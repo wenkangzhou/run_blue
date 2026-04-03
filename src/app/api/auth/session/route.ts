@@ -1,11 +1,13 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
-  const cookieStore = cookies();
-  const accessToken = cookieStore.get('access_token')?.value;
-  const userId = cookieStore.get('user_id')?.value;
-  const refreshToken = cookieStore.get('refresh_token')?.value;
+export async function GET(request: NextRequest) {
+  // Get cookies from request headers
+  const cookieHeader = request.headers.get('cookie') || '';
+  const cookies = parseCookies(cookieHeader);
+  
+  const accessToken = cookies['access_token'];
+  const userId = cookies['user_id'];
+  const refreshToken = cookies['refresh_token'];
 
   if (!accessToken || !userId) {
     return NextResponse.json({ user: null });
@@ -40,4 +42,18 @@ export async function GET() {
   } catch {
     return NextResponse.json({ user: null });
   }
+}
+
+function parseCookies(cookieHeader: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  
+  cookieHeader.split(';').forEach((cookie) => {
+    const [name, ...rest] = cookie.trim().split('=');
+    if (name) {
+      cookies[name] = decodeURIComponent(rest.join('='));
+    }
+  });
+  
+  return cookies;
 }
