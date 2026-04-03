@@ -77,8 +77,11 @@ export interface ActivitySplit {
   pace_zone?: number;
 }
 
+export type StravaSplit = ActivitySplit;
+
 export interface ActivityLap {
   id: number;
+  lap_index: number;
   name: string;
   distance: number;
   elapsed_time: number;
@@ -92,6 +95,8 @@ export interface ActivityLap {
   max_watts?: number;
   total_elevation_gain: number;
 }
+
+export type StravaLap = ActivityLap;
 
 export interface ActivityStream {
   type: 'time' | 'distance' | 'latlng' | 'altitude' | 'velocity_smooth' | 'heartrate' | 'cadence' | 'watts' | 'temp' | 'moving' | 'grade_smooth';

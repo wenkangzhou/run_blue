@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Inter, VT323 } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
 import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({
@@ -31,11 +29,7 @@ export default function RootLayout({
     <html lang="zh" suppressHydrationWarning>
       <body className={`${inter.variable} ${vt323.variable} font-sans antialiased`}>
         <Providers>
-          <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
+          {children}
         </Providers>
         <Analytics />
       </body>

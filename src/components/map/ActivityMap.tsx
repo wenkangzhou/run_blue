@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
+import { Loader2 } from 'lucide-react';
 
 interface ActivityMapProps {
   polyline: string | null;
@@ -13,7 +14,9 @@ interface ActivityMapProps {
 
 export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px' }: ActivityMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
+  const mapInstanceRef = React.useRef<any>(null);
   const [isClient, setIsClient] = React.useState(false);
+  const [mapReady, setMapReady] = React.useState(false);
   const { theme } = useTheme();
 
   React.useEffect(() => {
@@ -23,11 +26,6 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
   React.useEffect(() => {
     if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
 
-    let map: any;
-    let polylineLayer: any;
-    let startMarker: any;
-    let endMarker: any;
-
     const initMap = async () => {
       try {
         const L = (await import('leaflet')).default;
@@ -36,46 +34,91 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
         const points = decodePolyline(polyline);
         if (points.length < 2 || !mapRef.current) return;
 
-        // Calculate center
-        const midIndex = Math.floor(points.length / 2);
-        const center: [number, number] = [points[midIndex][0], points[midIndex][1]];
-
-        map = L.map(mapRef.current as HTMLElement, {
+        // Create map without initial center/zoom - will use fitBounds
+        const map = L.map(mapRef.current as HTMLElement, {
           scrollWheelZoom: false,
-        }).setView(center, 13);
+          zoomControl: true,
+          attributionControl: false,
+        });
 
-        const tileUrl = theme === 'dark'
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+        mapInstanceRef.current = map;
 
-        L.tileLayer(tileUrl, {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        // Position zoom control to bottom right
+        map.zoomControl.setPosition('bottomright');
+
+        // Use OpenStreetMap
+        const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+        const tileLayer = L.tileLayer(tileUrl, {
+          opacity: theme === 'dark' ? 0.6 : 1,
         }).addTo(map);
 
         const latLngs = points.map(p => [p[0], p[1]]);
-        polylineLayer = L.polyline(latLngs as any, {
+        const polylineLayer = L.polyline(latLngs as any, {
           color: theme === 'dark' ? '#60a5fa' : '#2563eb',
-          weight: 4,
-          opacity: 0.8,
+          weight: 5,
+          opacity: 0.9,
+          lineJoin: 'round',
         }).addTo(map);
 
-        // Add start and end markers
+        // Calculate bounds and set view in one go - no animation
+        const bounds = polylineLayer.getBounds();
+        map.fitBounds(bounds, { 
+          padding: [30, 30],
+          maxZoom: 16,
+          animate: false,
+          duration: 0,
+        });
+
+        // Add simple circle markers for start/end
         if (startLatlng) {
-          startMarker = L.marker([startLatlng[0], startLatlng[1]]).addTo(map);
+          L.circleMarker([startLatlng[0], startLatlng[1]], {
+            radius: 8,
+            fillColor: '#22c55e',
+            color: '#fff',
+            weight: 3,
+            fillOpacity: 1,
+          }).addTo(map);
         }
         if (endLatlng) {
-          endMarker = L.marker([endLatlng[0], endLatlng[1]]).addTo(map);
+          L.circleMarker([endLatlng[0], endLatlng[1]], {
+            radius: 8,
+            fillColor: '#ef4444',
+            color: '#fff',
+            weight: 3,
+            fillOpacity: 1,
+          }).addTo(map);
         }
+
+        // Wait for tiles to load before showing map
+        let tilesLoaded = 0;
+        const checkTilesLoaded = () => {
+          tilesLoaded++;
+          // After a few tiles load, show the map
+          if (tilesLoaded >= 3) {
+            setMapReady(true);
+          }
+        };
+
+        tileLayer.on('tileload', checkTilesLoaded);
+        
+        // Fallback: show map after 500ms regardless
+        setTimeout(() => {
+          setMapReady(true);
+        }, 500);
+
       } catch (e) {
         console.error('Error initializing map:', e);
+        setMapReady(true);
       }
     };
 
     initMap();
 
     return () => {
-      if (map) {
-        map.remove();
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
       }
     };
   }, [isClient, polyline, startLatlng, endLatlng, theme]);
@@ -85,16 +128,22 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
   if (!hasValidPolyline) {
     return (
       <div
-        className="flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 border-4 border-zinc-800 dark:border-zinc-200"
+        className="flex items-center justify-center bg-zinc-100 dark:bg-zinc-800"
         style={{ height }}
       >
-        <p className="font-mono text-sm text-zinc-500">No route data available</p>
+        <p className="font-mono text-sm text-zinc-500">No route data</p>
       </div>
     );
   }
 
   return (
-    <div className="border-4 border-zinc-800 dark:border-zinc-200 overflow-hidden" style={{ height }}>
+    <div className="relative w-full h-full bg-zinc-100 dark:bg-zinc-800" style={{ height }}>
+      {/* Loading overlay - stays until map is fully rendered */}
+      {!mapReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 z-20">
+          <Loader2 className="animate-spin text-zinc-400" size={24} />
+        </div>
+      )}
       <div ref={mapRef} className="w-full h-full" />
     </div>
   );
