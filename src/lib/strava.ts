@@ -4,7 +4,10 @@ const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
 export function getStravaAuthUrl(): string {
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-  const redirectUri = `${process.env.NEXTAUTH_URL}/api/auth/callback/strava`;
+  const baseUrl = typeof window !== 'undefined' 
+    ? window.location.origin 
+    : (process.env.NEXTAUTH_URL || 'http://localhost:6364');
+  const redirectUri = `${baseUrl}/api/auth/callback/strava`;
   const scope = 'read,activity:read';
   
   return `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(

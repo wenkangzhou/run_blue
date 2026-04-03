@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/hooks/useAuth';
 import { StravaConnect } from '@/components/StravaConnect';
 import { PixelButton } from '@/components/ui';
 import { Activity, Map, TrendingUp, Zap } from 'lucide-react';
@@ -10,7 +9,27 @@ import Link from 'next/link';
 
 export default function HomePage() {
   const { t } = useTranslation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/session');
+        if (response.ok) {
+          const session = await response.json();
+          setIsAuthenticated(!!session.user);
+        }
+      } catch {
+        setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   if (isLoading) {
     return (
