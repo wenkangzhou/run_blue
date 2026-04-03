@@ -1,4 +1,4 @@
-import { StravaActivity, StravaToken, StravaAthlete } from '@/types';
+import { StravaActivity, StravaToken, StravaAthlete, ActivityStream } from '@/types';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -21,7 +21,6 @@ export async function exchangeToken(code: string, redirectUri?: string): Promise
     grant_type: 'authorization_code',
   };
   
-  // Strava requires redirect_uri to match the one used in authorization request
   if (redirectUri) {
     body.redirect_uri = redirectUri;
   }
@@ -108,17 +107,47 @@ export async function getActivity(
   accessToken: string,
   activityId: number
 ): Promise<StravaActivity> {
-  const response = await fetch(`${STRAVA_API_BASE}/activities/${activityId}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const response = await fetch(
+    `${STRAVA_API_BASE}/activities/${activityId}?include_all_efforts=true`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error('Failed to get activity');
   }
 
   return response.json();
+}
+
+export async function getActivityStreams(
+  accessToken: string,
+  activityId: number,
+  types: string[] = ['time', 'distance', 'latlng', 'altitude', 'velocity_smooth', 'heartrate', 'watts']
+): Promise<Record<string, ActivityStream>> {
+  const response = await fetch(
+    `${STRAVA_API_BASE}/activities/${activityId}/streams/${types.join(',')}?resolution=high`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to get activity streams');
+  }
+
+  const data = await response.json();
+  // Convert array to object keyed by type
+  const streams: Record<string, ActivityStream> = {};
+  for (const stream of data) {
+    streams[stream.type] = stream;
+  }
+  return streams;
 }
 
 export function decodePolyline(encoded: string | null): [number, number][] {
@@ -215,5 +244,13 @@ export function formatDateTime(dateString: string, locale: string = 'zh-CN'): st
   const dateStr = formatDate(dateString, locale);
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${dateStr} ${hours}:${minutes}`;
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${dateStr} ${hours}:${minutes}:${seconds}`;
+}
+
+export function formatGearDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
 }

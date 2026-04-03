@@ -6,14 +6,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
-  console.log('Strava callback received:', {
-    code: code ? 'present' : 'missing',
-    error,
-    origin: request.nextUrl.origin,
-  });
-
   if (error) {
-    console.error('Strava returned error:', error);
     return NextResponse.redirect(new URL(`/?error=${error}`, request.url));
   }
 
@@ -22,15 +15,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Build the same redirect URI used in authorization request
-    const redirectUri = `${request.nextUrl.origin}/api/auth/callback/strava`;
-    console.log('Exchanging token with redirect_uri:', redirectUri);
+    // Use APP_URL env var for redirect_uri (must match authorization request)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const redirectUri = `${appUrl}/api/auth/callback/strava`;
     
     const tokenData = await exchangeToken(code, redirectUri);
-    console.log('Token exchange successful:', {
-      hasAthlete: !!tokenData.athlete,
-      athleteId: tokenData.athlete?.id,
-    });
 
     if (!tokenData.athlete) {
       return NextResponse.redirect(new URL('/?error=no_athlete', request.url));
@@ -48,7 +37,7 @@ export async function GET(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
     });
     response.cookies.set('user_id', tokenData.athlete.id.toString(), {
       httpOnly: true,

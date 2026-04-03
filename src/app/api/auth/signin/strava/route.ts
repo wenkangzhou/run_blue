@@ -11,11 +11,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Get the origin from the request headers
-  const origin = request.headers.get('host') || '';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-  const baseUrl = origin ? `${protocol}://${origin}` : 'http://localhost:6364';
-  const redirectUri = `${baseUrl}/api/auth/callback/strava`;
+  // Use APP_URL env var, fallback to request origin, then localhost
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  const redirectUri = `${appUrl}/api/auth/callback/strava`;
   
   const authUrl = getStravaAuthUrl(clientId, redirectUri);
   

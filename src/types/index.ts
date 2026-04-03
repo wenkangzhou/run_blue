@@ -31,6 +31,12 @@ export interface StravaActivity {
   visibility: string;
   flagged: boolean;
   gear_id: string | null;
+  gear?: {
+    id: string;
+    name: string;
+    distance: number;
+  };
+  device_name?: string;
   start_latlng: [number, number] | null;
   end_latlng: [number, number] | null;
   average_speed: number;
@@ -44,6 +50,7 @@ export interface StravaActivity {
   display_hide_heartrate_option: boolean;
   elev_high?: number;
   elev_low?: number;
+  calories?: number;
   upload_id: number;
   upload_id_str: string;
   external_id: string | null;
@@ -51,6 +58,47 @@ export interface StravaActivity {
   pr_count: number;
   total_photo_count: number;
   has_kudoed: boolean;
+  // Extended data for detailed view
+  splits_metric?: ActivitySplit[];
+  laps?: ActivityLap[];
+  average_watts?: number;
+  max_watts?: number;
+  weighted_average_watts?: number;
+}
+
+export interface ActivitySplit {
+  distance: number;
+  elapsed_time: number;
+  elevation_difference: number;
+  moving_time: number;
+  split: number;
+  average_speed: number;
+  average_heartrate?: number;
+  pace_zone?: number;
+}
+
+export interface ActivityLap {
+  id: number;
+  name: string;
+  distance: number;
+  elapsed_time: number;
+  moving_time: number;
+  start_date: string;
+  average_speed: number;
+  max_speed: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_watts?: number;
+  max_watts?: number;
+  total_elevation_gain: number;
+}
+
+export interface ActivityStream {
+  type: 'time' | 'distance' | 'latlng' | 'altitude' | 'velocity_smooth' | 'heartrate' | 'cadence' | 'watts' | 'temp' | 'moving' | 'grade_smooth';
+  data: number[] | [number, number][];
+  series_type: 'distance' | 'time';
+  original_size: number;
+  resolution: string;
 }
 
 export interface StravaAthlete {
