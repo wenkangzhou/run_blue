@@ -6,21 +6,24 @@ import { formatDuration, formatPace } from '@/lib/strava';
 
 interface SplitsTableProps {
   splits: StravaSplit[];
+  showHeader?: boolean;
 }
 
-export function SplitsTable({ splits }: SplitsTableProps) {
+export function SplitsTable({ splits, showHeader = true }: SplitsTableProps) {
   return (
     <div className="overflow-x-auto -mx-2 scrollbar-hide">
       <table className="w-full min-w-[400px]">
-        <thead>
-          <tr className="border-b border-zinc-200 dark:border-zinc-700">
-            <th className="text-left py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">km</th>
-            <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">时间</th>
-            <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">配速</th>
-            <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">爬升</th>
-            <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">心率</th>
-          </tr>
-        </thead>
+        {showHeader && (
+          <thead>
+            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <th className="text-left py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">km</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">时间</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">配速</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">爬升</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">心率</th>
+            </tr>
+          </thead>
+        )}
         <tbody>
           {splits.map((split, index) => (
             <tr 

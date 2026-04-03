@@ -3,28 +3,37 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
-import { Loader2 } from 'lucide-react';
 
 interface ActivityMapProps {
   polyline: string | null;
   startLatlng: [number, number] | null;
   endLatlng: [number, number] | null;
   height?: string;
+  onReady?: () => void;
 }
 
-export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px' }: ActivityMapProps) {
+export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px', onReady }: ActivityMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<any>(null);
   const [isClient, setIsClient] = React.useState(false);
-  const [mapReady, setMapReady] = React.useState(false);
   const { theme } = useTheme();
+  const onReadyCalled = React.useRef(false);
 
   React.useEffect(() => {
     setIsClient(true);
   }, []);
 
   React.useEffect(() => {
-    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
+    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) {
+      // No polyline, immediately ready
+      if (!polyline || polyline.length < 10) {
+        if (!onReadyCalled.current && onReady) {
+          onReadyCalled.current = true;
+          onReady();
+        }
+      }
+      return;
+    }
 
     const initMap = async () => {
       try {
@@ -32,7 +41,13 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
         await import('leaflet/dist/leaflet.css');
 
         const points = decodePolyline(polyline);
-        if (points.length < 2 || !mapRef.current) return;
+        if (points.length < 2 || !mapRef.current) {
+          if (!onReadyCalled.current && onReady) {
+            onReadyCalled.current = true;
+            onReady();
+          }
+          return;
+        }
 
         // Create map without initial center/zoom - will use fitBounds
         const map = L.map(mapRef.current as HTMLElement, {
@@ -90,26 +105,37 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
           }).addTo(map);
         }
 
-        // Wait for tiles to load before showing map
+        // Wait for tiles to load before calling ready
         let tilesLoaded = 0;
-        const checkTilesLoaded = () => {
-          tilesLoaded++;
-          // After a few tiles load, show the map
-          if (tilesLoaded >= 3) {
-            setMapReady(true);
+        const minTiles = 2;
+        
+        const checkReady = () => {
+          if (!onReadyCalled.current && onReady) {
+            onReadyCalled.current = true;
+            onReady();
           }
         };
 
-        tileLayer.on('tileload', checkTilesLoaded);
+        const onTileLoad = () => {
+          tilesLoaded++;
+          if (tilesLoaded >= minTiles) {
+            checkReady();
+          }
+        };
+
+        tileLayer.on('tileload', onTileLoad);
         
-        // Fallback: show map after 500ms regardless
+        // Fallback: call ready after 800ms regardless
         setTimeout(() => {
-          setMapReady(true);
-        }, 500);
+          checkReady();
+        }, 800);
 
       } catch (e) {
         console.error('Error initializing map:', e);
-        setMapReady(true);
+        if (!onReadyCalled.current && onReady) {
+          onReadyCalled.current = true;
+          onReady();
+        }
       }
     };
 
@@ -121,7 +147,7 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
         mapInstanceRef.current = null;
       }
     };
-  }, [isClient, polyline, startLatlng, endLatlng, theme]);
+  }, [isClient, polyline, startLatlng, endLatlng, theme, onReady]);
 
   const hasValidPolyline = polyline && polyline.length >= 10;
 
@@ -137,13 +163,7 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
   }
 
   return (
-    <div className="relative w-full h-full bg-zinc-100 dark:bg-zinc-800" style={{ height }}>
-      {/* Loading overlay - stays until map is fully rendered */}
-      {!mapReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 z-20">
-          <Loader2 className="animate-spin text-zinc-400" size={24} />
-        </div>
-      )}
+    <div className="w-full h-full bg-zinc-100 dark:bg-zinc-800" style={{ height }}>
       <div ref={mapRef} className="w-full h-full" />
     </div>
   );

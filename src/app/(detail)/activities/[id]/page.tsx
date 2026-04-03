@@ -25,6 +25,7 @@ export default function ActivityDetailPage() {
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [mapReady, setMapReady] = useState(false);
   const [splitsExpanded, setSplitsExpanded] = useState(false);
   const [lapsExpanded, setLapsExpanded] = useState(false);
 
@@ -41,11 +42,13 @@ export default function ActivityDetailPage() {
     const loadActivity = async () => {
       try {
         setLoading(true);
+        setMapReady(false);
         const [activityData, streamsData] = await Promise.all([
           getActivity(user.accessToken, activityId),
           getActivityStreams(user.accessToken, activityId).catch(() => null),
         ]);
         setActivity(activityData);
+        setStreams(streamsData);
       } catch (err) {
         setError('Failed to load activity');
       } finally {
@@ -110,10 +113,13 @@ export default function ActivityDetailPage() {
 
   if (!isAuthenticated) return null;
 
-  if (loading) {
+  // Single loading state - wait for everything
+  const isPageReady = !loading && activity && (mapReady || !activity.map?.polyline);
+
+  if (!isPageReady && !error) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        {/* Minimal Header */}
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+        {/* Minimal Header - always show */}
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
             <Link 
@@ -125,11 +131,8 @@ export default function ActivityDetailPage() {
             </Link>
           </div>
         </div>
-        <div className="container mx-auto px-4 py-12">
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="animate-spin mr-2" />
-            <span className="font-mono">加载中...</span>
-          </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="animate-spin text-zinc-400" size={32} />
         </div>
       </div>
     );
@@ -138,7 +141,6 @@ export default function ActivityDetailPage() {
   if (error || !activity) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        {/* Minimal Header */}
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
             <Link 
@@ -191,7 +193,7 @@ export default function ActivityDetailPage() {
           </p>
         </div>
 
-        {/* Map */}
+        {/* Map - notify when ready */}
         {activity.map?.polyline && (
           <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
             <ActivityMap 
@@ -199,6 +201,7 @@ export default function ActivityDetailPage() {
               startLatlng={activity.start_latlng}
               endLatlng={activity.end_latlng}
               height="200px"
+              onReady={() => setMapReady(true)}
             />
           </div>
         )}
@@ -290,11 +293,11 @@ export default function ActivityDetailPage() {
               )}
             </button>
             <div className="mt-3">
-              <SplitsTable splits={visibleSplits} />
+              <SplitsTable splits={visibleSplits} showHeader={true} />
               
               {hasHiddenSplits && splitsExpanded && (
                 <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <SplitsTable splits={hiddenSplits} />
+                  <SplitsTable splits={hiddenSplits} showHeader={false} />
                 </div>
               )}
             </div>
@@ -318,11 +321,11 @@ export default function ActivityDetailPage() {
               )}
             </button>
             <div className="mt-3">
-              <LapsTable laps={visibleLaps} />
+              <LapsTable laps={visibleLaps} showHeader={true} />
               
               {hasHiddenLaps && lapsExpanded && (
                 <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <LapsTable laps={hiddenLaps} />
+                  <LapsTable laps={hiddenLaps} showHeader={false} />
                 </div>
               )}
             </div>
