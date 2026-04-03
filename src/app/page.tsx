@@ -1,0 +1,106 @@
+'use client';
+
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/hooks/useAuth';
+import { StravaConnect } from '@/components/StravaConnect';
+import { PixelButton } from '@/components/ui';
+import { Activity, Map, TrendingUp, Zap } from 'lucide-react';
+import Link from 'next/link';
+
+export default function HomePage() {
+  const { t } = useTranslation();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-pulse font-mono text-xl">◼◼◼ LOADING ◼◼◼</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center mb-12">
+          <h1 className="font-pixel text-5xl md:text-7xl font-bold mb-4 text-blue-600 dark:text-blue-400">
+            {t('common.appName')}
+          </h1>
+          <p className="font-mono text-lg text-zinc-600 dark:text-zinc-400">
+            {t('common.appSlogan')}
+          </p>
+        </div>
+
+        <StravaConnect />
+
+        {/* Features */}
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <FeatureCard
+            icon={<Map size={32} />}
+            title="Route Visualization"
+            description="View your running routes on interactive maps"
+          />
+          <FeatureCard
+            icon={<TrendingUp size={32} />}
+            title="Track Progress"
+            description="Monitor your running statistics over time"
+          />
+          <FeatureCard
+            icon={<Zap size={32} />}
+            title="Sync with Strava"
+            description="Automatically sync your activities from Strava"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <div className="text-center mb-12">
+        <h1 className="font-pixel text-4xl md:text-5xl font-bold mb-4">
+          {t('nav.dashboard')}
+        </h1>
+        <p className="font-mono text-zinc-600 dark:text-zinc-400">
+          {t('common.appSlogan')}
+        </p>
+      </div>
+
+      <div className="flex justify-center gap-4">
+        <Link href="/activities">
+          <PixelButton size="lg">
+            <span className="flex items-center gap-2">
+              <Activity size={20} />
+              {t('nav.activities')}
+            </span>
+          </PixelButton>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="border-4 border-zinc-800 dark:border-zinc-200 p-6 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]">
+      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 border-2 border-blue-800 dark:border-blue-400 flex items-center justify-center mb-4 text-blue-600 dark:text-blue-400">
+        {icon}
+      </div>
+      <h3 className="font-mono font-bold text-lg mb-2">{title}</h3>
+      <p className="font-mono text-sm text-zinc-600 dark:text-zinc-400">
+        {description}
+      </p>
+    </div>
+  );
+}
