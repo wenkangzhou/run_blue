@@ -36,7 +36,6 @@ const resources = {
       },
       nav: {
         home: 'Home',
-        dashboard: 'Dashboard',
         activities: 'Activities',
         settings: 'Settings',
         profile: 'Profile',
@@ -143,7 +142,6 @@ const resources = {
       },
       nav: {
         home: '首页',
-        dashboard: '仪表盘',
         activities: '活动',
         settings: '设置',
         profile: '个人资料',

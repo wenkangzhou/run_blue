@@ -1,3 +1,3 @@
 export { ActivityCard } from './ActivityCard';
-export { StatsCard } from './StatsCard';
+export { ActivityGridCard } from './ActivityGridCard';
 export { StravaConnect } from './StravaConnect';

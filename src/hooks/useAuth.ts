@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
 import { useTranslation } from 'react-i18next';
 
 export function useAuth() {
+  const router = useRouter();
   const { user, isAuthenticated, isLoading, setUser, logout } = useAuthStore();
   const { language } = useSettingsStore();
   const { i18n } = useTranslation();
@@ -55,13 +57,13 @@ export function useAuth() {
   }, [setUser]);
 
   const handleLogin = () => {
-    window.location.href = '/api/auth/signin/strava';
+    router.push('/api/auth/signin/strava');
   };
 
   const handleLogout = async () => {
     await fetch('/api/auth/signout', { method: 'POST' });
     logout();
-    window.location.href = '/';
+    router.push('/');
   };
 
   return {

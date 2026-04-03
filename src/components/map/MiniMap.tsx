@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
-import { LatLngExpression } from 'leaflet';
+import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet';
+import { LatLngExpression, LatLngBounds } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { decodePolyline } from '@/lib/strava';
 import { useTheme } from 'next-themes';
@@ -12,6 +12,23 @@ interface MiniMapProps {
   height?: string;
 }
 
+// Component to fit bounds to the route
+function FitBounds({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  
+  React.useEffect(() => {
+    if (points.length > 0) {
+      const bounds = new LatLngBounds(
+        points.map(p => [p[0], p[1]] as LatLngExpression)
+      );
+      // Add some padding around the route
+      map.fitBounds(bounds, { padding: [10, 10], maxZoom: 16 });
+    }
+  }, [map, points]);
+  
+  return null;
+}
+
 export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
   const { theme } = useTheme();
   const points = React.useMemo(() => {
@@ -19,6 +36,7 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
     return decodePolyline(polyline);
   }, [polyline]);
 
+  // Calculate center as fallback
   const center: LatLngExpression = React.useMemo(() => {
     if (points.length > 0) {
       const midIndex = Math.floor(points.length / 2);
@@ -46,7 +64,7 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
     <div style={{ height }} className="overflow-hidden">
       <MapContainer
         center={center}
-        zoom={12}
+        zoom={13}
         zoomControl={false}
         attributionControl={false}
         scrollWheelZoom={false}
@@ -61,6 +79,7 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
           weight={3}
           opacity={0.9}
         />
+        <FitBounds points={points} />
       </MapContainer>
     </div>
   );

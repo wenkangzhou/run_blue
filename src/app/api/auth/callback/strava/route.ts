@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=no_athlete', request.url));
     }
 
-    // Redirect to dashboard with token info in cookies
-    const response = NextResponse.redirect(new URL('/dashboard', request.url));
+    // Redirect to activities with token info in cookies
+    const response = NextResponse.redirect(new URL('/activities', request.url));
     response.cookies.set('access_token', tokenData.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

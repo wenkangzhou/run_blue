@@ -12,7 +12,11 @@ export function Footer() {
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-blue-600 border-2 border-blue-800 dark:bg-blue-500 dark:border-blue-700" />
+            <img
+              src="/logo.png"
+              alt="跑蓝"
+              className="w-6 h-6 object-contain"
+            />
             <span className="font-mono text-sm font-bold">{t('common.appName')}</span>
           </div>
           <p className="font-mono text-xs text-zinc-600 dark:text-zinc-400">

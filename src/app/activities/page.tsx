@@ -1,18 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
-import { ActivityCard } from '@/components/ActivityCard';
 import { PixelButton } from '@/components/ui';
 import { StravaActivity } from '@/types';
-import { getActivities } from '@/lib/strava';
+import { getActivities, formatDistance, formatDuration } from '@/lib/strava';
 import { Loader2 } from 'lucide-react';
+import { ActivityGridCard } from '@/components/ActivityGridCard';
 
 export default function ActivitiesPage() {
-  const { t } = useTranslation();
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const {
@@ -29,6 +27,28 @@ export default function ActivitiesPage() {
   } = useActivitiesStore();
 
   const [initialLoading, setInitialLoading] = useState(true);
+
+  // Filter running activities with valid route data
+  const runningActivities = useMemo(() => {
+    return activities.filter((a: StravaActivity) => {
+      // Must be a run
+      if (a.type !== 'Run') return false;
+      // Must have valid route data
+      const hasRoute = a.map?.summary_polyline && a.map.summary_polyline.length > 10;
+      return hasRoute;
+    });
+  }, [activities]);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const totalDistance = runningActivities.reduce((sum, a) => sum + a.distance, 0);
+    const totalTime = runningActivities.reduce((sum, a) => sum + a.moving_time, 0);
+    return {
+      totalDistance,
+      totalRuns: runningActivities.length,
+      totalTime,
+    };
+  }, [runningActivities]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -50,7 +70,7 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      const newActivities = await getActivities(user.accessToken, page, 20);
+      const newActivities = await getActivities(user.accessToken, page, 200);
       
       if (newActivities.length === 0) {
         setHasMore(false);
@@ -59,7 +79,7 @@ export default function ActivitiesPage() {
         setPage(page + 1);
       }
     } catch (err) {
-      setError(t('errors.stravaError'));
+      setError('Failed to load activities');
     } finally {
       setLoading(false);
       setInitialLoading(false);
@@ -80,7 +100,7 @@ export default function ActivitiesPage() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-pulse font-mono text-xl flex items-center gap-2">
             <Loader2 className="animate-spin" />
-            {t('common.loading')}
+            加载中...
           </div>
         </div>
       </div>
@@ -88,14 +108,28 @@ export default function ActivitiesPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="font-pixel text-3xl md:text-4xl font-bold">
-          {t('activity.title')}
+    <div className="container mx-auto px-3 py-4">
+      {/* Header with Stats */}
+      <div className="mb-4">
+        <h1 className="font-pixel text-xl font-bold mb-2">
+          最近跑步记录
         </h1>
-        <span className="font-mono text-sm text-zinc-500">
-          {activities.length} {t('activity.title').toLowerCase()}
-        </span>
+        
+        {/* Stats Summary */}
+        <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-500">总距离</span>
+            <span className="font-bold">{formatDistance(stats.totalDistance, 'km')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-500">次数</span>
+            <span className="font-bold">{stats.totalRuns}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-500">总时间</span>
+            <span className="font-bold">{formatDuration(stats.totalTime)}</span>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -107,20 +141,24 @@ export default function ActivitiesPage() {
             className="mt-2"
             onClick={loadActivities}
           >
-            {t('common.retry')}
+            重试
           </PixelButton>
         </div>
       )}
 
-      {activities.length === 0 ? (
+      {runningActivities.length === 0 ? (
         <div className="text-center py-16">
-          <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
+          <p className="font-mono text-zinc-500">没有找到跑步记录</p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {activities.map((activity: StravaActivity) => (
-              <ActivityCard key={activity.id} activity={activity} />
+          {/* Grid Layout - 3 columns, taller cards */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {runningActivities.map((activity: StravaActivity, index: number) => (
+              <ActivityGridCard 
+                key={`${activity.id}-${index}`} 
+                activity={activity} 
+              />
             ))}
           </div>
 
@@ -131,7 +169,7 @@ export default function ActivitiesPage() {
                 isLoading={isLoading}
                 disabled={isLoading}
               >
-                {t('common.loading')}
+                加载更多
               </PixelButton>
             </div>
           )}

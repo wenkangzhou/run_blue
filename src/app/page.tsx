@@ -1,22 +1,20 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { StravaConnect } from '@/components/StravaConnect';
-import { PixelButton } from '@/components/ui';
-import { Activity, Map, TrendingUp, Zap } from 'lucide-react';
-import Link from 'next/link';
+import { Map, TrendingUp, Zap } from 'lucide-react';
 
 export default function HomePage() {
-  const { t } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     // Check URL for error
-    const params = new URLSearchParams(window.location.search);
-    const error = params.get('error');
+    const error = searchParams.get('error');
     if (error) {
       setErrorMsg(decodeURIComponent(error));
     }
@@ -37,7 +35,14 @@ export default function HomePage() {
     };
 
     checkAuth();
-  }, []);
+  }, [searchParams]);
+
+  // If authenticated, redirect to activities
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      router.push('/activities');
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -49,71 +54,46 @@ export default function HomePage() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        {/* Error Message */}
-        {errorMsg && (
-          <div className="max-w-md mx-auto mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
-            <p className="font-mono text-red-600 dark:text-red-400 text-sm">
-              登录失败: {errorMsg}
-            </p>
-          </div>
-        )}
-
-        <div className="text-center mb-12">
-          <h1 className="font-pixel text-5xl md:text-7xl font-bold mb-4 text-blue-600 dark:text-blue-400">
-            {t('common.appName')}
-          </h1>
-          <p className="font-mono text-lg text-zinc-600 dark:text-zinc-400">
-            {t('common.appSlogan')}
-          </p>
-        </div>
-
-        <StravaConnect />
-
-        {/* Features */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          <FeatureCard
-            icon={<Map size={32} />}
-            title={t('features.routeVisualization.title')}
-            description={t('features.routeVisualization.description')}
-          />
-          <FeatureCard
-            icon={<TrendingUp size={32} />}
-            title={t('features.trackProgress.title')}
-            description={t('features.trackProgress.description')}
-          />
-          <FeatureCard
-            icon={<Zap size={32} />}
-            title={t('features.syncStrava.title')}
-            description={t('features.syncStrava.description')}
-          />
-        </div>
-      </div>
-    );
-  }
-
+  // Show login page for unauthenticated users
   return (
     <div className="container mx-auto px-4 py-12">
+      {/* Error Message */}
+      {errorMsg && (
+        <div className="max-w-md mx-auto mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
+          <p className="font-mono text-red-600 dark:text-red-400 text-sm">
+            登录失败: {errorMsg}
+          </p>
+        </div>
+      )}
+
       <div className="text-center mb-12">
-        <h1 className="font-pixel text-4xl md:text-5xl font-bold mb-4">
-          {t('nav.dashboard')}
+        <h1 className="font-pixel text-5xl md:text-7xl font-bold mb-4 text-blue-600 dark:text-blue-400">
+          跑蓝
         </h1>
-        <p className="font-mono text-zinc-600 dark:text-zinc-400">
-          {t('common.appSlogan')}
+        <p className="font-mono text-lg text-zinc-600 dark:text-zinc-400">
+          记录你的跑步旅程
         </p>
       </div>
 
-      <div className="flex justify-center gap-4">
-        <Link href="/activities">
-          <PixelButton size="lg">
-            <span className="flex items-center gap-2">
-              <Activity size={20} />
-              {t('nav.activities')}
-            </span>
-          </PixelButton>
-        </Link>
+      <StravaConnect />
+
+      {/* Features */}
+      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <FeatureCard
+          icon={<Map size={32} />}
+          title="路线可视化"
+          description="在交互式地图上查看你的跑步路线"
+        />
+        <FeatureCard
+          icon={<TrendingUp size={32} />}
+          title="追踪进度"
+          description="随时监控你的跑步数据统计"
+        />
+        <FeatureCard
+          icon={<Zap size={32} />}
+          title="同步 Strava"
+          description="自动从你的 Strava 同步活动数据"
+        />
       </div>
     </div>
   );

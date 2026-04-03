@@ -88,9 +88,36 @@ body {
   background: hsl(var(--foreground));
 }
 
-/* Leaflet map styles */
+/* Leaflet map - force low z-index */
 .leaflet-container {
-  font-family: var(--font-inter), sans-serif;
+  z-index: 1 !important;
+}
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-overlay-pane,
+.leaflet-shadow-pane,
+.leaflet-marker-pane,
+.leaflet-tooltip-pane,
+.leaflet-popup-pane {
+  z-index: 1 !important;
+}
+
+/* Route map specific */
+.route-map {
+  z-index: 1 !important;
+}
+
+.route-map .leaflet-container {
+  z-index: 1 !important;
+}
+
+/* Map container isolation */
+.map-container {
+  isolation: isolate;
 }
 
 /* Animation utilities */

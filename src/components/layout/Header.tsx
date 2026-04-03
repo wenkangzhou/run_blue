@@ -15,12 +15,19 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b-4 border-zinc-800 bg-white dark:bg-zinc-900 dark:border-zinc-200">
+    <header 
+      className="sticky top-0 w-full border-b-4 border-zinc-800 bg-white dark:bg-zinc-900 dark:border-zinc-200"
+      style={{ zIndex: 9999 }}
+    >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 border-4 border-blue-800 dark:bg-blue-500 dark:border-blue-700" />
+            <img
+              src="/logo.png"
+              alt="跑蓝"
+              className="w-8 h-8 object-contain"
+            />
             <span className="font-mono text-xl font-bold tracking-tighter">
               {t('common.appName')}
             </span>
@@ -29,20 +36,12 @@ export function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
             {isAuthenticated && (
-              <>
-                <Link
-                  href="/dashboard"
-                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                >
-                  {t('nav.dashboard')}
-                </Link>
-                <Link
-                  href="/activities"
-                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                >
-                  {t('nav.activities')}
-                </Link>
-              </>
+              <Link
+                href="/activities"
+                className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                {t('nav.activities')}
+              </Link>
             )}
           </nav>
 
@@ -80,22 +79,13 @@ export function Header() {
           <div className="md:hidden border-t-2 border-zinc-200 dark:border-zinc-700 py-4">
             <nav className="flex flex-col gap-3">
               {isAuthenticated && (
-                <>
-                  <Link
-                    href="/dashboard"
-                    className="font-mono text-sm font-bold uppercase py-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {t('nav.dashboard')}
-                  </Link>
-                  <Link
-                    href="/activities"
-                    className="font-mono text-sm font-bold uppercase py-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {t('nav.activities')}
-                  </Link>
-                </>
+                <Link
+                  href="/activities"
+                  className="font-mono text-sm font-bold uppercase py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {t('nav.activities')}
+                </Link>
               )}
               <div className="flex items-center gap-3 py-2">
                 <LanguageToggle />

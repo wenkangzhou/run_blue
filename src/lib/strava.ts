@@ -2,12 +2,7 @@ import { StravaActivity, StravaToken, StravaAthlete } from '@/types';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
-export function getStravaAuthUrl(): string {
-  const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-  const baseUrl = typeof window !== 'undefined' 
-    ? window.location.origin 
-    : 'http://localhost:6364';
-  const redirectUri = `${baseUrl}/api/auth/callback/strava`;
+export function getStravaAuthUrl(clientId: string, redirectUri: string): string {
   const scope = 'read,activity:read';
   
   return `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
@@ -201,20 +196,24 @@ export function formatPace(
 
 export function formatDate(dateString: string, locale: string = 'zh-CN'): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  
+  // Format manually to avoid locale issues in SSR
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  
+  if (locale.startsWith('zh')) {
+    return `${year}年${month}月${day}日`;
+  }
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${monthNames[date.getMonth()]} ${day}, ${year}`;
 }
 
 export function formatDateTime(dateString: string, locale: string = 'zh-CN'): string {
   const date = new Date(dateString);
-  return date.toLocaleString(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const dateStr = formatDate(dateString, locale);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${dateStr} ${hours}:${minutes}`;
 }
