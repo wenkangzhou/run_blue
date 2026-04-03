@@ -11,8 +11,16 @@ export default function HomePage() {
   const { t } = useTranslation();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    // Check URL for error
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (error) {
+      setErrorMsg(decodeURIComponent(error));
+    }
+
     // Check if user is logged in
     const checkAuth = async () => {
       try {
@@ -44,6 +52,15 @@ export default function HomePage() {
   if (!isAuthenticated) {
     return (
       <div className="container mx-auto px-4 py-12">
+        {/* Error Message */}
+        {errorMsg && (
+          <div className="max-w-md mx-auto mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
+            <p className="font-mono text-red-600 dark:text-red-400 text-sm">
+              登录失败: {errorMsg}
+            </p>
+          </div>
+        )}
+
         <div className="text-center mb-12">
           <h1 className="font-pixel text-5xl md:text-7xl font-bold mb-4 text-blue-600 dark:text-blue-400">
             {t('common.appName')}

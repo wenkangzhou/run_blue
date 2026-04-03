@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeToken } from '@/lib/strava';
-import { saveUser } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
+  console.log('Strava callback received:', {
+    code: code ? 'present' : 'missing',
+    error,
+    origin: request.nextUrl.origin,
+  });
+
   if (error) {
+    console.error('Strava returned error:', error);
     return NextResponse.redirect(new URL(`/?error=${error}`, request.url));
   }
 
@@ -18,24 +24,17 @@ export async function GET(request: NextRequest) {
   try {
     // Build the same redirect URI used in authorization request
     const redirectUri = `${request.nextUrl.origin}/api/auth/callback/strava`;
+    console.log('Exchanging token with redirect_uri:', redirectUri);
+    
     const tokenData = await exchangeToken(code, redirectUri);
+    console.log('Token exchange successful:', {
+      hasAthlete: !!tokenData.athlete,
+      athleteId: tokenData.athlete?.id,
+    });
 
     if (!tokenData.athlete) {
       return NextResponse.redirect(new URL('/?error=no_athlete', request.url));
     }
-
-    const user = {
-      id: tokenData.athlete.id.toString(),
-      stravaId: tokenData.athlete.id,
-      email: '',
-      name: `${tokenData.athlete.firstname} ${tokenData.athlete.lastname}`,
-      image: tokenData.athlete.profile,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
-      expiresAt: tokenData.expires_at,
-    };
-
-    await saveUser(user);
 
     // Redirect to dashboard with token info in cookies
     const response = NextResponse.redirect(new URL('/dashboard', request.url));
@@ -51,7 +50,7 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
-    response.cookies.set('user_id', user.id, {
+    response.cookies.set('user_id', tokenData.athlete.id.toString(), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -59,8 +58,9 @@ export async function GET(request: NextRequest) {
     });
 
     return response;
-  } catch (err) {
+  } catch (err: any) {
     console.error('Strava callback error:', err);
-    return NextResponse.redirect(new URL('/?error=auth_failed', request.url));
+    const errorMessage = encodeURIComponent(err.message || 'auth_failed');
+    return NextResponse.redirect(new URL(`/?error=${errorMessage}`, request.url));
   }
 }
