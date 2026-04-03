@@ -93,6 +93,20 @@ const resources = {
         stravaError: 'Failed to connect to Strava',
         noData: 'No data available',
       },
+      features: {
+        routeVisualization: {
+          title: 'Route Visualization',
+          description: 'View your running routes on interactive maps',
+        },
+        trackProgress: {
+          title: 'Track Progress',
+          description: 'Monitor your running statistics over time',
+        },
+        syncStrava: {
+          title: 'Sync with Strava',
+          description: 'Automatically sync your activities from Strava',
+        },
+      },
     },
   },
   zh: {
@@ -185,6 +199,20 @@ const resources = {
         auth: '认证错误',
         stravaError: '连接 Strava 失败',
         noData: '没有可用数据',
+      },
+      features: {
+        routeVisualization: {
+          title: '路线可视化',
+          description: '在交互式地图上查看你的跑步路线',
+        },
+        trackProgress: {
+          title: '追踪进度',
+          description: '随时监控你的跑步数据统计',
+        },
+        syncStrava: {
+          title: '同步 Strava',
+          description: '自动从你的 Strava 同步活动数据',
+        },
       },
     },
   },

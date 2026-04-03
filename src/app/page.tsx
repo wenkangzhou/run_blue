@@ -59,18 +59,18 @@ export default function HomePage() {
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
           <FeatureCard
             icon={<Map size={32} />}
-            title="Route Visualization"
-            description="View your running routes on interactive maps"
+            title={t('features.routeVisualization.title')}
+            description={t('features.routeVisualization.description')}
           />
           <FeatureCard
             icon={<TrendingUp size={32} />}
-            title="Track Progress"
-            description="Monitor your running statistics over time"
+            title={t('features.trackProgress.title')}
+            description={t('features.trackProgress.description')}
           />
           <FeatureCard
             icon={<Zap size={32} />}
-            title="Sync with Strava"
-            description="Automatically sync your activities from Strava"
+            title={t('features.syncStrava.title')}
+            description={t('features.syncStrava.description')}
           />
         </div>
       </div>
