@@ -1,17 +1,16 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { PixelCard, PixelButton } from '@/components/ui';
 import { Activity, ChevronRight } from 'lucide-react';
 
 export function StravaConnect() {
   const { t } = useTranslation();
-  const router = useRouter();
 
   const handleConnect = () => {
-    router.push('/api/auth/signin/strava');
+    // Use window.location for external redirect to avoid CORS
+    window.location.href = '/api/auth/signin/strava';
   };
 
   return (
