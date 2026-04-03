@@ -2,120 +2,107 @@
 
 一个像素极简风格的跑步数据可视化网站，数据来源于 Strava。
 
-## 功能特性
+## 核心功能
 
-- 🔐 Strava OAuth 授权登录
-- 🗺️ 跑步路线地图展示
-- 📊 跑步数据统计
-- 🌐 中英文多语言支持
-- 🌙 深色/浅色主题切换
-- 📱 响应式设计
-
-## 技术栈
-
-- **前端**: Next.js 16 + React 19 + TypeScript
-- **样式**: Tailwind CSS 4
-- **状态管理**: Zustand
-- **国际化**: i18next
-- **认证**: NextAuth.js
-- **地图**: Leaflet + React-Leaflet
-- **数据库**: Supabase
-- **部署**: Vercel
+- 🔐 **Strava OAuth 登录** - 唯一登录方式，无需注册账号
+- 🗺️ **跑步路线地图** - 使用 Leaflet 展示 GPS 轨迹
+- 📊 **数据统计** - 距离、时间、配速等关键指标
+- 🌐 **中英文切换** - 支持双语界面
+- 🌙 **深色/浅色主题** - 自动适配系统主题
 
 ## 快速开始
 
-### 1. 环境配置
-
-复制 `.env.example` 为 `.env.local` 并填写你的配置：
+### 1. 克隆代码
 
 ```bash
-cp .env.example .env.local
+git clone https://github.com/wenkangzhou/run_blue.git
+cd run_blue
 ```
-
-需要配置的变量：
-- `NEXT_PUBLIC_STRAVA_CLIENT_ID` - Strava 应用的 Client ID
-- `STRAVA_CLIENT_SECRET` - Strava 应用的 Client Secret
-- `NEXTAUTH_SECRET` - NextAuth 的加密密钥（可以使用 `openssl rand -base64 32` 生成）
-- `NEXTAUTH_URL` - 你的应用 URL（本地开发为 http://localhost:3000）
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase 项目 URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase 匿名密钥
 
 ### 2. 安装依赖
 
 ```bash
-yarn install
-# 或
 npm install
+# 或
+yarn install
 ```
 
-### 3. 运行开发服务器
+### 3. 配置 Strava
+
+详见 [STRAVA_SETUP.md](./STRAVA_SETUP.md)
+
+简要说就是：
+1. 去 [Strava API 设置](https://www.strava.com/settings/api) 创建应用
+2. **Authorization Callback Domain** 填 `localhost:6364`
+3. 复制 Client ID 和 Client Secret
+
+### 4. 环境变量
+
+创建 `.env.local` 文件：
+
+```env
+NEXT_PUBLIC_STRAVA_CLIENT_ID=你的Client_ID
+STRAVA_CLIENT_SECRET=你的Client_Secret
+NEXTAUTH_URL=http://localhost:6364
+```
+
+### 5. 启动开发服务器
 
 ```bash
-yarn dev
-# 或
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:6364
 
-### 4. 构建生产版本
-
-```bash
-yarn build
-# 或
-npm run build
-```
-
-## Strava API 配置
-
-1. 访问 [Strava Developers](https://developers.strava.com/)
-2. 创建一个新的应用
-3. 设置授权回调域名为你的应用域名
-4. 获取 Client ID 和 Client Secret
-
-## Supabase 配置
-
-1. 创建一个新的 Supabase 项目
-2. 创建 `users` 表：
-
-```sql
-create table users (
-  id text primary key,
-  strava_id bigint unique not null,
-  email text,
-  name text,
-  image text,
-  access_token text,
-  refresh_token text,
-  expires_at bigint,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
-);
-```
-
-## 部署到 Vercel
-
-1. 推送代码到 GitHub
-2. 在 Vercel 导入项目
-3. 配置环境变量
-4. 部署
-
-## 项目结构
+## 项目架构
 
 ```
 run_blue/
 ├── src/
 │   ├── app/              # Next.js App Router
-│   ├── components/       # React 组件
-│   ├── hooks/            # 自定义 Hooks
-│   ├── i18n/             # 国际化配置
+│   │   ├── api/auth/     # 认证 API (Strava OAuth)
+│   │   ├── activities/   # 活动列表页
+│   │   ├── dashboard/    # 仪表盘
+│   │   └── page.tsx      # 首页
+│   ├── components/       # 组件
+│   │   ├── ui/           # 像素风格 UI 组件
+│   │   ├── layout/       # 布局组件
+│   │   └── map/          # 地图组件
 │   ├── lib/              # 工具函数
-│   ├── store/            # Zustand Store
-│   ├── styles/           # 样式文件
-│   └── types/            # TypeScript 类型
-├── public/               # 静态资源
-└── ...
+│   │   ├── strava.ts     # Strava API 封装
+│   │   └── supabase.ts   # 数据库操作
+│   ├── store/            # Zustand 状态管理
+│   └── i18n/             # 多语言配置
 ```
+
+## 技术栈
+
+- **框架**: Next.js 16 + React 19 + TypeScript
+- **样式**: Tailwind CSS 4 (像素极简风格)
+- **状态**: Zustand
+- **地图**: Leaflet + React-Leaflet
+- **国际化**: i18next
+- **部署**: Vercel
+
+## 登录流程说明
+
+本项目**只支持 Strava 登录**，流程如下：
+
+1. 用户点击"使用 STRAVA 登录"
+2. 跳转到 Strava 授权页面
+3. 用户授权后，Strava 重定向回 `/api/auth/callback/strava`
+4. 后端用 code 换取 access_token
+5. 存储 token 到 cookie，跳转到仪表盘
+
+**没有传统账号密码登录**，因为所有数据都来自 Strava。
+
+## 部署到 Vercel
+
+1. 推送代码到 GitHub
+2. 在 Vercel 导入项目
+3. 添加环境变量（同上）
+4. 修改 Strava 应用的 **Authorization Callback Domain** 为生产域名
+5. 部署
 
 ## License
 

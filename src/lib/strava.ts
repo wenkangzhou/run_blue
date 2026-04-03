@@ -15,25 +15,34 @@ export function getStravaAuthUrl(): string {
   )}&response_type=code&scope=${encodeURIComponent(scope)}`;
 }
 
-export async function exchangeToken(code: string): Promise<StravaToken> {
+export async function exchangeToken(code: string, redirectUri?: string): Promise<StravaToken> {
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  
+  const body: Record<string, string> = {
+    client_id: clientId || '',
+    client_secret: clientSecret || '',
+    code,
+    grant_type: 'authorization_code',
+  };
+  
+  // Strava requires redirect_uri to match the one used in authorization request
+  if (redirectUri) {
+    body.redirect_uri = redirectUri;
+  }
   
   const response = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      grant_type: 'authorization_code',
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new Error('Failed to exchange token');
+    const errorText = await response.text();
+    console.error('Strava token exchange error:', errorText);
+    throw new Error(`Failed to exchange token: ${errorText}`);
   }
 
   return response.json();
@@ -57,7 +66,9 @@ export async function refreshAccessToken(refreshToken: string): Promise<StravaTo
   });
 
   if (!response.ok) {
-    throw new Error('Failed to refresh token');
+    const errorText = await response.text();
+    console.error('Strava refresh token error:', errorText);
+    throw new Error(`Failed to refresh token: ${errorText}`);
   }
 
   return response.json();

@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokenData = await exchangeToken(code);
+    // Build the same redirect URI used in authorization request
+    const redirectUri = `${request.nextUrl.origin}/api/auth/callback/strava`;
+    const tokenData = await exchangeToken(code, redirectUri);
 
     if (!tokenData.athlete) {
       return NextResponse.redirect(new URL('/?error=no_athlete', request.url));

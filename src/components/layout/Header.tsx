@@ -50,7 +50,7 @@ export function Header() {
           <div className="hidden md:flex items-center gap-3">
             <LanguageToggle />
             <ThemeToggle />
-            {isAuthenticated ? (
+            {isAuthenticated && (
               <div className="flex items-center gap-3">
                 {user?.image && (
                   <img
@@ -63,10 +63,6 @@ export function Header() {
                   {t('common.logout')}
                 </PixelButton>
               </div>
-            ) : (
-              <PixelButton size="sm" onClick={() => window.location.href = '/api/auth/signin/strava'}>
-                {t('common.login')}
-              </PixelButton>
             )}
           </div>
 
@@ -105,13 +101,9 @@ export function Header() {
                 <LanguageToggle />
                 <ThemeToggle />
               </div>
-              {isAuthenticated ? (
+              {isAuthenticated && (
                 <PixelButton variant="outline" size="sm" onClick={logout}>
                   {t('common.logout')}
-                </PixelButton>
-              ) : (
-                <PixelButton size="sm" onClick={() => window.location.href = '/api/auth/signin/strava'}>
-                  {t('common.login')}
                 </PixelButton>
               )}
             </nav>
