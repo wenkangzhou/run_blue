@@ -6,7 +6,7 @@ export function getStravaAuthUrl(): string {
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
   const baseUrl = typeof window !== 'undefined' 
     ? window.location.origin 
-    : (process.env.NEXTAUTH_URL || 'http://localhost:6364');
+    : 'http://localhost:6364';
   const redirectUri = `${baseUrl}/api/auth/callback/strava`;
   const scope = 'read,activity:read';
   
