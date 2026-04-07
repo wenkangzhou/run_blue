@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const refreshToken = cookies['refresh_token'];
 
   if (!accessToken || !userId) {
-    return NextResponse.json({ user: null });
+    return NextResponse.json({ user: null, error: 'no_token' });
   }
 
   // Try to get user info from Strava
@@ -22,8 +22,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      // Token might be expired
-      return NextResponse.json({ user: null });
+      // Token might be expired - return error so client knows to reauth
+      const status = response.status;
+      if (status === 401) {
+        return NextResponse.json({ user: null, error: 'token_expired' });
+      }
+      return NextResponse.json({ user: null, error: 'strava_error', status });
     }
 
     const athlete = await response.json();
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
       refreshToken,
     });
   } catch {
-    return NextResponse.json({ user: null });
+    return NextResponse.json({ user: null, error: 'network_error' });
   }
 }
 

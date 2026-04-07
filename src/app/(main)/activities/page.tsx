@@ -154,6 +154,12 @@ export default function ActivitiesPage() {
   };
 
   const handleRefresh = () => {
+    // Don't clear activities on refresh - if fetch fails, we keep the cache
+    loadActivities(true);
+  };
+  
+  const handleForceRefresh = () => {
+    // Force clear and reload - only use this when user explicitly wants to clear cache
     clearActivities();
     loadActivities(true);
   };

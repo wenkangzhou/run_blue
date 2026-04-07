@@ -11,6 +11,7 @@ export default function HomePage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     // Check URL for error
@@ -18,24 +19,47 @@ export default function HomePage() {
     if (error) {
       setErrorMsg(decodeURIComponent(error));
     }
+  }, [searchParams]);
 
-    // Check if user is logged in
+  useEffect(() => {
+    // Check if user is logged in with retry logic
     const checkAuth = async () => {
       try {
         const response = await fetch('/api/auth/session');
         if (response.ok) {
           const session = await response.json();
-          setIsAuthenticated(!!session.user);
+          if (session.user) {
+            setIsAuthenticated(true);
+            return;
+          }
+          // If token expired, show error
+          if (session.error === 'token_expired') {
+            setErrorMsg('登录已过期，请重新登录');
+          }
+        }
+        // If no user and we haven't retried too many times, retry
+        if (retryCount < 3) {
+          setTimeout(() => {
+            setRetryCount(c => c + 1);
+          }, 500);
         }
       } catch {
-        setIsAuthenticated(false);
+        // Retry on error
+        if (retryCount < 3) {
+          setTimeout(() => {
+            setRetryCount(c => c + 1);
+          }, 500);
+        }
       } finally {
-        setIsLoading(false);
+        // Only set loading false after retries are exhausted
+        if (retryCount >= 2) {
+          setIsLoading(false);
+        }
       }
     };
 
     checkAuth();
-  }, [searchParams]);
+  }, [retryCount]);
 
   // If authenticated, redirect to activities
   useEffect(() => {
@@ -44,7 +68,7 @@ export default function HomePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading) {
+  if (isLoading && !errorMsg) {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="flex items-center justify-center h-64">

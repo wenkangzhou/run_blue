@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
@@ -39,6 +39,10 @@ export function useAuth() {
               refreshToken: session.refreshToken || '',
               expiresAt: session.expiresAt || 0,
             });
+          } else if (session.error === 'token_expired') {
+            // Token expired, need to re-login
+            console.log('Token expired, redirecting to login');
+            logout();
           } else {
             // No session, set loading to false
             useAuthStore.getState().setLoading(false);
@@ -54,6 +58,32 @@ export function useAuth() {
     };
 
     checkAuth();
+  }, [setUser, logout]);
+
+  // Force refresh session - useful after OAuth callback
+  const refreshSession = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/session');
+      if (response.ok) {
+        const session = await response.json();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            stravaId: session.stravaId,
+            email: session.user.email || '',
+            name: session.user.name || '',
+            image: session.user.image || null,
+            accessToken: session.accessToken || '',
+            refreshToken: session.refreshToken || '',
+            expiresAt: session.expiresAt || 0,
+          });
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }, [setUser]);
 
   const handleLogin = () => {
@@ -73,5 +103,6 @@ export function useAuth() {
     login: handleLogin,
     logout: handleLogout,
     setUser,
+    refreshSession,
   };
 }
