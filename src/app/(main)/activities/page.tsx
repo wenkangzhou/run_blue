@@ -33,6 +33,7 @@ export default function ActivitiesPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
 
   // Filter running activities with valid route data
   const runningActivities = React.useMemo(() => {
@@ -66,6 +67,7 @@ export default function ActivitiesPage() {
       setPage(1);
       setHasMore(true);
       setNeedsReauth(false);
+      setRateLimited(false);
     } else {
       setLoading(true);
     }
@@ -89,6 +91,7 @@ export default function ActivitiesPage() {
       }
       setLastFetchedAt(Date.now());
       setNeedsReauth(false);
+      setRateLimited(false);
     } catch (err: any) {
       const errorMessage = err?.message || '';
       
@@ -99,7 +102,16 @@ export default function ActivitiesPage() {
         if (activities.length === 0) {
           setError('登录已过期，请重新登录');
         }
-      } else {
+      } 
+      // Check if it's a rate limit error
+      else if (errorMessage.includes('429')) {
+        setRateLimited(true);
+        // Don't show error if we have cached data
+        if (activities.length === 0) {
+          setError('请求过于频繁，请稍后再试');
+        }
+      }
+      else {
         // If we have cached data, don't show error
         if (activities.length === 0) {
           setError('Failed to load activities');
@@ -168,6 +180,44 @@ export default function ActivitiesPage() {
     );
   }
 
+  // Show error page if no cache and error
+  if ((error || needsReauth) && activities.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center">
+          {rateLimited ? (
+            <>
+              <p className="font-mono text-amber-600 dark:text-amber-400 mb-2">请求过于频繁</p>
+              <p className="font-mono text-sm text-zinc-500 mb-4">Strava API 限流中，请 15 分钟后再试</p>
+            </>
+          ) : needsReauth ? (
+            <>
+              <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
+              <button 
+                onClick={handleReauth}
+                className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                重新登录
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="font-mono text-red-500">{error}</p>
+              <PixelButton
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => loadActivities(false)}
+              >
+                重试
+              </PixelButton>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-3 py-4">
       {/* Header with Stats */}
@@ -194,7 +244,7 @@ export default function ActivitiesPage() {
           </div>
         </div>
 
-        {/* Refresh Button */}
+        {/* Refresh/Reauth Button */}
         {needsReauth ? (
           <button
             onClick={handleReauth}
@@ -210,50 +260,27 @@ export default function ActivitiesPage() {
             title="刷新数据"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? '刷新中' : isActivitiesCacheStale(lastFetchedAt) ? '已过期' : ''}
+            {refreshing ? '刷新中' : rateLimited ? '限流中' : isActivitiesCacheStale(lastFetchedAt) ? '已过期' : ''}
           </button>
         )}
       </div>
 
-      {/* Reauth banner */}
-      {needsReauth && activities.length > 0 && (
+      {/* Warning banner */}
+      {(needsReauth || rateLimited) && activities.length > 0 && (
         <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
-              登录已过期，显示缓存数据
+              {rateLimited ? '请求过于频繁，显示缓存数据' : '登录已过期，显示缓存数据'}
             </span>
-            <button 
-              onClick={handleReauth}
-              className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
-            >
-              重新登录
-            </button>
+            {needsReauth && (
+              <button 
+                onClick={handleReauth}
+                className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
+              >
+                重新登录
+              </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {error && activities.length === 0 && (
-        <div className="mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
-          <p className="font-mono text-red-600 dark:text-red-400">{error}</p>
-          {needsReauth ? (
-            <PixelButton
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={handleReauth}
-            >
-              重新登录
-            </PixelButton>
-          ) : (
-            <PixelButton
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => loadActivities(false)}
-            >
-              重试
-            </PixelButton>
-          )}
         </div>
       )}
 
