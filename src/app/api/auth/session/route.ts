@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
       if (status === 401) {
         return NextResponse.json({ user: null, error: 'token_expired' });
       }
+      if (status === 429) {
+        return NextResponse.json({ user: null, error: 'rate_limited' });
+      }
       return NextResponse.json({ user: null, error: 'strava_error', status });
     }
 

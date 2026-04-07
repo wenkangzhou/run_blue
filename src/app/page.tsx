@@ -3,21 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { StravaConnect } from '@/components/StravaConnect';
-import { Map, TrendingUp, Zap } from 'lucide-react';
+import { Map, TrendingUp, Zap, AlertCircle, X } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'info' } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     // Check URL for error
     const error = searchParams.get('error');
     if (error) {
-      setErrorMsg(decodeURIComponent(error));
+      setToast({ message: decodeURIComponent(error), type: 'error' });
     }
   }, [searchParams]);
 
@@ -32,9 +32,13 @@ export default function HomePage() {
             setIsAuthenticated(true);
             return;
           }
-          // If token expired, show error
+          // Handle specific errors
           if (session.error === 'token_expired') {
-            setErrorMsg('登录已过期，请重新登录');
+            setToast({ message: '登录已过期，请重新登录', type: 'warning' });
+          } else if (session.error === 'rate_limited') {
+            setToast({ message: 'Strava API 限流中，请稍后再试（约15分钟）', type: 'warning' });
+          } else if (session.error === 'strava_error' && session.status === 429) {
+            setToast({ message: 'Strava API 限流中，请稍后再试（约15分钟）', type: 'warning' });
           }
         }
         // If no user and we haven't retried too many times, retry
@@ -68,7 +72,7 @@ export default function HomePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading && !errorMsg) {
+  if (isLoading && !toast) {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="flex items-center justify-center h-64">
@@ -81,12 +85,25 @@ export default function HomePage() {
   // Show login page for unauthenticated users
   return (
     <div className="container mx-auto px-4 py-12">
-      {/* Error Message */}
-      {errorMsg && (
-        <div className="max-w-md mx-auto mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
-          <p className="font-mono text-red-600 dark:text-red-400 text-sm">
-            登录失败: {errorMsg}
-          </p>
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4`}>
+          <div className={`flex items-center gap-3 p-4 border-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] ${
+            toast.type === 'error' 
+              ? 'bg-red-50 border-red-600 text-red-700 dark:bg-red-950 dark:border-red-400 dark:text-red-400' 
+              : toast.type === 'warning'
+              ? 'bg-amber-50 border-amber-600 text-amber-700 dark:bg-amber-950 dark:border-amber-400 dark:text-amber-400'
+              : 'bg-blue-50 border-blue-600 text-blue-700 dark:bg-blue-950 dark:border-blue-400 dark:text-blue-400'
+          }`}>
+            <AlertCircle size={20} />
+            <p className="font-mono text-sm flex-1">{toast.message}</p>
+            <button 
+              onClick={() => setToast(null)}
+              className="hover:opacity-70"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
       )}
 
