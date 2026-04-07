@@ -240,8 +240,8 @@ export default function ActivityDetailPage() {
     );
   }
 
-  // Show reauth prompt if needed and no cache
-  if (needsReauth && !activity) {
+  // Show error page if no cache and error
+  if ((error || needsReauth || rateLimited) && !activity) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
@@ -257,42 +257,32 @@ export default function ActivityDetailPage() {
         </div>
         <div className="container mx-auto px-4 py-12 max-w-2xl">
           <div className="text-center">
-            <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
-            <button 
-              onClick={() => router.push('/api/auth/signin/strava')}
-              className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              重新登录
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !activity) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <Link 
-              href="/activities" 
-              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              <ChevronLeft size={16} />
-              返回
-            </Link>
-          </div>
-        </div>
-        <div className="container mx-auto px-4 py-12 max-w-2xl">
-          <div className="text-center">
-            <p className="font-mono text-red-500">{error}</p>
-            <button 
-              onClick={() => loadData(true)}
-              className="mt-4 px-4 py-2 font-mono text-sm bg-zinc-100 dark:bg-zinc-800 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            >
-              重试
-            </button>
+            {rateLimited ? (
+              <>
+                <p className="font-mono text-amber-600 dark:text-amber-400 mb-2">请求过于频繁</p>
+                <p className="font-mono text-sm text-zinc-500 mb-4">Strava API 限流中，请 15 分钟后再试</p>
+              </>
+            ) : needsReauth ? (
+              <>
+                <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
+                <button 
+                  onClick={() => router.push('/api/auth/signin/strava')}
+                  className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  重新登录
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-red-500">{error}</p>
+                <button 
+                  onClick={() => loadData(true)}
+                  className="mt-4 px-4 py-2 font-mono text-sm bg-zinc-100 dark:bg-zinc-800 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  重试
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -304,8 +294,9 @@ export default function ActivityDetailPage() {
   // Show laps only if more than 1 lap
   const shouldShowLaps = activity?.laps && activity.laps.length > 1;
 
-  // Page is ready if we have activity data and (map is ready or no polyline to show)
-  const isPageReady = activity && (mapReady || !activity.map?.polyline);
+  // Page is ready if we have activity data
+  // If rate limited with cache, don't wait for map
+  const isPageReady = activity && ((rateLimited && isFromCache) || mapReady || !activity.map?.polyline);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">

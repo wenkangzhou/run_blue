@@ -132,6 +132,7 @@ export function ActivityMap({ polyline, startLatlng, endLatlng, height = '300px'
 
       } catch (e) {
         console.error('Error initializing map:', e);
+        // Even if map fails, call ready so the page can show
         if (!onReadyCalled.current && onReady) {
           onReadyCalled.current = true;
           onReady();
