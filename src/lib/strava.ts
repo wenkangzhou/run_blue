@@ -87,20 +87,34 @@ export async function getActivities(
   page: number = 1,
   perPage: number = 30
 ): Promise<StravaActivity[]> {
-  const response = await fetch(
-    `${STRAVA_API_BASE}/athlete/activities?page=${page}&per_page=${perPage}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+  try {
+    const response = await fetch(
+      `${STRAVA_API_BASE}/athlete/activities?page=${page}&per_page=${perPage}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('401 Unauthorized');
+      }
+      if (response.status === 429) {
+        throw new Error('429 Rate Limited');
+      }
+      throw new Error(`Failed to get activities: ${response.status}`);
     }
-  );
 
-  if (!response.ok) {
-    throw new Error('Failed to get activities');
+    return response.json();
+  } catch (error) {
+    // Re-throw network errors with a clear message
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Failed to fetch');
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function getActivity(
