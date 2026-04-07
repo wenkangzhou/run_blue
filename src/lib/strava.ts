@@ -107,23 +107,34 @@ export async function getActivity(
   accessToken: string,
   activityId: number
 ): Promise<StravaActivity> {
-  const response = await fetch(
-    `${STRAVA_API_BASE}/activities/${activityId}?include_all_efforts=true`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
+  try {
+    const response = await fetch(
+      `${STRAVA_API_BASE}/activities/${activityId}?include_all_efforts=true`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('401 Unauthorized');
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('401 Unauthorized');
+      }
+      if (response.status === 429) {
+        throw new Error('429 Rate Limited');
+      }
+      throw new Error(`Failed to get activity: ${response.status}`);
     }
-    throw new Error(`Failed to get activity: ${response.status}`);
+
+    return response.json();
+  } catch (error) {
+    // Re-throw network errors with a clear message
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Failed to fetch');
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function getActivityStreams(
@@ -131,29 +142,40 @@ export async function getActivityStreams(
   activityId: number,
   types: string[] = ['time', 'distance', 'latlng', 'altitude', 'velocity_smooth', 'heartrate', 'watts']
 ): Promise<Record<string, ActivityStream>> {
-  const response = await fetch(
-    `${STRAVA_API_BASE}/activities/${activityId}/streams/${types.join(',')}?resolution=high`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
+  try {
+    const response = await fetch(
+      `${STRAVA_API_BASE}/activities/${activityId}/streams/${types.join(',')}?resolution=high`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('401 Unauthorized');
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('401 Unauthorized');
+      }
+      if (response.status === 429) {
+        throw new Error('429 Rate Limited');
+      }
+      throw new Error(`Failed to get activity streams: ${response.status}`);
     }
-    throw new Error(`Failed to get activity streams: ${response.status}`);
-  }
 
-  const data = await response.json();
-  // Convert array to object keyed by type
-  const streams: Record<string, ActivityStream> = {};
-  for (const stream of data) {
-    streams[stream.type] = stream;
+    const data = await response.json();
+    // Convert array to object keyed by type
+    const streams: Record<string, ActivityStream> = {};
+    for (const stream of data) {
+      streams[stream.type] = stream;
+    }
+    return streams;
+  } catch (error) {
+    // Re-throw network errors with a clear message
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Failed to fetch');
+    }
+    throw error;
   }
-  return streams;
 }
 
 export function decodePolyline(encoded: string | null): [number, number][] {

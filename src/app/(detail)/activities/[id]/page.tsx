@@ -32,6 +32,7 @@ export default function ActivityDetailPage() {
   const [lapsExpanded, setLapsExpanded] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
 
   const activityId = parseInt(params.id as string, 10);
 
@@ -93,26 +94,41 @@ export default function ActivityDetailPage() {
       setIsFromCache(false);
       setError('');
       setNeedsReauth(false);
+      setRateLimited(false);
       
       // Cache the fresh data
       setCachedActivity(activityId, activityData, streamsData);
     } catch (err: any) {
       console.error('Failed to refresh activity:', err);
       
+      const errorMessage = err?.message || '';
+      
       // Check if it's an auth error
-      if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
+      if (errorMessage.includes('401')) {
         // Try to refresh session
         const refreshed = await handleAuthError();
-        if (!refreshed) {
+        if (!refreshed && !activity) {
           // If we have cached data, show it with a warning
-          if (!activity) {
-            setError('登录已过期，请重新登录');
-          }
-          // Don't clear activity if we have cache
+          setError('登录已过期，请重新登录');
         }
-      } else if (!activity) {
+      } 
+      // Check if it's a rate limit error
+      else if (errorMessage.includes('429')) {
+        setRateLimited(true);
+        // Don't show error if we have cached data
+        if (!activity) {
+          setError('请求过于频繁，请稍后再试');
+        }
+      }
+      // Network error
+      else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch')) {
+        if (!activity) {
+          setError('网络错误，请检查连接');
+        }
+      }
+      else if (!activity) {
         // Only show error if we don't have cached data
-        setError(err?.message || 'Failed to load activity');
+        setError(errorMessage || 'Failed to load activity');
       }
       // If we have cached data, silently fail and keep showing it
     } finally {
@@ -294,29 +310,31 @@ export default function ActivityDetailPage() {
           {activity && (
             <button
               onClick={() => loadData(true)}
-              disabled={refreshing || needsReauth}
+              disabled={refreshing || needsReauth || rateLimited}
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {needsReauth ? '需重新登录' : refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
+              {rateLimited ? '限流中' : needsReauth ? '需重新登录' : refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
             </button>
           )}
         </div>
       </div>
 
-      {/* Reauth banner if using cache but token expired */}
-      {needsReauth && activity && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+      {/* Warning banner */}
+      {(needsReauth || rateLimited) && activity && (
+        <div className={`border-b ${rateLimited ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
           <div className="container mx-auto px-4 py-2 max-w-2xl flex items-center justify-between">
-            <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
-              登录已过期，显示缓存数据
+            <span className={`font-mono text-xs ${rateLimited ? 'text-amber-700 dark:text-amber-400' : 'text-amber-700 dark:text-amber-400'}`}>
+              {rateLimited ? '请求过于频繁，显示缓存数据' : '登录已过期，显示缓存数据'}
             </span>
-            <button 
-              onClick={() => router.push('/api/auth/signin/strava')}
-              className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
-            >
-              重新登录
-            </button>
+            {needsReauth && (
+              <button 
+                onClick={() => router.push('/api/auth/signin/strava')}
+                className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
+              >
+                重新登录
+              </button>
+            )}
           </div>
         </div>
       )}
