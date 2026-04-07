@@ -12,7 +12,7 @@ import { ActivityGridCard } from '@/components/ActivityGridCard';
 
 export default function ActivitiesPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const {
     activities,
     isLoading,
@@ -32,6 +32,7 @@ export default function ActivitiesPage() {
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   // Filter running activities with valid route data
   const runningActivities = React.useMemo(() => {
@@ -64,6 +65,7 @@ export default function ActivitiesPage() {
       // Reset pagination for refresh
       setPage(1);
       setHasMore(true);
+      setNeedsReauth(false);
     } else {
       setLoading(true);
     }
@@ -86,10 +88,22 @@ export default function ActivitiesPage() {
         }
       }
       setLastFetchedAt(Date.now());
+      setNeedsReauth(false);
     } catch (err: any) {
-      // If we have cached data, don't show error
-      if (activities.length === 0) {
-        setError('Failed to load activities');
+      const errorMessage = err?.message || '';
+      
+      // Check if it's an auth error
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        setNeedsReauth(true);
+        // If we have no cached data, show error
+        if (activities.length === 0) {
+          setError('登录已过期，请重新登录');
+        }
+      } else {
+        // If we have cached data, don't show error
+        if (activities.length === 0) {
+          setError('Failed to load activities');
+        }
       }
     } finally {
       setLoading(false);
@@ -130,6 +144,11 @@ export default function ActivitiesPage() {
   const handleRefresh = () => {
     clearActivities();
     loadActivities(true);
+  };
+
+  const handleReauth = () => {
+    logout();
+    router.push('/api/auth/signin/strava');
   };
 
   if (!isAuthenticated) {
@@ -176,28 +195,65 @@ export default function ActivitiesPage() {
         </div>
 
         {/* Refresh Button */}
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing || isLoading}
-          className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2"
-          title="刷新数据"
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? '刷新中' : isActivitiesCacheStale(lastFetchedAt) ? '已过期' : ''}
-        </button>
+        {needsReauth ? (
+          <button
+            onClick={handleReauth}
+            className="inline-flex items-center gap-1 font-mono text-xs text-amber-600 hover:text-amber-700 dark:hover:text-amber-400 p-2"
+          >
+            重新登录
+          </button>
+        ) : (
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || isLoading}
+            className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2"
+            title="刷新数据"
+          >
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? '刷新中' : isActivitiesCacheStale(lastFetchedAt) ? '已过期' : ''}
+          </button>
+        )}
       </div>
+
+      {/* Reauth banner */}
+      {needsReauth && activities.length > 0 && (
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
+              登录已过期，显示缓存数据
+            </span>
+            <button 
+              onClick={handleReauth}
+              className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              重新登录
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && activities.length === 0 && (
         <div className="mb-6 p-4 border-4 border-red-600 bg-red-50 dark:bg-red-950">
           <p className="font-mono text-red-600 dark:text-red-400">{error}</p>
-          <PixelButton
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => loadActivities(false)}
-          >
-            重试
-          </PixelButton>
+          {needsReauth ? (
+            <PixelButton
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={handleReauth}
+            >
+              重新登录
+            </PixelButton>
+          ) : (
+            <PixelButton
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => loadActivities(false)}
+            >
+              重试
+            </PixelButton>
+          )}
         </div>
       )}
 

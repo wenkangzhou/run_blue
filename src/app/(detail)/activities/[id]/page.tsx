@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +33,15 @@ export default function ActivityDetailPage() {
   const [isFromCache, setIsFromCache] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
+  
+  // Use ref to track if we have loaded data to avoid infinite loops
+  const hasLoadedRef = useRef(false);
+  const activityRef = useRef<StravaActivity | null>(null);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    activityRef.current = activity;
+  }, [activity]);
 
   const activityId = parseInt(params.id as string, 10);
 
@@ -102,12 +111,13 @@ export default function ActivityDetailPage() {
       console.error('Failed to refresh activity:', err);
       
       const errorMessage = err?.message || '';
+      const currentActivity = activityRef.current;
       
       // Check if it's an auth error
       if (errorMessage.includes('401')) {
         // Try to refresh session
         const refreshed = await handleAuthError();
-        if (!refreshed && !activity) {
+        if (!refreshed && !currentActivity) {
           // If we have cached data, show it with a warning
           setError('登录已过期，请重新登录');
         }
@@ -116,17 +126,17 @@ export default function ActivityDetailPage() {
       else if (errorMessage.includes('429')) {
         setRateLimited(true);
         // Don't show error if we have cached data
-        if (!activity) {
+        if (!currentActivity) {
           setError('请求过于频繁，请稍后再试');
         }
       }
       // Network error
       else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch')) {
-        if (!activity) {
+        if (!currentActivity) {
           setError('网络错误，请检查连接');
         }
       }
-      else if (!activity) {
+      else if (!currentActivity) {
         // Only show error if we don't have cached data
         setError(errorMessage || 'Failed to load activity');
       }
@@ -135,7 +145,7 @@ export default function ActivityDetailPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.accessToken, activityId, activity, handleAuthError]);
+  }, [user?.accessToken, activityId, handleAuthError]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -148,9 +158,13 @@ export default function ActivityDetailPage() {
     }
 
     if (!user?.accessToken || !activityId) return;
-
-    loadData(false);
-  }, [isAuthenticated, user, activityId, router, loadData]);
+    
+    // Only load once to avoid infinite loop
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadData(false);
+    }
+  }, [isAuthenticated, user?.accessToken, activityId, router, loadData]);
 
   // Split data into visible and hidden based on 20km threshold
   const { visibleSplits, hiddenSplits, hasHiddenSplits } = useMemo(() => {
@@ -290,8 +304,8 @@ export default function ActivityDetailPage() {
   // Show laps only if more than 1 lap
   const shouldShowLaps = activity?.laps && activity.laps.length > 1;
 
-  // Single loading state - wait for everything including map
-  const isPageReady = !loading && activity && (mapReady || !activity.map?.polyline);
+  // Page is ready if we have activity data and (map is ready or no polyline to show)
+  const isPageReady = activity && (mapReady || !activity.map?.polyline);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -322,9 +336,9 @@ export default function ActivityDetailPage() {
 
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activity && (
-        <div className={`border-b ${rateLimited ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
           <div className="container mx-auto px-4 py-2 max-w-2xl flex items-center justify-between">
-            <span className={`font-mono text-xs ${rateLimited ? 'text-amber-700 dark:text-amber-400' : 'text-amber-700 dark:text-amber-400'}`}>
+            <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
               {rateLimited ? '请求过于频繁，显示缓存数据' : '登录已过期，显示缓存数据'}
             </span>
             {needsReauth && (
