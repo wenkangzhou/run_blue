@@ -87,19 +87,19 @@ export default function HomePage() {
     <div className="container mx-auto px-4 py-12">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4`}>
-          <div className={`flex items-center gap-3 p-4 border-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] ${
+        <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-4 pointer-events-none">
+          <div className={`flex items-center gap-3 p-4 border-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] max-w-md w-full pointer-events-auto ${
             toast.type === 'error' 
               ? 'bg-red-50 border-red-600 text-red-700 dark:bg-red-950 dark:border-red-400 dark:text-red-400' 
               : toast.type === 'warning'
               ? 'bg-amber-50 border-amber-600 text-amber-700 dark:bg-amber-950 dark:border-amber-400 dark:text-amber-400'
               : 'bg-blue-50 border-blue-600 text-blue-700 dark:bg-blue-950 dark:border-blue-400 dark:text-blue-400'
           }`}>
-            <AlertCircle size={20} />
+            <AlertCircle size={20} className="flex-shrink-0" />
             <p className="font-mono text-sm flex-1">{toast.message}</p>
             <button 
               onClick={() => setToast(null)}
-              className="hover:opacity-70"
+              className="hover:opacity-70 flex-shrink-0"
             >
               <X size={18} />
             </button>
