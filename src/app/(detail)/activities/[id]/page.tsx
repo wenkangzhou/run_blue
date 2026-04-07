@@ -1,17 +1,18 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatDuration, formatPace } from '@/lib/strava';
+import { getCachedActivity, setCachedActivity } from '@/lib/cache';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
 import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
-import { ChevronLeft, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
@@ -24,12 +25,62 @@ export default function ActivityDetailPage() {
   const [activity, setActivity] = useState<StravaActivity | null>(null);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [splitsExpanded, setSplitsExpanded] = useState(false);
   const [lapsExpanded, setLapsExpanded] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(false);
 
   const activityId = parseInt(params.id as string, 10);
+
+  // Load data with cache-first strategy
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (!user?.accessToken || !activityId) return;
+
+    // If not refreshing, try cache first
+    if (!isRefresh) {
+      const cached = getCachedActivity(activityId);
+      if (cached) {
+        setActivity(cached.activity);
+        setStreams(cached.streams);
+        setIsFromCache(true);
+        setLoading(false);
+      }
+    }
+
+    // Always try to fetch fresh data in background
+    if (isRefresh) {
+      setRefreshing(true);
+    }
+
+    try {
+      const [activityData, streamsData] = await Promise.all([
+        getActivity(user.accessToken, activityId),
+        getActivityStreams(user.accessToken, activityId).catch(() => null),
+      ]);
+      
+      // Update state with fresh data
+      setActivity(activityData);
+      setStreams(streamsData);
+      setIsFromCache(false);
+      setError('');
+      
+      // Cache the fresh data
+      setCachedActivity(activityId, activityData, streamsData);
+    } catch (err: any) {
+      console.error('Failed to refresh activity:', err);
+      
+      // Only show error if we don't have cached data
+      if (!activity) {
+        setError(err?.message || 'Failed to load activity');
+      }
+      // If we have cached data, silently fail and keep showing it
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user?.accessToken, activityId, activity]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -39,25 +90,8 @@ export default function ActivityDetailPage() {
 
     if (!user?.accessToken || !activityId) return;
 
-    const loadActivity = async () => {
-      try {
-        setLoading(true);
-        setMapReady(false);
-        const [activityData, streamsData] = await Promise.all([
-          getActivity(user.accessToken, activityId),
-          getActivityStreams(user.accessToken, activityId).catch(() => null),
-        ]);
-        setActivity(activityData);
-        setStreams(streamsData);
-      } catch (err) {
-        setError('Failed to load activity');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadActivity();
-  }, [isAuthenticated, user, activityId, router]);
+    loadData(false);
+  }, [isAuthenticated, user, activityId, router, loadData]);
 
   // Split data into visible and hidden based on 20km threshold
   const { visibleSplits, hiddenSplits, hasHiddenSplits } = useMemo(() => {
@@ -113,13 +147,10 @@ export default function ActivityDetailPage() {
 
   if (!isAuthenticated) return null;
 
-  // Single loading state - wait for everything
-  const isPageReady = !loading && activity && (mapReady || !activity.map?.polyline);
-
-  if (!isPageReady && !error) {
+  // Show loading only if no cache data available
+  if (loading && !activity) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
-        {/* Minimal Header - always show */}
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
             <Link 
@@ -138,7 +169,7 @@ export default function ActivityDetailPage() {
     );
   }
 
-  if (error || !activity) {
+  if (error && !activity) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
@@ -154,10 +185,13 @@ export default function ActivityDetailPage() {
         </div>
         <div className="container mx-auto px-4 py-12">
           <div className="text-center">
-            <p className="font-mono text-red-500">{error || '活动未找到'}</p>
-            <Link href="/activities" className="mt-4 inline-block font-mono text-blue-600">
-              ← 返回
-            </Link>
+            <p className="font-mono text-red-500">{error}</p>
+            <button 
+              onClick={() => loadData(true)}
+              className="mt-4 px-4 py-2 font-mono text-sm bg-zinc-100 dark:bg-zinc-800 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            >
+              重试
+            </button>
           </div>
         </div>
       </div>
@@ -165,15 +199,18 @@ export default function ActivityDetailPage() {
   }
 
   // Show splits only if more than 1 split
-  const shouldShowSplits = activity.splits_metric && activity.splits_metric.length > 1;
+  const shouldShowSplits = activity?.splits_metric && activity.splits_metric.length > 1;
   // Show laps only if more than 1 lap
-  const shouldShowLaps = activity.laps && activity.laps.length > 1;
+  const shouldShowLaps = activity?.laps && activity.laps.length > 1;
+
+  // Single loading state - wait for everything including map
+  const isPageReady = !loading && activity && (mapReady || !activity.map?.polyline);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-2xl">
+        <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
           <Link 
             href="/activities" 
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -181,157 +218,176 @@ export default function ActivityDetailPage() {
             <ChevronLeft size={16} />
             返回
           </Link>
+          
+          {/* Refresh button - only show if we have data */}
+          {activity && (
+            <button
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-4 max-w-2xl">
-        {/* Header */}
-        <div className="mb-4">
-          <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
-          <p className="font-mono text-xs text-zinc-500">
-            {formatDateTime(activity.start_date_local)}
-          </p>
+      {/* Page content or full-page loading */}
+      {!isPageReady ? (
+        <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+          <Loader2 className="animate-spin text-zinc-400" size={32} />
         </div>
+      ) : (
+        <div className="container mx-auto px-4 py-4 max-w-2xl">
+          {/* Header */}
+          <div className="mb-4">
+            <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
+            <p className="font-mono text-xs text-zinc-500">
+              {formatDateTime(activity.start_date_local)}
+            </p>
+          </div>
 
-        {/* Map - notify when ready */}
-        {activity.map?.polyline && (
-          <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
-            <ActivityMap 
-              polyline={activity.map.polyline}
-              startLatlng={activity.start_latlng}
-              endLatlng={activity.end_latlng}
-              height="200px"
-              onReady={() => setMapReady(true)}
+          {/* Map - notify when ready */}
+          {activity.map?.polyline && (
+            <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+              <ActivityMap 
+                polyline={activity.map.polyline}
+                startLatlng={activity.start_latlng}
+                endLatlng={activity.end_latlng}
+                height="200px"
+                onReady={() => setMapReady(true)}
+              />
+            </div>
+          )}
+
+          {/* Main Stats - Compact, no truncate */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <StatCard 
+              label="距离"
+              value={formatDistance(activity.distance, 'km')}
+            />
+            <StatCard 
+              label="时间"
+              value={formatDuration(activity.moving_time)}
+            />
+            <StatCard 
+              label="配速"
+              value={formatPace(activity.distance, activity.moving_time, 'min/km')}
+            />
+            <StatCard 
+              label="用时"
+              value={formatDuration(activity.elapsed_time)}
             />
           </div>
-        )}
 
-        {/* Main Stats - Compact, no truncate */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-          <StatCard 
-            label="距离"
-            value={formatDistance(activity.distance, 'km')}
-          />
-          <StatCard 
-            label="时间"
-            value={formatDuration(activity.moving_time)}
-          />
-          <StatCard 
-            label="配速"
-            value={formatPace(activity.distance, activity.moving_time, 'min/km')}
-          />
-          <StatCard 
-            label="用时"
-            value={formatDuration(activity.elapsed_time)}
-          />
-        </div>
-
-        {/* Extended Stats */}
-        <div className="mb-4">
-          <ActivityStats activity={activity} />
-        </div>
-
-        {/* Charts */}
-        {streams && (
-          <div className="mb-4 space-y-4">
-            {streams.heartrate && (
-              <ChartSection 
-                title="心率"
-                subtitle={`${Math.round(activity.average_heartrate || 0)} bpm ~ ${Math.round(activity.max_heartrate || 0)} bpm`}
-              >
-                <SimpleLineChart 
-                  data={streams.heartrate.data as number[]}
-                  color="#ef4444"
-                  height={100}
-                />
-              </ChartSection>
-            )}
-            
-            {streams.velocity_smooth && (
-              <ChartSection 
-                title="配速"
-                subtitle=""
-              >
-                <SimpleLineChart 
-                  data={(streams.velocity_smooth.data as number[]).map(v => v > 0 ? 1000 / v : 0)}
-                  color="#3b82f6"
-                  height={100}
-                />
-              </ChartSection>
-            )}
-            
-            {streams.altitude && (
-              <ChartSection 
-                title="海拔"
-                subtitle={`${Math.round(activity.elev_low || 0)}m ~ ${Math.round(activity.elev_high || 0)}m`}
-              >
-                <SimpleLineChart 
-                  data={streams.altitude.data as number[]}
-                  color="#22c55e"
-                  height={100}
-                  fill
-                />
-              </ChartSection>
-            )}
-          </div>
-        )}
-
-        {/* Splits - Show first 20km, collapse rest (only if more than 1) */}
-        {shouldShowSplits && (
+          {/* Extended Stats */}
           <div className="mb-4">
-            <button
-              onClick={() => setSplitsExpanded(!splitsExpanded)}
-              className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
-            >
-              <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                分段 ({activity.splits_metric!.length})
-              </h2>
-              {hasHiddenSplits && (
-                <span className="text-zinc-400">
-                  {splitsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </span>
+            <ActivityStats activity={activity} />
+          </div>
+
+          {/* Charts */}
+          {streams && (
+            <div className="mb-4 space-y-4">
+              {streams.heartrate && (
+                <ChartSection 
+                  title="心率"
+                  subtitle={`${Math.round(activity.average_heartrate || 0)} bpm ~ ${Math.round(activity.max_heartrate || 0)} bpm`}
+                >
+                  <SimpleLineChart 
+                    data={streams.heartrate.data as number[]}
+                    color="#ef4444"
+                    height={100}
+                  />
+                </ChartSection>
               )}
-            </button>
-            <div className="mt-3">
-              <SplitsTable splits={visibleSplits} showHeader={true} />
               
-              {hasHiddenSplits && splitsExpanded && (
-                <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <SplitsTable splits={hiddenSplits} showHeader={false} />
-                </div>
+              {streams.velocity_smooth && (
+                <ChartSection 
+                  title="配速"
+                  subtitle=""
+                >
+                  <SimpleLineChart 
+                    data={(streams.velocity_smooth.data as number[]).map(v => v > 0 ? 1000 / v : 0)}
+                    color="#3b82f6"
+                    height={100}
+                  />
+                </ChartSection>
+              )}
+              
+              {streams.altitude && (
+                <ChartSection 
+                  title="海拔"
+                  subtitle={`${Math.round(activity.elev_low || 0)}m ~ ${Math.round(activity.elev_high || 0)}m`}
+                >
+                  <SimpleLineChart 
+                    data={streams.altitude.data as number[]}
+                    color="#22c55e"
+                    height={100}
+                    fill
+                  />
+                </ChartSection>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Laps - Show first 20km, collapse rest (only if more than 1) */}
-        {shouldShowLaps && (
-          <div className="mb-4">
-            <button
-              onClick={() => setLapsExpanded(!lapsExpanded)}
-              className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
-            >
-              <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                圈数 ({activity.laps!.length})
-              </h2>
-              {hasHiddenLaps && (
-                <span className="text-zinc-400">
-                  {lapsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </span>
-              )}
-            </button>
-            <div className="mt-3">
-              <LapsTable laps={visibleLaps} showHeader={true} />
-              
-              {hasHiddenLaps && lapsExpanded && (
-                <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <LapsTable laps={hiddenLaps} showHeader={false} />
-                </div>
-              )}
+          {/* Splits - Show first 20km, collapse rest (only if more than 1) */}
+          {shouldShowSplits && (
+            <div className="mb-4">
+              <button
+                onClick={() => setSplitsExpanded(!splitsExpanded)}
+                className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
+              >
+                <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
+                  分段 ({activity.splits_metric!.length})
+                </h2>
+                {hasHiddenSplits && (
+                  <span className="text-zinc-400">
+                    {splitsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </span>
+                )}
+              </button>
+              <div className="mt-3">
+                <SplitsTable splits={visibleSplits} showHeader={true} />
+                
+                {hasHiddenSplits && splitsExpanded && (
+                  <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+                    <SplitsTable splits={hiddenSplits} showHeader={false} />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* Laps - Show first 20km, collapse rest (only if more than 1) */}
+          {shouldShowLaps && (
+            <div className="mb-4">
+              <button
+                onClick={() => setLapsExpanded(!lapsExpanded)}
+                className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
+              >
+                <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
+                  圈数 ({activity.laps!.length})
+                </h2>
+                {hasHiddenLaps && (
+                  <span className="text-zinc-400">
+                    {lapsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </span>
+                )}
+              </button>
+              <div className="mt-3">
+                <LapsTable laps={visibleLaps} showHeader={true} />
+                
+                {hasHiddenLaps && lapsExpanded && (
+                  <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+                    <LapsTable laps={hiddenLaps} showHeader={false} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
