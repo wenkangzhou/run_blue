@@ -21,7 +21,7 @@ const LAP_DISTANCE_THRESHOLD = 20; // km
 export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const [activity, setActivity] = useState<StravaActivity | null>(null);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,8 +31,35 @@ export default function ActivityDetailPage() {
   const [splitsExpanded, setSplitsExpanded] = useState(false);
   const [lapsExpanded, setLapsExpanded] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   const activityId = parseInt(params.id as string, 10);
+
+  // Handle 401 error - try refresh session or logout
+  const handleAuthError = useCallback(async () => {
+    // Try to refresh session first
+    try {
+      const response = await fetch('/api/auth/session', { method: 'GET' });
+      if (!response.ok) {
+        // Session is really expired
+        setNeedsReauth(true);
+        logout();
+        return false;
+      }
+      const session = await response.json();
+      if (!session?.user) {
+        setNeedsReauth(true);
+        logout();
+        return false;
+      }
+      // Session refreshed, retry should work
+      return true;
+    } catch {
+      setNeedsReauth(true);
+      logout();
+      return false;
+    }
+  }, [logout]);
 
   // Load data with cache-first strategy
   const loadData = useCallback(async (isRefresh = false) => {
@@ -65,14 +92,26 @@ export default function ActivityDetailPage() {
       setStreams(streamsData);
       setIsFromCache(false);
       setError('');
+      setNeedsReauth(false);
       
       // Cache the fresh data
       setCachedActivity(activityId, activityData, streamsData);
     } catch (err: any) {
       console.error('Failed to refresh activity:', err);
       
-      // Only show error if we don't have cached data
-      if (!activity) {
+      // Check if it's an auth error
+      if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
+        // Try to refresh session
+        const refreshed = await handleAuthError();
+        if (!refreshed) {
+          // If we have cached data, show it with a warning
+          if (!activity) {
+            setError('登录已过期，请重新登录');
+          }
+          // Don't clear activity if we have cache
+        }
+      } else if (!activity) {
+        // Only show error if we don't have cached data
         setError(err?.message || 'Failed to load activity');
       }
       // If we have cached data, silently fail and keep showing it
@@ -80,11 +119,15 @@ export default function ActivityDetailPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.accessToken, activityId, activity]);
+  }, [user?.accessToken, activityId, activity, handleAuthError]);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/');
+      // Check if we have cached data to show
+      const cached = getCachedActivity(activityId);
+      if (!cached) {
+        router.push('/');
+      }
       return;
     }
 
@@ -145,8 +188,6 @@ export default function ActivityDetailPage() {
     };
   }, [activity?.laps]);
 
-  if (!isAuthenticated) return null;
-
   // Show loading only if no cache data available
   if (loading && !activity) {
     return (
@@ -169,6 +210,36 @@ export default function ActivityDetailPage() {
     );
   }
 
+  // Show reauth prompt if needed and no cache
+  if (needsReauth && !activity) {
+    return (
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="container mx-auto px-4 py-4 max-w-2xl">
+            <Link 
+              href="/activities" 
+              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            >
+              <ChevronLeft size={16} />
+              返回
+            </Link>
+          </div>
+        </div>
+        <div className="container mx-auto px-4 py-12 max-w-2xl">
+          <div className="text-center">
+            <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
+            <button 
+              onClick={() => router.push('/api/auth/signin/strava')}
+              className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              重新登录
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error && !activity) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -183,7 +254,7 @@ export default function ActivityDetailPage() {
             </Link>
           </div>
         </div>
-        <div className="container mx-auto px-4 py-12">
+        <div className="container mx-auto px-4 py-12 max-w-2xl">
           <div className="text-center">
             <p className="font-mono text-red-500">{error}</p>
             <button 
@@ -223,15 +294,32 @@ export default function ActivityDetailPage() {
           {activity && (
             <button
               onClick={() => loadData(true)}
-              disabled={refreshing}
+              disabled={refreshing || needsReauth}
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
+              {needsReauth ? '需重新登录' : refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
             </button>
           )}
         </div>
       </div>
+
+      {/* Reauth banner if using cache but token expired */}
+      {needsReauth && activity && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+          <div className="container mx-auto px-4 py-2 max-w-2xl flex items-center justify-between">
+            <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
+              登录已过期，显示缓存数据
+            </span>
+            <button 
+              onClick={() => router.push('/api/auth/signin/strava')}
+              className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              重新登录
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Page content or full-page loading */}
       {!isPageReady ? (

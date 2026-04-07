@@ -117,7 +117,10 @@ export async function getActivity(
   );
 
   if (!response.ok) {
-    throw new Error('Failed to get activity');
+    if (response.status === 401) {
+      throw new Error('401 Unauthorized');
+    }
+    throw new Error(`Failed to get activity: ${response.status}`);
   }
 
   return response.json();
@@ -138,7 +141,10 @@ export async function getActivityStreams(
   );
 
   if (!response.ok) {
-    throw new Error('Failed to get activity streams');
+    if (response.status === 401) {
+      throw new Error('401 Unauthorized');
+    }
+    throw new Error(`Failed to get activity streams: ${response.status}`);
   }
 
   const data = await response.json();
