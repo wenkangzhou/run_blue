@@ -260,7 +260,7 @@ export default function ActivitiesPage() {
             title="刷新数据"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? t('common.refreshing') : rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : ''}
+            {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
           </button>
         )}
       </div>
