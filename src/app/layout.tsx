@@ -18,6 +18,17 @@ const vt323 = VT323({
 export const metadata: Metadata = {
   title: "跑蓝 Run Blue - Track Your Running Journey",
   description: "Connect with Strava to visualize your running data and track your progress",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "跑蓝",
+  },
+  icons: {
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180" },
+    ],
+  },
 };
 
 export default function RootLayout({
