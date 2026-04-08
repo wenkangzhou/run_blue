@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatDuration, formatPace } from '@/lib/strava';
@@ -23,7 +24,9 @@ export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { isAuthenticated, user, logout } = useAuth();
+  const { resolvedTheme } = useTheme();
   const { t } = useTranslation();
+  const isDark = resolvedTheme === 'dark';
   const [activity, setActivity] = useState<StravaActivity | null>(null);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +39,7 @@ export default function ActivityDetailPage() {
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [forceShow, setForceShow] = useState(false);
+  const [hasShownContent, setHasShownContent] = useState(false);
   
   // Use ref to track if we have loaded data to avoid infinite loops
   const hasLoadedRef = useRef(false);
@@ -46,15 +50,22 @@ export default function ActivityDetailPage() {
     activityRef.current = activity;
   }, [activity]);
   
+  // Once content is shown, never go back to loading
+  useEffect(() => {
+    if (activity && !hasShownContent) {
+      setHasShownContent(true);
+    }
+  }, [activity, hasShownContent]);
+  
   // Timeout to force show page if map gets stuck
   useEffect(() => {
-    if (activity) {
+    if (activity && !forceShow) {
       const timeout = setTimeout(() => {
         setForceShow(true);
-      }, 3000);
+      }, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [activity]);
+  }, [activity, forceShow]);
 
   const activityId = parseInt(params.id as string, 10);
 
@@ -308,8 +319,8 @@ export default function ActivityDetailPage() {
   const shouldShowLaps = activity?.laps && activity.laps.length > 1;
 
   // Page is ready if we have activity data
-  // Don't wait for map if: no polyline, or we have cache, or timeout
-  const isPageReady = activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow);
+  // Once shown, always stay ready (never go back to full-page loading)
+  const isPageReady = hasShownContent || (activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow));
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -357,13 +368,13 @@ export default function ActivityDetailPage() {
         </div>
       )}
 
-      {/* Page content or full-page loading */}
+      {/* Page content or full-page loading - only show once */}
       {!isPageReady ? (
         <div className="flex-1 flex items-center justify-center min-h-[50vh]">
           <Loader2 className="animate-spin text-zinc-400" size={32} />
         </div>
-      ) : (
-        <div className="container mx-auto px-4 py-4 max-w-2xl">
+      ) : activity && (
+        <div className="container mx-auto px-4 py-4 max-w-2xl relative">
           {/* Header */}
           <div className="mb-4">
             <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
@@ -380,6 +391,7 @@ export default function ActivityDetailPage() {
                 startLatlng={activity.start_latlng}
                 endLatlng={activity.end_latlng}
                 height="200px"
+                isDark={isDark}
                 onReady={() => setMapReady(true)}
               />
             </div>

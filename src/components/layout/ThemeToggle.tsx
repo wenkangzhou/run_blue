@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const { t } = useTranslation();
   const [mounted, setMounted] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -15,10 +15,13 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
+  // Use resolvedTheme for actual dark/light detection
+  const activeTheme = resolvedTheme || 'light';
+
   if (!mounted) {
     return (
-      <button className="p-2 border-2 border-zinc-800 dark:border-zinc-200">
-        <Monitor size={18} />
+      <button className="p-2 border-2 border-zinc-800 dark:border-zinc-600 bg-white dark:bg-zinc-900">
+        <Monitor size={18} className="text-zinc-900 dark:text-zinc-100" />
       </button>
     );
   }
@@ -35,12 +38,14 @@ export function ThemeToggle() {
     <div className="relative">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2 border-2 border-zinc-800 dark:border-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        className="p-2 border-2 border-zinc-800 dark:border-zinc-600 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
       >
-        {currentTheme.icon}
+        <span className="text-zinc-900 dark:text-zinc-100">
+          {currentTheme.icon}
+        </span>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 flex flex-col gap-1 bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 p-1 min-w-[120px] z-50">
+        <div className="absolute right-0 top-full mt-2 flex flex-col gap-1 bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-600 p-1 min-w-[120px] z-50">
           {themes.map((t) => (
             <button
               key={t.value}
@@ -48,11 +53,11 @@ export function ThemeToggle() {
                 setTheme(t.value);
                 setIsOpen(false);
               }}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-mono hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-mono hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-900 dark:text-zinc-100 ${
                 theme === t.value ? 'bg-blue-100 dark:bg-blue-900' : ''
               }`}
             >
-              {t.icon}
+              <span className="text-zinc-900 dark:text-zinc-100">{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}

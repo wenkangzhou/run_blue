@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
@@ -13,6 +14,7 @@ import { ActivityGridCard } from '@/components/ActivityGridCard';
 export default function ActivitiesPage() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
+  const { t } = useTranslation();
   const {
     activities,
     isLoading,
@@ -179,7 +181,7 @@ export default function ActivitiesPage() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-pulse font-mono text-xl flex items-center gap-2">
             <Loader2 className="animate-spin" />
-            加载中...
+            {t('common.loading')}
           </div>
         </div>
       </div>
@@ -193,17 +195,17 @@ export default function ActivitiesPage() {
         <div className="text-center">
           {rateLimited ? (
             <>
-              <p className="font-mono text-amber-600 dark:text-amber-400 mb-2">请求过于频繁</p>
-              <p className="font-mono text-sm text-zinc-500 mb-4">Strava API 限流中，请 15 分钟后再试</p>
+              <p className="font-mono text-amber-600 dark:text-amber-400 mb-2">{t('errors.rateLimitedTitle')}</p>
+              <p className="font-mono text-sm text-zinc-500 mb-4">{t('errors.rateLimitedDesc')}</p>
             </>
           ) : needsReauth ? (
             <>
-              <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
+              <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">{t('auth.sessionExpired')}</p>
               <button 
                 onClick={handleReauth}
                 className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
               >
-                重新登录
+                {t('auth.relogin')}
               </button>
             </>
           ) : (
@@ -215,7 +217,7 @@ export default function ActivitiesPage() {
                 className="mt-4"
                 onClick={() => loadActivities(false)}
               >
-                重试
+                {t('common.retry')}
               </PixelButton>
             </>
           )}
@@ -230,21 +232,21 @@ export default function ActivitiesPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="font-pixel text-xl font-bold mb-2">
-            最近跑步记录
+            {t('activity.recentRuns', '最近跑步记录')}
           </h1>
           
           {/* Stats Summary */}
           <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
             <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">总距离</span>
+              <span className="text-zinc-500">{t('stats.totalDistance')}</span>
               <span className="font-bold">{formatDistance(stats.totalDistance, 'km')}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">次数</span>
+              <span className="text-zinc-500">{t('stats.totalActivities')}</span>
               <span className="font-bold">{stats.totalRuns}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">总时间</span>
+              <span className="text-zinc-500">{t('stats.totalTime')}</span>
               <span className="font-bold">{formatDuration(stats.totalTime)}</span>
             </div>
           </div>
@@ -256,7 +258,7 @@ export default function ActivitiesPage() {
             onClick={handleReauth}
             className="inline-flex items-center gap-1 font-mono text-xs text-amber-600 hover:text-amber-700 dark:hover:text-amber-400 p-2"
           >
-            重新登录
+            {t('auth.relogin')}
           </button>
         ) : (
           <button
@@ -266,7 +268,7 @@ export default function ActivitiesPage() {
             title="刷新数据"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? '刷新中' : rateLimited ? '限流中' : isActivitiesCacheStale(lastFetchedAt) ? '已过期' : ''}
+            {refreshing ? t('common.refreshing') : rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired', '已过期') : ''}
           </button>
         )}
       </div>
@@ -276,7 +278,7 @@ export default function ActivitiesPage() {
         <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
-              {rateLimited ? '请求过于频繁，显示缓存数据' : '登录已过期，显示缓存数据'}
+              {rateLimited ? t('errors.rateLimitedShowCache') : t('auth.sessionExpiredShowCache')}
             </span>
             {needsReauth && (
               <button 
@@ -292,7 +294,7 @@ export default function ActivitiesPage() {
 
       {runningActivities.length === 0 ? (
         <div className="text-center py-16">
-          <p className="font-mono text-zinc-500">没有找到跑步记录</p>
+          <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
         </div>
       ) : (
         <>

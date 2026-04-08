@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
 
 interface RouteOnlyMapProps {
@@ -11,6 +12,8 @@ interface RouteOnlyMapProps {
 export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = React.useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   React.useEffect(() => {
     setIsClient(true);
@@ -45,12 +48,13 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
           opacity: 0,
         }).addTo(map);
 
-        // Add polyline
+        // Add polyline with appropriate color for theme
+        const lineColor = isDark ? '#a1a1aa' : '#1a1a1a'; // zinc-400 for dark, dark for light
         const latLngs = points.map(p => [p[0], p[1]]);
         polylineLayer = L.polyline(latLngs as any, {
-          color: '#1a1a1a',
+          color: lineColor,
           weight: 2.5,
-          opacity: 0.9,
+          opacity: isDark ? 1 : 0.9,
         }).addTo(map);
 
         // Fit bounds
@@ -67,22 +71,30 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
         map.remove();
       }
     };
-  }, [isClient, polyline]);
+  }, [isClient, polyline, isDark]);
 
   // Check if we have valid polyline
   const hasValidPolyline = polyline && polyline.length >= 10;
+  
+  // Match card background exactly (default to light during SSR)
+  const bgColor = isDark ? '#27272a' : '#f4f4f5'; // zinc-800 or zinc-100
+
+  if (!hasValidPolyline) {
+    return (
+      <div 
+        style={{ height, backgroundColor: bgColor }}
+        className="w-full h-full flex items-center justify-center"
+      >
+        <div className="w-8 h-8 border-2 border-zinc-300 dark:border-zinc-600" />
+      </div>
+    );
+  }
 
   return (
     <div 
       ref={mapRef}
-      style={{ height }}
-      className="bg-zinc-100 dark:bg-zinc-800 w-full h-full"
-    >
-      {!hasValidPolyline && (
-        <div className="w-full h-full flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-zinc-300 dark:border-zinc-600" />
-        </div>
-      )}
-    </div>
+      style={{ height, backgroundColor: bgColor }}
+      className="w-full h-full"
+    />
   );
 }
