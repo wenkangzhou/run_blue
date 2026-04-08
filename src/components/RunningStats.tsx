@@ -67,6 +67,13 @@ export function RunningStats({ activities }: ActivityStatsProps) {
       ? (activeStats.time / 60) / (activeStats.distance / 1000)
       : 0;
 
+  // Get current period label
+  const periodLabel = {
+    week: t('stats.weekShort', '周'),
+    month: t('stats.monthShort', '月'),
+    year: t('stats.yearShort', '年'),
+  }[activePeriod];
+
   return (
     <div className="relative">
       {/* Compact Toggle Button */}
@@ -75,7 +82,8 @@ export function RunningStats({ activities }: ActivityStatsProps) {
         className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-xs font-mono hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
       >
         <BarChart3 size={12} />
-        <span>{formatDistance(activeStats.distance, 'km')} · {activeStats.count}{t('stats.runs')}</span>
+        <span className="text-zinc-500">{periodLabel}</span>
+        <span className="font-medium">{formatDistance(activeStats.distance, 'km')} · {activeStats.count}{t('stats.runs')}</span>
         {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 

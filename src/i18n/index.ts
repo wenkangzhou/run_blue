@@ -238,6 +238,9 @@ const resources = {
         byWeek: '按周',
         byMonth: '按月',
         byYear: '按年',
+        weekShort: '周',
+        monthShort: '月',
+        yearShort: '年',
       },
       months: {
         jan: '1月',
