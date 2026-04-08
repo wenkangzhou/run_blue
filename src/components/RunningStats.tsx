@@ -68,11 +68,12 @@ export function RunningStats({ activities }: ActivityStatsProps) {
       : 0;
 
   // Get current period label
-  const periodLabel = {
+  const periodLabels: Record<Exclude<PeriodType, 'all'>, string> = {
     week: t('stats.weekShort', '周'),
     month: t('stats.monthShort', '月'),
     year: t('stats.yearShort', '年'),
-  }[activePeriod];
+  };
+  const periodLabel = periodLabels[activePeriod as Exclude<PeriodType, 'all'>];
 
   return (
     <div className="relative">
