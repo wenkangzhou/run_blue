@@ -433,7 +433,11 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.heartrate.data as number[]}
                     color="#ef4444"
-                    height={100}
+                    height={120}
+                    yUnit=""
+                    minValue={activity.average_heartrate ? activity.average_heartrate - 30 : undefined}
+                    maxValue={activity.max_heartrate ? activity.max_heartrate + 10 : undefined}
+                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                   />
                 </ChartSection>
               )}
@@ -446,7 +450,9 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={(streams.velocity_smooth.data as number[]).map(v => v > 0 ? 1000 / v : 0)}
                     color="#3b82f6"
-                    height={100}
+                    height={120}
+                    yUnit="'"
+                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                   />
                 </ChartSection>
               )}
@@ -459,8 +465,10 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.altitude.data as number[]}
                     color="#22c55e"
-                    height={100}
+                    height={120}
+                    yUnit="m"
                     fill
+                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                   />
                 </ChartSection>
               )}

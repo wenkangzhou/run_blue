@@ -78,7 +78,7 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      const newActivities = await getActivities(user.accessToken, 1, 200);
+      const newActivities = await getActivities(user.accessToken, isRefresh ? 1 : page, 200);
       
       if (isRefresh) {
         // Replace all activities on refresh
