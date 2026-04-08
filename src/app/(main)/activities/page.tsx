@@ -9,8 +9,8 @@ import { PixelButton } from '@/components/ui';
 import { StravaActivity } from '@/types';
 import { getActivities, formatDistance, formatDuration } from '@/lib/strava';
 import { Loader2, RefreshCw } from 'lucide-react';
-import { ActivityGridCard } from '@/components/ActivityGridCard';
 import { RunningStats } from '@/components/RunningStats';
+import { GroupedActivities } from '@/components/GroupedActivities';
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -285,29 +285,7 @@ export default function ActivitiesPage() {
           <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
         </div>
       ) : (
-        <>
-          {/* Grid Layout - 3 columns, taller cards */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {runningActivities.map((activity: StravaActivity, index: number) => (
-              <ActivityGridCard 
-                key={`${activity.id}-${index}`} 
-                activity={activity} 
-              />
-            ))}
-          </div>
-
-          {hasMore && (
-            <div className="mt-8 text-center">
-              <PixelButton
-                onClick={loadMore}
-                isLoading={isLoading}
-                disabled={isLoading}
-              >
-                加载更多
-              </PixelButton>
-            </div>
-          )}
-        </>
+        <GroupedActivities activities={runningActivities} />
       )}
     </div>
   );
