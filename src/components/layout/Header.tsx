@@ -65,13 +65,22 @@ export function Header() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2 border-2 border-zinc-800 dark:border-zinc-200"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          {/* Mobile Menu Button & Avatar */}
+          <div className="md:hidden flex items-center gap-2">
+            {isAuthenticated && user?.image && (
+              <img
+                src={user.image}
+                alt={user.name}
+                className="w-8 h-8 border-2 border-zinc-800 dark:border-zinc-200"
+              />
+            )}
+            <button
+              className="p-2 border-2 border-zinc-800 dark:border-zinc-200"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+            >
+              {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu */}

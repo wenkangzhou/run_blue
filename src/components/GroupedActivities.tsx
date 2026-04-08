@@ -77,8 +77,8 @@ export function GroupedActivities({ activities }: GroupedActivitiesProps) {
               </div>
             </div>
 
-            {/* Activity Grid */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {/* Activity Grid - Responsive columns */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {group.activities.map((activity, index) => (
                 <ActivityGridCard
                   key={`${activity.id}-${index}`}
