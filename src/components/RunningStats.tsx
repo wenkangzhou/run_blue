@@ -3,7 +3,7 @@
 import React from 'react';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
-import { Calendar, Clock, Route, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 type PeriodType = 'week' | 'month' | 'year' | 'all';
@@ -25,7 +25,7 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [activePeriod, setActivePeriod] = React.useState<PeriodType>('week');
 
-  // Calculate stats for different periods
+  // Calculate stats for different periods (removed 'all')
   const stats = React.useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -34,30 +34,25 @@ export function RunningStats({ activities }: ActivityStatsProps) {
 
     const result: PeriodStats[] = [
       {
-        label: t('stats.thisWeek', '本周'),
+        label: t('stats.thisWeek'),
         period: 'week',
         ...calculatePeriodStats(activities, (date) => {
           return getWeekNumber(date) === currentWeek && date.getFullYear() === currentYear;
         }),
       },
       {
-        label: t('stats.thisMonth', '本月'),
+        label: t('stats.thisMonth'),
         period: 'month',
         ...calculatePeriodStats(activities, (date) => {
           return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
         }),
       },
       {
-        label: t('stats.thisYear', '今年'),
+        label: t('stats.thisYear'),
         period: 'year',
         ...calculatePeriodStats(activities, (date) => {
           return date.getFullYear() === currentYear;
         }),
-      },
-      {
-        label: t('stats.allTime', '全部'),
-        period: 'all',
-        ...calculatePeriodStats(activities, () => true),
       },
     ];
 
@@ -73,31 +68,27 @@ export function RunningStats({ activities }: ActivityStatsProps) {
       : 0;
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg mb-4 overflow-hidden">
-      {/* Header - Click to expand */}
+    <div className="relative">
+      {/* Compact Toggle Button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-xs font-mono hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
       >
-        <div className="flex items-center gap-3">
-          <span className="font-pixel text-sm font-bold">{t('stats.title', '统计数据')}</span>
-          <span className="text-xs font-mono text-zinc-400">
-            {formatDistance(activeStats.distance, 'km')} · {activeStats.count}{t('stats.runs', '次')}
-          </span>
-        </div>
-        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <BarChart3 size={12} />
+        <span>{formatDistance(activeStats.distance, 'km')} · {activeStats.count}{t('stats.runs')}</span>
+        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 
-      {/* Expandable Content */}
+      {/* Expandable Content - Dropdown Style */}
       {isExpanded && (
-        <div className="p-3 pt-0 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-3 shadow-lg z-50">
           {/* Period Tabs */}
-          <div className="flex gap-1 mt-3 mb-3 p-1 bg-zinc-100 dark:bg-zinc-800 rounded">
+          <div className="flex gap-1 mb-3 p-1 bg-zinc-100 dark:bg-zinc-800 rounded">
             {stats.map((stat) => (
               <button
                 key={stat.period}
                 onClick={() => setActivePeriod(stat.period)}
-                className={`flex-1 py-1.5 px-2 text-xs font-mono rounded transition-colors ${
+                className={`flex-1 py-1 px-1 text-[10px] font-mono rounded transition-colors ${
                   activePeriod === stat.period
                     ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
@@ -109,27 +100,23 @@ export function RunningStats({ activities }: ActivityStatsProps) {
           </div>
 
           {/* Main Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard
-              icon={<Route size={16} />}
-              label={t('stats.distance', '距离')}
-              value={formatDistance(activeStats.distance, 'km')}
-            />
-            <StatCard
-              icon={<Clock size={16} />}
-              label={t('stats.time', '时间')}
-              value={formatDuration(activeStats.time)}
-            />
-            <StatCard
-              icon={<TrendingUp size={16} />}
-              label={t('stats.avgPace', '平均配速')}
-              value={avgPace > 0 ? `${avgPace.toFixed(2)}'/${t('stats.km', 'km')}` : '-'}
-            />
-            <StatCard
-              icon={<Calendar size={16} />}
-              label={t('stats.totalRuns', '次数')}
-              value={`${activeStats.count}`}
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
+              <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.distance')}</div>
+              <div className="font-mono text-xs font-bold">{formatDistance(activeStats.distance, 'km')}</div>
+            </div>
+            <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
+              <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.time')}</div>
+              <div className="font-mono text-xs font-bold">{formatDuration(activeStats.time)}</div>
+            </div>
+            <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
+              <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.avgPace')}</div>
+              <div className="font-mono text-xs font-bold">{avgPace > 0 ? `${avgPace.toFixed(2)}'/km` : '-'}</div>
+            </div>
+            <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
+              <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.totalRuns')}</div>
+              <div className="font-mono text-xs font-bold">{activeStats.count}</div>
+            </div>
           </div>
         </div>
       )}
@@ -137,27 +124,7 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="text-center">
-      <div className="flex items-center justify-center gap-1 text-zinc-500 mb-1">
-        {icon}
-        <span className="text-xs font-mono">{label}</span>
-      </div>
-      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
-        {value}
-      </div>
-    </div>
-  );
-}
+
 
 // Helper functions
 function calculatePeriodStats(

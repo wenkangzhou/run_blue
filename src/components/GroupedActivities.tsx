@@ -45,10 +45,9 @@ export function GroupedActivities({ activities }: GroupedActivitiesProps) {
                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}
           >
-            {type === 'week' && t('stats.byWeek', '按周')}
-            {type === 'month' && t('stats.byMonth', '按月')}
-            {type === 'month' && t('stats.byYear', '按年')}
-            {type === 'year' && t('stats.byYear', '按年')}
+            {type === 'week' && t('stats.byWeek')}
+            {type === 'month' && t('stats.byMonth')}
+            {type === 'year' && t('stats.byYear')}
           </button>
         ))}
       </div>

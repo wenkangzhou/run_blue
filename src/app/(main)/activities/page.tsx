@@ -231,9 +231,18 @@ export default function ActivitiesPage() {
     <div className="container mx-auto px-3 py-4">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-pixel text-xl font-bold">
-          {t('activity.recentRuns', '最近跑步记录')}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="font-pixel text-xl font-bold">
+            {t('activity.recentRuns')}
+          </h1>
+          
+          {/* Stats Toggle - compact */}
+          {runningActivities.length > 0 && (
+            <div className="relative">
+              <RunningStats activities={runningActivities} />
+            </div>
+          )}
+        </div>
 
         {/* Refresh/Reauth Button */}
         {needsReauth ? (
@@ -251,15 +260,12 @@ export default function ActivitiesPage() {
             title="刷新数据"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? t('common.refreshing') : rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired', '已过期') : ''}
+            {refreshing ? t('common.refreshing') : rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : ''}
           </button>
         )}
       </div>
 
-      {/* Stats Overview */}
-      {runningActivities.length > 0 && (
-        <RunningStats activities={runningActivities} />
-      )}
+
 
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activities.length > 0 && (
