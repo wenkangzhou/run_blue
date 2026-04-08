@@ -12,7 +12,8 @@ import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
 import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
-import { ChevronLeft, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Loader2, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
@@ -22,6 +23,7 @@ export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { isAuthenticated, user, logout } = useAuth();
+  const { t } = useTranslation();
   const [activity, setActivity] = useState<StravaActivity | null>(null);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -240,7 +242,7 @@ export default function ActivityDetailPage() {
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
-              返回
+              {t('common.back')}
             </Link>
           </div>
         </div>
@@ -280,7 +282,7 @@ export default function ActivityDetailPage() {
                   onClick={() => router.push('/api/auth/signin/strava')}
                   className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  重新登录
+                  {t('auth.relogin')}
                 </button>
               </>
             ) : (
@@ -330,7 +332,7 @@ export default function ActivityDetailPage() {
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {rateLimited ? '限流中' : needsReauth ? '需重新登录' : refreshing ? '刷新中' : isFromCache ? '缓存' : ''}
+              {rateLimited ? t('errors.rateLimited', '限流中') : needsReauth ? t('auth.relogin', '需重新登录') : refreshing ? t('common.refreshing', '刷新中') : isFromCache ? t('common.cached', '缓存') : ''}
             </button>
           )}
         </div>
@@ -341,7 +343,7 @@ export default function ActivityDetailPage() {
         <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
           <div className="container mx-auto px-4 py-2 max-w-2xl flex items-center justify-between">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
-              {rateLimited ? '请求过于频繁，显示缓存数据' : '登录已过期，显示缓存数据'}
+              {rateLimited ? t('errors.rateLimitedShowCache', '请求过于频繁，显示缓存数据') : t('auth.sessionExpiredShowCache', '登录已过期，显示缓存数据')}
             </span>
             {needsReauth && (
               <button 
@@ -386,19 +388,19 @@ export default function ActivityDetailPage() {
           {/* Main Stats - Compact, no truncate */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <StatCard 
-              label="距离"
+              label={t('activity.distance')}
               value={formatDistance(activity.distance, 'km')}
             />
             <StatCard 
-              label="时间"
+              label={t('activity.time')}
               value={formatDuration(activity.moving_time)}
             />
             <StatCard 
-              label="配速"
+              label={t('activity.pace')}
               value={formatPace(activity.distance, activity.moving_time, 'min/km')}
             />
             <StatCard 
-              label="用时"
+              label={t('activity.elapsedTime', '用时')}
               value={formatDuration(activity.elapsed_time)}
             />
           </div>
@@ -413,7 +415,7 @@ export default function ActivityDetailPage() {
             <div className="mb-4 space-y-4">
               {streams.heartrate && (
                 <ChartSection 
-                  title="心率"
+                  title={t('activity.heartRate')}
                   subtitle={`${Math.round(activity.average_heartrate || 0)} bpm ~ ${Math.round(activity.max_heartrate || 0)} bpm`}
                 >
                   <SimpleLineChart 
@@ -426,7 +428,7 @@ export default function ActivityDetailPage() {
               
               {streams.velocity_smooth && (
                 <ChartSection 
-                  title="配速"
+                  title={t('activity.pace')}
                   subtitle=""
                 >
                   <SimpleLineChart 
@@ -439,7 +441,7 @@ export default function ActivityDetailPage() {
               
               {streams.altitude && (
                 <ChartSection 
-                  title="海拔"
+                  title={t('activity.elevation')}
                   subtitle={`${Math.round(activity.elev_low || 0)}m ~ ${Math.round(activity.elev_high || 0)}m`}
                 >
                   <SimpleLineChart 
@@ -456,26 +458,28 @@ export default function ActivityDetailPage() {
           {/* Splits - Show first 20km, collapse rest (only if more than 1) */}
           {shouldShowSplits && (
             <div className="mb-4">
-              <button
-                onClick={() => setSplitsExpanded(!splitsExpanded)}
-                className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
-              >
+              <div className="py-3 border-b border-zinc-200 dark:border-zinc-700">
                 <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  分段 ({activity.splits_metric!.length})
+                  {t('activity.splits')} ({activity.splits_metric!.length})
                 </h2>
-                {hasHiddenSplits && (
-                  <span className="text-zinc-400">
-                    {splitsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </span>
-                )}
-              </button>
+              </div>
               <div className="mt-3">
                 <SplitsTable splits={visibleSplits} showHeader={true} />
                 
-                {hasHiddenSplits && splitsExpanded && (
-                  <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                    <SplitsTable splits={hiddenSplits} showHeader={false} />
-                  </div>
+                {hasHiddenSplits && (
+                  <>
+                    {splitsExpanded && (
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/50">
+                        <SplitsTable splits={hiddenSplits} showHeader={false} />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setSplitsExpanded(!splitsExpanded)}
+                      className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
+                    >
+                      {splitsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -484,26 +488,28 @@ export default function ActivityDetailPage() {
           {/* Laps - Show first 20km, collapse rest (only if more than 1) */}
           {shouldShowLaps && (
             <div className="mb-4">
-              <button
-                onClick={() => setLapsExpanded(!lapsExpanded)}
-                className="w-full flex items-center justify-between py-3 border-b border-zinc-200 dark:border-zinc-700"
-              >
+              <div className="py-3 border-b border-zinc-200 dark:border-zinc-700">
                 <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  圈数 ({activity.laps!.length})
+                  {t('activity.laps')} ({activity.laps!.length})
                 </h2>
-                {hasHiddenLaps && (
-                  <span className="text-zinc-400">
-                    {lapsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </span>
-                )}
-              </button>
+              </div>
               <div className="mt-3">
                 <LapsTable laps={visibleLaps} showHeader={true} />
                 
-                {hasHiddenLaps && lapsExpanded && (
-                  <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                    <LapsTable laps={hiddenLaps} showHeader={false} />
-                  </div>
+                {hasHiddenLaps && (
+                  <>
+                    {lapsExpanded && (
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/50">
+                        <LapsTable laps={hiddenLaps} showHeader={false} />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setLapsExpanded(!lapsExpanded)}
+                      className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
+                    >
+                      {lapsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

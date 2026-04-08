@@ -9,6 +9,7 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [mounted, setMounted] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
@@ -31,24 +32,39 @@ export function ThemeToggle() {
   const currentTheme = themes.find((t) => t.value === theme) || themes[2];
 
   return (
-    <div className="relative group">
-      <button className="p-2 border-2 border-zinc-800 dark:border-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 border-2 border-zinc-800 dark:border-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+      >
         {currentTheme.icon}
       </button>
-      <div className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col gap-1 bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 p-1 min-w-[120px]">
-        {themes.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTheme(t.value)}
-            className={`flex items-center gap-2 px-3 py-2 text-sm font-mono hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
-              theme === t.value ? 'bg-blue-100 dark:bg-blue-900' : ''
-            }`}
-          >
-            {t.icon}
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </div>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 flex flex-col gap-1 bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 p-1 min-w-[120px] z-50">
+          {themes.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => {
+                setTheme(t.value);
+                setIsOpen(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-mono hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+                theme === t.value ? 'bg-blue-100 dark:bg-blue-900' : ''
+              }`}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Click outside to close */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setIsOpen(false)}
+        />
+      )}
     </div>
   );
 }
