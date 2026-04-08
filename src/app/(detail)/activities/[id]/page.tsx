@@ -33,6 +33,7 @@ export default function ActivityDetailPage() {
   const [isFromCache, setIsFromCache] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
+  const [forceShow, setForceShow] = useState(false);
   
   // Use ref to track if we have loaded data to avoid infinite loops
   const hasLoadedRef = useRef(false);
@@ -41,6 +42,16 @@ export default function ActivityDetailPage() {
   // Keep ref in sync with state
   useEffect(() => {
     activityRef.current = activity;
+  }, [activity]);
+  
+  // Timeout to force show page if map gets stuck
+  useEffect(() => {
+    if (activity) {
+      const timeout = setTimeout(() => {
+        setForceShow(true);
+      }, 3000);
+      return () => clearTimeout(timeout);
+    }
   }, [activity]);
 
   const activityId = parseInt(params.id as string, 10);
@@ -295,8 +306,8 @@ export default function ActivityDetailPage() {
   const shouldShowLaps = activity?.laps && activity.laps.length > 1;
 
   // Page is ready if we have activity data
-  // If rate limited with cache, don't wait for map
-  const isPageReady = activity && ((rateLimited && isFromCache) || mapReady || !activity.map?.polyline);
+  // Don't wait for map if: no polyline, or we have cache, or timeout
+  const isPageReady = activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">

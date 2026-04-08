@@ -55,7 +55,7 @@ export default function HomePage() {
           }, 500);
         }
       } finally {
-        // Only set loading false after retries are exhausted
+        // Only set loading false after retries are exhausted or timeout
         if (retryCount >= 2) {
           setIsLoading(false);
         }
@@ -63,6 +63,13 @@ export default function HomePage() {
     };
 
     checkAuth();
+    
+    // Timeout after 5 seconds to show page anyway
+    const timeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 5000);
+    
+    return () => clearTimeout(timeout);
   }, [retryCount]);
 
   // If authenticated, redirect to activities
@@ -72,6 +79,7 @@ export default function HomePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  // Don't block the UI for too long - show the login page after a reasonable timeout
   if (isLoading && !toast) {
     return (
       <div className="container mx-auto px-4 py-12">
