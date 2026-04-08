@@ -10,6 +10,7 @@ import { StravaActivity } from '@/types';
 import { getActivities, formatDistance, formatDuration } from '@/lib/strava';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { ActivityGridCard } from '@/components/ActivityGridCard';
+import { RunningStats } from '@/components/RunningStats';
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -228,29 +229,11 @@ export default function ActivitiesPage() {
 
   return (
     <div className="container mx-auto px-3 py-4">
-      {/* Header with Stats */}
-      <div className="mb-4 flex items-start justify-between">
-        <div>
-          <h1 className="font-pixel text-xl font-bold mb-2">
-            {t('activity.recentRuns', '最近跑步记录')}
-          </h1>
-          
-          {/* Stats Summary */}
-          <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">{t('stats.totalDistance')}</span>
-              <span className="font-bold">{formatDistance(stats.totalDistance, 'km')}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">{t('stats.totalActivities')}</span>
-              <span className="font-bold">{stats.totalRuns}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">{t('stats.totalTime')}</span>
-              <span className="font-bold">{formatDuration(stats.totalTime)}</span>
-            </div>
-          </div>
-        </div>
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="font-pixel text-xl font-bold">
+          {t('activity.recentRuns', '最近跑步记录')}
+        </h1>
 
         {/* Refresh/Reauth Button */}
         {needsReauth ? (
@@ -272,6 +255,11 @@ export default function ActivitiesPage() {
           </button>
         )}
       </div>
+
+      {/* Stats Overview */}
+      {runningActivities.length > 0 && (
+        <RunningStats activities={runningActivities} />
+      )}
 
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activities.length > 0 && (

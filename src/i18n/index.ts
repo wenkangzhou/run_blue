@@ -230,6 +230,11 @@ const resources = {
         thisMonth: '本月',
         thisYear: '今年',
         allTime: '全部',
+        distance: '距离',
+        time: '时间',
+        totalRuns: '跑步次数',
+        runs: '次',
+        km: '公里',
       },
       theme: {
         light: '浅色',
