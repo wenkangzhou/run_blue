@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
-import { PixelButton } from '@/components/ui';
 import { StravaActivity } from '@/types';
-import { getActivities, formatDistance, formatDuration } from '@/lib/strava';
+import { getActivities } from '@/lib/strava';
 import { Loader2, RefreshCw } from 'lucide-react';
+import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
 
@@ -37,6 +37,7 @@ export default function ActivitiesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Filter running activities with valid route data
   const runningActivities = React.useMemo(() => {
@@ -149,12 +150,23 @@ export default function ActivitiesPage() {
     }
   }, [isAuthenticated, user, activities.length, lastFetchedAt, loadActivities, router]);
 
-  const loadMore = () => {
-    if (page === 1) {
-      setPage(2);
-    }
-    loadActivities(false);
-  };
+  // Infinite scroll - load more when scrolling to bottom
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasMore || isLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+          loadActivities(false);
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    observer.observe(loadMoreRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoading, loadActivities, loadMoreRef]);
 
   const handleRefresh = () => {
     // Don't clear activities on refresh - if fetch fails, we keep the cache
@@ -291,7 +303,21 @@ export default function ActivitiesPage() {
           <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
         </div>
       ) : (
-        <GroupedActivities activities={runningActivities} />
+        <>
+          <GroupedActivities 
+            activities={runningActivities} 
+            hasMore={hasMore}
+            isLoading={isLoading}
+          />
+          {/* Loading indicator at bottom */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="py-4 flex justify-center">
+              {isLoading && (
+                <div className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

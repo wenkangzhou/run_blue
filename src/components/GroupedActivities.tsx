@@ -11,6 +11,8 @@ type GroupBy = 'week' | 'month' | 'year';
 
 interface GroupedActivitiesProps {
   activities: StravaActivity[];
+  hasMore?: boolean;
+  isLoading?: boolean;
 }
 
 interface ActivityGroup {
@@ -23,7 +25,7 @@ interface ActivityGroup {
   totalTime: number;
 }
 
-export function GroupedActivities({ activities }: GroupedActivitiesProps) {
+export function GroupedActivities({ activities, hasMore, isLoading }: GroupedActivitiesProps) {
   const { t } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
 
