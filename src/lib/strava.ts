@@ -82,17 +82,37 @@ export async function getAthlete(accessToken: string): Promise<StravaAthlete> {
   return response.json();
 }
 
+// Helper to get valid access token (auto-refresh if needed)
+async function getValidAccessToken(): Promise<string | null> {
+  // Check session first
+  try {
+    const sessionRes = await fetch('/api/auth/session');
+    if (sessionRes.ok) {
+      const session = await sessionRes.json();
+      if (session.user?.accessToken) {
+        return session.user.accessToken;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to get session:', e);
+  }
+  return null;
+}
+
 export async function getActivities(
   accessToken: string,
   page: number = 1,
   perPage: number = 30
 ): Promise<StravaActivity[]> {
+  // Try to get a valid token (may refresh automatically)
+  const validToken = await getValidAccessToken() || accessToken;
+  
   try {
     const response = await fetch(
       `${STRAVA_API_BASE}/athlete/activities?page=${page}&per_page=${perPage}`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${validToken}`,
         },
       }
     );
@@ -121,12 +141,15 @@ export async function getActivity(
   accessToken: string,
   activityId: number
 ): Promise<StravaActivity> {
+  // Try to get a valid token (may refresh automatically)
+  const validToken = await getValidAccessToken() || accessToken;
+  
   try {
     const response = await fetch(
       `${STRAVA_API_BASE}/activities/${activityId}?include_all_efforts=true`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${validToken}`,
         },
       }
     );
@@ -156,12 +179,15 @@ export async function getActivityStreams(
   activityId: number,
   types: string[] = ['time', 'distance', 'latlng', 'altitude', 'velocity_smooth', 'heartrate', 'watts']
 ): Promise<Record<string, ActivityStream>> {
+  // Try to get a valid token (may refresh automatically)
+  const validToken = await getValidAccessToken() || accessToken;
+  
   try {
     const response = await fetch(
       `${STRAVA_API_BASE}/activities/${activityId}/streams/${types.join(',')}?resolution=high`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${validToken}`,
         },
       }
     );
@@ -265,8 +291,17 @@ export function formatPace(
   return `${minutes}'${secs.toString().padStart(2, '0')}"${unit === 'min/mi' ? '/mi' : '/km'}`;
 }
 
+// Parse local datetime string (e.g., "2024-01-15T07:30:00Z") without timezone conversion
+// Strava's start_date_local includes 'Z' suffix but represents local time
+function parseLocalDate(dateString: string): Date {
+  // Remove Z suffix if present to treat as local time
+  const cleanDateString = dateString.replace(/Z$/, '');
+  const date = new Date(cleanDateString);
+  return date;
+}
+
 export function formatDate(dateString: string, locale: string = 'zh-CN'): string {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   
   // Format manually to avoid locale issues in SSR
   const year = date.getFullYear();
@@ -282,7 +317,7 @@ export function formatDate(dateString: string, locale: string = 'zh-CN'): string
 }
 
 export function formatDateTime(dateString: string, locale: string = 'zh-CN'): string {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   const dateStr = formatDate(dateString, locale);
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');

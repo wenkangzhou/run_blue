@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
@@ -22,10 +22,12 @@ interface PeriodStats {
 
 export function RunningStats({ activities }: ActivityStatsProps) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const [activePeriod, setActivePeriod] = React.useState<PeriodType>('week');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [activePeriod, setActivePeriod] = useState<PeriodType>('week');
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Calculate stats for different periods (removed 'all')
+  // Calculate stats for different periods
   const stats = React.useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -75,11 +77,41 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   };
   const periodLabel = periodLabels[activePeriod as Exclude<PeriodType, 'all'>];
 
+  // Update dropdown position when expanded
+  useEffect(() => {
+    if (isExpanded && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + window.scrollY + 8,
+        left: rect.left + window.scrollX,
+      });
+    }
+  }, [isExpanded]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!isExpanded) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setIsExpanded(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [isExpanded]);
+
   return (
     <div className="relative">
       {/* Compact Toggle Button */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        ref={buttonRef}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}
         className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-xs font-mono hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
       >
         <BarChart3 size={12} />
@@ -88,9 +120,16 @@ export function RunningStats({ activities }: ActivityStatsProps) {
         {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 
-      {/* Expandable Content - Dropdown Style */}
+      {/* Expandable Content - Portal to body */}
       {isExpanded && (
-        <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-3 shadow-lg z-50">
+        <div 
+          className="fixed w-64 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-3 shadow-lg"
+          style={{ 
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            zIndex: 9999,
+          }}
+        >
           {/* Period Tabs */}
           <div className="flex gap-1 mb-3 p-1 bg-zinc-100 dark:bg-zinc-800 rounded">
             {stats.map((stat) => (

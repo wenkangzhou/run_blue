@@ -445,14 +445,35 @@ export default function ActivityDetailPage() {
               {streams.velocity_smooth && (
                 <ChartSection 
                   title={t('activity.pace')}
-                  subtitle=""
+                  subtitle={(() => {
+                    // 过滤合理的配速范围 (2-15 分钟/公里)
+                    const paces = (streams.velocity_smooth.data as number[])
+                      .filter(v => v > 0)
+                      .map(v => 1000 / v / 60)
+                      .filter(p => p >= 2 && p <= 15);
+                    if (paces.length === 0) return '';
+                    const minPace = Math.min(...paces);
+                    const maxPace = Math.max(...paces);
+                    const formatPace = (p: number) => {
+                      const min = Math.floor(p);
+                      const sec = Math.round((p - min) * 60);
+                      return `${min}'${sec.toString().padStart(2, '0')}"`;
+                    };
+                    return `${formatPace(minPace)} ~ ${formatPace(maxPace)}`;
+                  })()}
                 >
                   <SimpleLineChart 
-                    data={(streams.velocity_smooth.data as number[]).map(v => v > 0 ? 1000 / v : 0)}
+                    data={(streams.velocity_smooth.data as number[])
+                      .map(v => v > 0 ? 1000 / v / 60 : 0)
+                      .filter(p => p >= 2 && p <= 15)} // 过滤异常值
                     color="#3b82f6"
                     height={120}
-                    yUnit="'"
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
+                    formatYLabel={(v) => {
+                      const min = Math.floor(v);
+                      const sec = Math.round((v - min) * 60);
+                      return `${min}'${sec.toString().padStart(2, '0')}"`;
+                    }}
                   />
                 </ChartSection>
               )}

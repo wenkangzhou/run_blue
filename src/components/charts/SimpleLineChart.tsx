@@ -7,21 +7,23 @@ interface SimpleLineChartProps {
   color: string;
   height?: number;
   fill?: boolean;
-  xLabels?: string[]; // X轴标签（距离或时间）
-  yUnit?: string; // Y轴单位
+  xLabels?: string[];
+  yUnit?: string;
   minValue?: number;
   maxValue?: number;
+  formatYLabel?: (value: number) => string;
 }
 
 export function SimpleLineChart({ 
   data, 
   color, 
-  height = 120, 
+  height = 140, 
   fill = false,
   xLabels,
   yUnit = '',
   minValue,
-  maxValue
+  maxValue,
+  formatYLabel
 }: SimpleLineChartProps) {
   if (!data || data.length === 0) return null;
 
@@ -35,102 +37,103 @@ export function SimpleLineChart({
   const max = maxValue !== undefined ? maxValue : Math.max(...sampledData);
   const range = max - min || 1;
 
-  const chartWidth = 100;
-  const chartHeight = 80; // 留给坐标轴空间
-  const padding = 5;
+  const padding = { top: 10, right: 10, bottom: 25, left: 35 };
+  const chartWidth = 300;
+  const chartHeight = height - padding.top - padding.bottom;
   
   // Generate path
   const points = sampledData.map((value, index) => {
-    const x = (index / (sampledData.length - 1)) * (chartWidth - padding * 2) + padding;
-    const y = chartHeight - ((value - min) / range) * (chartHeight - padding * 2) - padding;
-    return `${x},${y}`;
+    const x = padding.left + (index / (sampledData.length - 1)) * (chartWidth - padding.left - padding.right);
+    const y = padding.top + chartHeight - ((value - min) / range) * chartHeight;
+    return [x, y];
   });
 
-  const linePath = `M ${points.join(' L ')}`;
+  const linePath = points.map((p, i) => (i === 0 ? 'M' : 'L') + ` ${p[0]},${p[1]}`).join(' ');
   
   // Fill path (close the area)
   const fillPath = fill 
-    ? `${linePath} L ${chartWidth - padding},${chartHeight} L ${padding},${chartHeight} Z`
+    ? `${linePath} L ${points[points.length - 1][0]},${padding.top + chartHeight} L ${points[0][0]},${padding.top + chartHeight} Z`
     : linePath;
 
-  // Y轴刻度
+  // Y轴刻度 (3个)
   const yTicks = [min, (min + max) / 2, max];
 
   return (
     <div className="w-full" style={{ height }}>
       <svg 
-        viewBox={`0 0 ${chartWidth} ${height}`} 
-        className="w-full h-full"
-        preserveAspectRatio="none"
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${chartWidth} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
       >
         {/* Y轴刻度线和标签 */}
         {yTicks.map((tick, i) => {
-          const y = chartHeight - ((tick - min) / range) * (chartHeight - padding * 2) - padding;
+          const y = padding.top + chartHeight - ((tick - min) / range) * chartHeight;
           return (
             <g key={i}>
               {/* 网格线 */}
               <line
-                x1={padding}
+                x1={padding.left}
                 y1={y}
-                x2={chartWidth - padding}
+                x2={chartWidth - padding.right}
                 y2={y}
                 stroke="#e4e4e7"
-                strokeWidth={0.3}
-                strokeDasharray="2,2"
+                strokeWidth={1}
+                strokeDasharray="4,2"
               />
               {/* Y轴数值 */}
               <text
-                x={2}
+                x={padding.left - 5}
                 y={y}
-                fontSize={4}
-                fill="#71717a"
-                textAnchor="start"
+                fontSize={11}
+                fill="#52525b"
+                textAnchor="end"
                 dominantBaseline="middle"
+                fontWeight="500"
               >
-                {Math.round(tick)}{yUnit}
+                {formatYLabel ? formatYLabel(tick) : `${Math.round(tick)}${yUnit}`}
               </text>
             </g>
           );
         })}
 
         {/* 图表区域 */}
-        <g transform={`translate(0, ${height - chartHeight - 15})`}>
-          {fill && (
-            <path
-              d={fillPath}
-              fill={color}
-              fillOpacity={0.1}
-            />
-          )}
+        {fill && (
           <path
-            d={linePath}
-            fill="none"
-            stroke={color}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
+            d={fillPath}
+            fill={color}
+            fillOpacity={0.15}
           />
-        </g>
+        )}
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
         {/* X轴标签 */}
         {xLabels && xLabels.length >= 2 && (
           <>
             <text
-              x={padding}
-              y={height - 2}
-              fontSize={4}
-              fill="#71717a"
+              x={padding.left}
+              y={height - 5}
+              fontSize={11}
+              fill="#52525b"
               textAnchor="start"
+              fontWeight="500"
             >
               {xLabels[0]}
             </text>
             <text
-              x={chartWidth - padding}
-              y={height - 2}
-              fontSize={4}
-              fill="#71717a"
+              x={chartWidth - padding.right}
+              y={height - 5}
+              fontSize={11}
+              fill="#52525b"
               textAnchor="end"
+              fontWeight="500"
             >
               {xLabels[xLabels.length - 1]}
             </text>
