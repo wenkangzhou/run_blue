@@ -120,7 +120,7 @@ export default function HomePage() {
           跑蓝
         </h1>
         <p className="font-mono text-lg text-zinc-600 dark:text-zinc-400">
-          记录你的跑步旅程
+          像素级记录你的每一步
         </p>
       </div>
 
@@ -130,18 +130,18 @@ export default function HomePage() {
       <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
         <FeatureCard
           icon={<Map size={32} />}
-          title="路线可视化"
-          description="在交互式地图上查看你的跑步路线"
+          title="地图收集"
+          description="把跑过的路，变成墙上的画"
         />
         <FeatureCard
           icon={<TrendingUp size={32} />}
-          title="追踪进度"
-          description="随时监控你的跑步数据统计"
+          title="数据看板"
+          description="距离、配速、次数，一目了然"
         />
         <FeatureCard
           icon={<Zap size={32} />}
-          title="同步 Strava"
-          description="自动从你的 Strava 同步活动数据"
+          title="Strava 直连"
+          description="一键授权，无需注册，数据自动来"
         />
       </div>
     </div>
