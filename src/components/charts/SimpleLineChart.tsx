@@ -108,7 +108,18 @@ export function SimpleLineChart({
                 dominantBaseline="middle"
                 fontWeight="500"
               >
-                {formatYLabel ? formatYLabel(tick) : `${Math.round(tick)}${yUnit}`}
+                {(() => {
+                  const value = Number(tick);
+                  if (isNaN(value)) return '-';
+                  if (formatYLabel) {
+                    try {
+                      return formatYLabel(value);
+                    } catch (e) {
+                      return `${Math.round(value)}${yUnit}`;
+                    }
+                  }
+                  return `${Math.round(value)}${yUnit}`;
+                })()}
               </text>
             </g>
           );
