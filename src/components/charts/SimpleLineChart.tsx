@@ -33,9 +33,18 @@ export function SimpleLineChart({
     ? data.filter((_, i) => i % sampleRate === 0)
     : data;
 
-  const min = minValue !== undefined ? minValue : Math.min(...sampledData);
-  const max = maxValue !== undefined ? maxValue : Math.max(...sampledData);
-  const range = max - min || 1;
+  // 过滤掉无效数据 (NaN, null, undefined, Infinity)
+  const validData = sampledData.filter(v => 
+    typeof v === 'number' && !isNaN(v) && isFinite(v)
+  );
+  
+  if (validData.length === 0) return null;
+  
+  const rawMin = Math.min(...validData);
+  const rawMax = Math.max(...validData);
+  const min = minValue !== undefined && !isNaN(minValue) ? minValue : rawMin;
+  const max = maxValue !== undefined && !isNaN(maxValue) ? maxValue : rawMax;
+  const range = Math.abs(max - min) || 1;
 
   const padding = { top: 10, right: 10, bottom: 25, left: 35 };
   const chartWidth = 300;
@@ -55,8 +64,16 @@ export function SimpleLineChart({
     ? `${linePath} L ${points[points.length - 1][0]},${padding.top + chartHeight} L ${points[0][0]},${padding.top + chartHeight} Z`
     : linePath;
 
-  // Y轴刻度 (3个)
-  const yTicks = [min, (min + max) / 2, max];
+  // Y轴刻度 (3个) - 确保在合理范围内
+  const mid = (min + max) / 2;
+  const yTicks = [
+    Math.max(min, 0),
+    Math.max(Math.min(mid, max), min),
+    Math.min(max, 100)
+  ].filter((v, i, arr) => {
+    // 去重，避免相同值
+    return arr.indexOf(v) === i;
+  });
 
   return (
     <div className="w-full" style={{ height }}>
