@@ -297,7 +297,7 @@ export default function ActivitiesPage() {
     <div className="container mx-auto px-3 py-4">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0">
           <h1 className="font-pixel text-xl font-bold truncate shrink-0">
             {t('activity.recentRuns')}
           </h1>
