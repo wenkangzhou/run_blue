@@ -64,10 +64,18 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   const activeStats = stats.find((s) => s.period === activePeriod) || stats[0];
 
   // Calculate averages
-  const avgPace =
+  const avgPaceMinutes =
     activeStats.distance > 0
       ? (activeStats.time / 60) / (activeStats.distance / 1000)
       : 0;
+  
+  // Format pace as M'SS"/km
+  const formatAvgPace = (pace: number): string => {
+    if (pace <= 0) return '-';
+    const min = Math.floor(pace);
+    const sec = Math.round((pace - min) * 60);
+    return `${min}'${sec.toString().padStart(2, '0')}"/km`;
+  };
 
   // Get current period label
   const periodLabels: Record<Exclude<PeriodType, 'all'>, string> = {
@@ -89,11 +97,18 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   }, [isExpanded]);
 
   // Close dropdown when clicking outside
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
   useEffect(() => {
     if (!isExpanded) return;
     
     const handleClickOutside = (e: MouseEvent) => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // 点击 button 或 dropdown 内都不关闭
+      const clickedButton = buttonRef.current?.contains(target);
+      const clickedDropdown = dropdownRef.current?.contains(target);
+      
+      if (!clickedButton && !clickedDropdown) {
         setIsExpanded(false);
       }
     };
@@ -123,6 +138,7 @@ export function RunningStats({ activities }: ActivityStatsProps) {
       {/* Expandable Content - Portal to body */}
       {isExpanded && (
         <div 
+          ref={dropdownRef}
           className="fixed w-64 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-3 shadow-lg"
           style={{ 
             top: dropdownPos.top,
@@ -135,7 +151,10 @@ export function RunningStats({ activities }: ActivityStatsProps) {
             {stats.map((stat) => (
               <button
                 key={stat.period}
-                onClick={() => setActivePeriod(stat.period)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivePeriod(stat.period);
+                }}
                 className={`flex-1 py-1 px-1 text-[10px] font-mono rounded transition-colors ${
                   activePeriod === stat.period
                     ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm'
@@ -159,7 +178,7 @@ export function RunningStats({ activities }: ActivityStatsProps) {
             </div>
             <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
               <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.avgPace')}</div>
-              <div className="font-mono text-xs font-bold">{avgPace > 0 ? `${avgPace.toFixed(2)}'/km` : '-'}</div>
+              <div className="font-mono text-xs font-bold">{formatAvgPace(avgPaceMinutes)}</div>
             </div>
             <div className="text-center p-2 bg-zinc-50 dark:bg-zinc-800 rounded">
               <div className="text-[10px] font-mono text-zinc-500 mb-1">{t('stats.totalRuns')}</div>
