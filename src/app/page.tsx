@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { StravaConnect } from '@/components/StravaConnect';
-import { Map, TrendingUp, Zap, AlertCircle, X, Route, Timer, Calendar } from 'lucide-react';
+import { Map, TrendingUp, Zap, AlertCircle, X, Route } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
@@ -69,21 +69,32 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden">
-      {/* Background Grid Pattern */}
-      <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+      {/* Animated Background Grid */}
+      <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]"
         style={{
           backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px),
                            linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
-          backgroundSize: '40px 40px'
+          backgroundSize: '32px 32px'
         }}
       />
       
-      {/* Floating Decorative Elements */}
-      <div className="absolute top-20 left-10 w-4 h-4 bg-blue-500 animate-pulse" />
-      <div className="absolute top-40 right-20 w-3 h-3 bg-orange-500 animate-bounce" style={{ animationDuration: '2s' }} />
-      <div className="absolute bottom-40 left-20 w-2 h-2 bg-green-500 animate-pulse" style={{ animationDuration: '3s' }} />
-      <div className="absolute top-1/3 right-10 w-6 h-6 border-2 border-blue-400 rotate-45 opacity-50" />
-      <div className="absolute bottom-1/4 right-1/4 w-8 h-8 border-2 border-orange-400 rotate-12 opacity-30" />
+      {/* Floating Pixel Elements - More animations */}
+      <PixelElement className="top-16 left-[10%] w-3 h-3 bg-blue-500" delay={0} />
+      <PixelElement className="top-24 left-[20%] w-2 h-2 bg-blue-400" delay={200} />
+      <PixelElement className="top-12 left-[35%] w-4 h-4 bg-orange-500" delay={400} />
+      <PixelElement className="top-28 right-[30%] w-3 h-3 bg-green-500" delay={600} />
+      <PixelElement className="top-20 right-[15%] w-2 h-2 bg-orange-400" delay={800} />
+      <PixelElement className="top-32 left-[5%] w-2 h-2 bg-green-400" delay={1000} />
+      
+      {/* Moving Pixel Particles */}
+      <MovingPixel className="top-40 left-[15%] w-2 h-2 bg-blue-300" duration={8} delay={0} direction="right" />
+      <MovingPixel className="top-60 right-[20%] w-3 h-3 bg-orange-300" duration={10} delay={2} direction="left" />
+      <MovingPixel className="top-80 left-[25%] w-2 h-2 bg-green-300" duration={12} delay={4} direction="right" />
+      
+      {/* Rotating Squares */}
+      <RotatingSquare className="top-36 right-[10%] w-6 h-6 border-blue-400" duration={20} />
+      <RotatingSquare className="top-72 left-[8%] w-4 h-4 border-orange-400" duration={15} />
+      <RotatingSquare className="bottom-40 right-[25%] w-5 h-5 border-green-400" duration={25} />
 
       {/* Toast */}
       {toast && (
@@ -104,101 +115,91 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="container mx-auto px-4 py-8 md:py-16 relative z-10">
-        {/* Hero Section */}
-        <div className="text-center mb-12 md:mb-16">
-          {/* Logo Mark */}
-          <div className="inline-flex items-center justify-center mb-6">
-            <div className="relative">
-              <div className="w-16 h-16 md:w-20 md:h-20 bg-blue-600 border-4 border-blue-800 dark:border-blue-400 flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
-                <Route size={32} className="text-white" />
+      <div className="container mx-auto px-4 py-8 md:py-12 relative z-10">
+        {/* Hero Section with Pixel Art Logo */}
+        <div className="text-center mb-10 md:mb-12">
+          {/* Animated Logo Mark */}
+          <div className="inline-flex items-center justify-center mb-6 relative">
+            {/* Surrounding pixels */}
+            <div className="absolute -top-4 -left-4 w-2 h-2 bg-blue-400 animate-bounce" style={{ animationDelay: '0.1s' }} />
+            <div className="absolute -top-2 -right-6 w-2 h-2 bg-orange-400 animate-bounce" style={{ animationDelay: '0.3s' }} />
+            <div className="absolute -bottom-4 -left-6 w-2 h-2 bg-green-400 animate-bounce" style={{ animationDelay: '0.5s' }} />
+            <div className="absolute -bottom-2 -right-4 w-3 h-3 bg-blue-500 animate-pulse" />
+            
+            <div className="relative group">
+              <div className="w-20 h-20 md:w-24 md:h-24 bg-blue-600 border-4 border-blue-800 dark:border-blue-400 flex items-center justify-center shadow-[6px_6px_0px_0px_rgba(0,0,0,0.2)] transition-transform group-hover:scale-105">
+                <Route size={40} className="text-white" />
               </div>
-              <div className="absolute -top-2 -right-2 w-4 h-4 bg-orange-500 border-2 border-orange-700" />
+              {/* Corner decorations */}
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 border-2 border-orange-700" />
+              <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-green-500" />
             </div>
           </div>
           
-          {/* Main Title */}
-          <h1 className="font-pixel text-6xl md:text-8xl font-bold mb-4 relative inline-block">
-            <span className="bg-gradient-to-b from-blue-500 to-blue-700 bg-clip-text text-transparent drop-shadow-[4px_4px_0px_rgba(0,0,0,0.1)]">
+          {/* Main Title with Pixel Shadow */}
+          <div className="relative inline-block mb-4">
+            <h1 className="font-pixel text-6xl md:text-8xl font-bold relative z-10 bg-gradient-to-b from-blue-500 to-blue-700 bg-clip-text text-transparent">
               跑蓝
-            </span>
-          </h1>
+            </h1>
+            {/* Pixel shadow layers */}
+            <div className="absolute top-1 left-1 text-blue-800/20 dark:text-blue-400/20 font-pixel text-6xl md:text-8xl font-bold -z-10">跑蓝</div>
+            <div className="absolute top-2 left-2 text-blue-800/10 dark:text-blue-400/10 font-pixel text-6xl md:text-8xl font-bold -z-20">跑蓝</div>
+          </div>
           
           {/* Tagline */}
-          <p className="font-mono text-lg md:text-xl text-zinc-600 dark:text-zinc-400 mb-2">
+          <p className="font-mono text-lg md:text-xl text-zinc-600 dark:text-zinc-400 mb-3">
             像素级记录你的每一步
           </p>
-          <div className="flex items-center justify-center gap-2 text-xs font-mono text-zinc-400">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-            <span>与 Strava 实时同步</span>
+          <div className="flex items-center justify-center gap-2">
+            <span className="w-2 h-2 bg-green-500 animate-pulse" />
+            <span className="font-mono text-sm text-zinc-500">与 Strava 实时同步</span>
+            <span className="w-2 h-2 bg-orange-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
           </div>
         </div>
 
-        {/* Strava Connect Card */}
-        <div className="mb-16 md:mb-20">
+        {/* Strava Connect */}
+        <div className="mb-12 md:mb-16">
           <StravaConnect />
         </div>
 
-        {/* Features Grid */}
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        {/* Features - Horizontal Layout */}
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FeatureCard
               icon={<Map />}
               title="地图收集"
-              description="把跑过的路，变成墙上的画"
+              description="把跑过的路，变成墙上的画。每一次跑步，都是城市上空的一笔涂鸦。"
               color="blue"
-              delay={0}
+              stats="路线可视化"
             />
             <FeatureCard
               icon={<TrendingUp />}
               title="数据看板"
-              description="距离、配速、次数，一目了然"
+              description="距离、配速、次数，一目了然。按周、月、年追踪你的跑步历程。"
               color="green"
-              delay={100}
+              stats="周期统计"
             />
             <FeatureCard
               icon={<Zap />}
               title="Strava 直连"
-              description="一键授权，无需注册，数据自动来"
+              description="一键授权，无需注册。数据自动同步，缓存本地，加载飞快。"
               color="orange"
-              delay={200}
+              stats="实时同步"
             />
-          </div>
-        </div>
-
-        {/* Stats Preview */}
-        <div className="mt-16 md:mt-20 max-w-3xl mx-auto">
-          <div className="border-4 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-mono text-sm font-bold uppercase text-zinc-500">预览</h3>
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-zinc-300 dark:bg-zinc-600" />
-                <div className="w-2 h-2 bg-zinc-300 dark:bg-zinc-600" />
-                <div className="w-2 h-2 bg-zinc-300 dark:bg-zinc-600" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-zinc-50 dark:bg-zinc-800">
-                <Route className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                <div className="font-pixel text-xl font-bold">42.2</div>
-                <div className="font-mono text-xs text-zinc-500">公里</div>
-              </div>
-              <div className="text-center p-4 bg-zinc-50 dark:bg-zinc-800">
-                <Timer className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                <div className="font-pixel text-xl font-bold">4:30</div>
-                <div className="font-mono text-xs text-zinc-500">配速</div>
-              </div>
-              <div className="text-center p-4 bg-zinc-50 dark:bg-zinc-800">
-                <Calendar className="w-6 h-6 mx-auto mb-2 text-orange-500" />
-                <div className="font-pixel text-xl font-bold">128</div>
-                <div className="font-mono text-xs text-zinc-500">次跑步</div>
-              </div>
-            </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="mt-16 text-center">
+          <div className="flex items-center justify-center gap-1 mb-2">
+            {[...Array(5)].map((_, i) => (
+              <div 
+                key={i} 
+                className="w-1.5 h-1.5 bg-zinc-400 animate-pulse" 
+                style={{ animationDelay: `${i * 0.2}s` }}
+              />
+            ))}
+          </div>
           <p className="font-mono text-xs text-zinc-400">
             Made with ◼ for runners
           </p>
@@ -208,18 +209,66 @@ export default function HomePage() {
   );
 }
 
+// Animated pixel element
+function PixelElement({ className, delay }: { className: string; delay: number }) {
+  return (
+    <div 
+      className={`absolute ${className} animate-float`}
+      style={{ 
+        animationDelay: `${delay}ms`,
+        animation: `float 3s ease-in-out infinite`,
+      }}
+    />
+  );
+}
+
+// Moving pixel
+function MovingPixel({ 
+  className, 
+  duration, 
+  delay, 
+  direction 
+}: { 
+  className: string; 
+  duration: number; 
+  delay: number;
+  direction: 'left' | 'right';
+}) {
+  return (
+    <div 
+      className={`absolute ${className} opacity-60`}
+      style={{
+        animation: `move${direction} ${duration}s linear infinite`,
+        animationDelay: `${delay}s`,
+      }}
+    />
+  );
+}
+
+// Rotating square
+function RotatingSquare({ className, duration }: { className: string; duration: number }) {
+  return (
+    <div 
+      className={`absolute border-2 ${className} opacity-40`}
+      style={{
+        animation: `spin ${duration}s linear infinite`,
+      }}
+    />
+  );
+}
+
 function FeatureCard({
   icon,
   title,
   description,
   color,
-  delay,
+  stats,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
   color: 'blue' | 'green' | 'orange';
-  delay: number;
+  stats: string;
 }) {
   const colorClasses = {
     blue: 'bg-blue-100 dark:bg-blue-900/30 border-blue-600 text-blue-600 dark:text-blue-400',
@@ -227,21 +276,43 @@ function FeatureCard({
     orange: 'bg-orange-100 dark:bg-orange-900/30 border-orange-600 text-orange-600 dark:text-orange-400',
   };
 
+  const bgClasses = {
+    blue: 'bg-blue-50/50 dark:bg-blue-900/10',
+    green: 'bg-green-50/50 dark:bg-green-900/10',
+    orange: 'bg-orange-50/50 dark:bg-orange-900/10',
+  };
+
   return (
-    <div 
-      className="group relative"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div className={`border-4 border-zinc-800 dark:border-zinc-200 p-6 bg-white dark:bg-zinc-900 h-full transition-all duration-200 hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] ${
-        delay > 0 ? 'animate-fade-in' : ''
-      }`}>
-        <div className={`w-14 h-14 border-4 flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${colorClasses[color]}`}>
-          {icon}
+    <div className="group relative">
+      <div className={`border-4 border-zinc-800 dark:border-zinc-200 p-5 ${bgClasses[color]} h-full transition-all duration-200 hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]`}>
+        {/* Header with icon and tag */}
+        <div className="flex items-start justify-between mb-3">
+          <div className={`w-12 h-12 border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${colorClasses[color]}`}>
+            {icon}
+          </div>
+          <span className={`font-mono text-[10px] px-2 py-1 border-2 ${colorClasses[color]}`}>
+            {stats}
+          </span>
         </div>
+        
+        {/* Title */}
         <h3 className="font-mono font-bold text-lg mb-2">{title}</h3>
+        
+        {/* Description */}
         <p className="font-mono text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
           {description}
         </p>
+        
+        {/* Bottom decoration */}
+        <div className="mt-4 flex gap-1">
+          {[...Array(4)].map((_, i) => (
+            <div 
+              key={i} 
+              className={`w-1.5 h-1.5 ${color === 'blue' ? 'bg-blue-300' : color === 'green' ? 'bg-green-300' : 'bg-orange-300'}`}
+              style={{ opacity: 0.3 + i * 0.2 }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
