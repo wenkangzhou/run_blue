@@ -503,9 +503,7 @@ export default function ActivityDetailPage() {
                 {hasHiddenSplits && (
                   <>
                     {splitsExpanded && (
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/50">
-                        <SplitsTable splits={hiddenSplits} showHeader={false} />
-                      </div>
+                      <SplitsTable splits={hiddenSplits} showHeader={false} />
                     )}
                     <button
                       onClick={() => setSplitsExpanded(!splitsExpanded)}
@@ -533,9 +531,7 @@ export default function ActivityDetailPage() {
                 {hasHiddenLaps && (
                   <>
                     {lapsExpanded && (
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/50">
-                        <LapsTable laps={hiddenLaps} showHeader={false} />
-                      </div>
+                      <LapsTable laps={hiddenLaps} showHeader={false} />
                     )}
                     <button
                       onClick={() => setLapsExpanded(!lapsExpanded)}
