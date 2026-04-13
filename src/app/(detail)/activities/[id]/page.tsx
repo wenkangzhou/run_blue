@@ -9,6 +9,7 @@ import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types'
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getCachedActivity, setCachedActivity } from '@/lib/cache';
 import { ActivityMap } from '@/components/map/ActivityMap';
+import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
@@ -424,7 +425,7 @@ export default function ActivityDetailPage() {
 
           {/* Charts */}
           {streams && (
-            <div className="mb-4 space-y-4">
+            <div>
               {streams.heartrate && (
                 <ChartSection 
                   title={t('activity.heartRate')}
@@ -433,10 +434,8 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.heartrate.data as number[]}
                     color="#ef4444"
-                    height={120}
+                    height={108}
                     yUnit=""
-                    minValue={activity.average_heartrate ? activity.average_heartrate - 30 : undefined}
-                    maxValue={activity.max_heartrate ? activity.max_heartrate + 10 : undefined}
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                   />
                 </ChartSection>
@@ -446,34 +445,20 @@ export default function ActivityDetailPage() {
                 <ChartSection 
                   title={t('activity.pace')}
                   subtitle={(() => {
-                    // 过滤合理的配速范围 (2-15 分钟/公里)
-                    const paces = (streams.velocity_smooth.data as number[])
-                      .filter(v => v > 0)
-                      .map(v => 1000 / v / 60)
-                      .filter(p => p >= 2 && p <= 15);
+                    const paces = processPaceData(streams.velocity_smooth.data as number[]);
                     if (paces.length === 0) return '';
-                    const minPace = Math.min(...paces);
-                    const maxPace = Math.max(...paces);
-                    const formatPace = (p: number) => {
-                      const min = Math.floor(p);
-                      const sec = Math.round((p - min) * 60);
-                      return `${min}'${sec.toString().padStart(2, '0')}"`;
-                    };
-                    return `${formatPace(minPace)} ~ ${formatPace(maxPace)}`;
+                    const validPaces = paces.filter(p => p > 0);
+                    const minPace = Math.min(...validPaces);
+                    const maxPace = Math.max(...validPaces);
+                    return `${formatPaceValue(minPace)} ~ ${formatPaceValue(maxPace)}`;
                   })()}
                 >
                   <SimpleLineChart 
-                    data={(streams.velocity_smooth.data as number[])
-                      .map(v => v > 0 ? 1000 / v / 60 : 0)
-                      .filter(p => p >= 2 && p <= 15)} // 过滤异常值
+                    data={processPaceData(streams.velocity_smooth.data as number[])}
                     color="#3b82f6"
-                    height={120}
+                    height={108}
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
-                    formatYLabel={(v) => {
-                      const min = Math.floor(v);
-                      const sec = Math.round((v - min) * 60);
-                      return `${min}'${sec.toString().padStart(2, '0')}"`;
-                    }}
+                    formatYLabel={(v) => formatPaceValue(v)}
                   />
                 </ChartSection>
               )}
@@ -486,7 +471,7 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.altitude.data as number[]}
                     color="#22c55e"
-                    height={120}
+                    height={108}
                     yUnit="m"
                     fill
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
@@ -494,6 +479,14 @@ export default function ActivityDetailPage() {
                 </ChartSection>
               )}
             </div>
+          )}
+
+          {/* AI Analysis */}
+          {activity && (
+            <AIAnalysisCard 
+              activity={activity} 
+              streams={streams} 
+            />
           )}
 
           {/* Splits - Show first 20km, collapse rest (only if more than 1) */}
@@ -580,4 +573,40 @@ function ChartSection({ title, subtitle, children }: { title: string; subtitle: 
       {children}
     </div>
   );
+}
+
+// Process pace data with percentile-based clamping
+function processPaceData(velocityData: number[]): number[] {
+  // Convert velocity (m/s) to pace (min/km)
+  const rawPaces = velocityData.map(v => v > 0 ? 1000 / v / 60 : 0);
+  
+  // Get valid paces for percentile calculation
+  const validPaces = rawPaces.filter(p => p > 0);
+  if (validPaces.length === 0) return rawPaces;
+  
+  // Sort for percentile calculation
+  const sortedPaces = [...validPaces].sort((a, b) => a - b);
+  
+  // Use 10th and 90th percentile as bounds (tighter than 5th-95th)
+  const lowerIndex = Math.floor(sortedPaces.length * 0.10);
+  const upperIndex = Math.floor(sortedPaces.length * 0.90);
+  const lowerBound = sortedPaces[lowerIndex];
+  const upperBound = sortedPaces[upperIndex];
+  
+  // Clamp values to the percentile bounds (don't filter, just clamp)
+  return rawPaces.map(p => {
+    if (p === 0) return 0;
+    if (p < lowerBound) return lowerBound;
+    if (p > upperBound) return upperBound;
+    return p;
+  });
+}
+
+// Format pace value as M'SS"
+function formatPaceValue(pace: number): string {
+  if (!isFinite(pace) || pace < 0) return '--';
+  if (pace === 0) return '0\'00"';  // Show 0'00" instead of --
+  const min = Math.floor(pace);
+  const sec = Math.round((pace - min) * 60);
+  return `${min}'${sec.toString().padStart(2, '0')}"`;
 }

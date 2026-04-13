@@ -64,6 +64,12 @@ export interface StravaActivity {
   average_watts?: number;
   max_watts?: number;
   weighted_average_watts?: number;
+  workout_type?: string;
+  best_efforts?: Array<{
+    name: string;
+    elapsed_time: number;
+    distance: number;
+  }>;
 }
 
 export interface ActivitySplit {
