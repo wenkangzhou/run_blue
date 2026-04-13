@@ -53,6 +53,28 @@ export interface SimilarActivityStats {
   trendDirection: 'improving' | 'stable' | 'declining';
 }
 
+// Running physiology metrics (the three key factors)
+export interface PhysiologyMetrics {
+  vo2max: {
+    value: number;      // ml/kg/min
+    level: 'elite' | 'excellent' | 'good' | 'average' | 'below_average';
+    description: string;
+  };
+  lactateThreshold: {
+    pace: number;       // seconds per km
+    heartRate?: number; // estimated bpm
+    description: string;
+  };
+  runningEconomy: {
+    score: 'excellent' | 'good' | 'average' | 'needs_improvement';
+    efficiency: number; // seconds per km at marathon pace
+    description: string;
+    suggestions: string[];
+  };
+  // Derived metrics
+  speedEndurance: 'strength' | 'balanced' | 'endurance'; // 速度vs耐力倾向
+}
+
 // Activity classification
 export interface ActivityClassification {
   isRace: boolean;
@@ -66,10 +88,122 @@ export interface TrainingProfile {
   estimatedPBs: EstimatedPBs;
   paceZones: PaceZones;
   patterns: TrainingPatterns;
+  physiologyMetrics: PhysiologyMetrics;
   recentLoad: WeeklyLoad[];
   similarStats: SimilarActivityStats | null;
   totalRunsAnalyzed: number;
   dateRange: { start: string; end: string };
+}
+
+/**
+ * Calculate physiology metrics (VO2max, LT, Running Economy)
+ * Based on race PBs and performance patterns
+ */
+function calculatePhysiologyMetrics(pbs: EstimatedPBs): PhysiologyMetrics {
+  const pb5k = pbs['5k'];
+  const pb10k = pbs['10k'];
+  const pb21k = pbs['21k'];
+  const pb42k = pbs['42k'];
+  
+  // 1. Estimate VO2max using Daniels formula
+  let vo2maxValue = 45; // default average
+  if (pb5k > 0) {
+    const pace5kMetersPerMin = 5000 / (pb5k / 60);
+    vo2maxValue = Math.round((pace5kMetersPerMin * 0.18 + 2.5) * 10) / 10;
+  }
+  
+  let vo2maxLevel: PhysiologyMetrics['vo2max']['level'] = 'average';
+  if (vo2maxValue >= 60) vo2maxLevel = 'elite';
+  else if (vo2maxValue >= 55) vo2maxLevel = 'excellent';
+  else if (vo2maxValue >= 50) vo2maxLevel = 'good';
+  else if (vo2maxValue < 40) vo2maxLevel = 'below_average';
+  
+  // 2. Estimate Lactate Threshold
+  let ltPace = pb10k > 0 ? pb10k / 10 : (pb5k > 0 ? pb5k / 5 * 1.05 : 300);
+  let ltHeartRate = 170;
+  
+  // 3. Running Economy analysis
+  let economyScore: PhysiologyMetrics['runningEconomy']['score'] = 'good';
+  let speedEndurance: PhysiologyMetrics['speedEndurance'] = 'balanced';
+  const suggestions: string[] = [];
+  
+  if (pb5k > 0 && pb42k > 0) {
+    const pace5k = pb5k / 5;
+    const pace42k = pb42k / 42.195;
+    const slowdown = pace42k / pace5k;
+    
+    if (slowdown < 1.15) {
+      economyScore = 'excellent';
+      speedEndurance = 'balanced';
+      suggestions.push('跑步经济性优秀，保持当前训练结构');
+    } else if (slowdown < 1.20) {
+      economyScore = 'good';
+      speedEndurance = 'balanced';
+      suggestions.push('可适当增加长距离有氧训练提升耐力');
+    } else if (slowdown < 1.25) {
+      economyScore = 'average';
+      speedEndurance = 'endurance';
+      suggestions.push('建议增加乳酸阈值跑和马拉松配速跑');
+      suggestions.push('每周安排一次30km+的长距离训练');
+    } else {
+      economyScore = 'needs_improvement';
+      speedEndurance = 'endurance';
+      suggestions.push('耐力相对速度明显不足，需重点加强');
+      suggestions.push('增加M配速跑和长距离慢跑比例');
+      suggestions.push('考虑增加周跑量至60-80km');
+    }
+    
+    if (pb10k > 0) {
+      const pace10k = pb10k / 10;
+      const speedRatio = pace10k / pace5k;
+      if (speedRatio > 1.06) {
+        speedEndurance = 'strength';
+        suggestions.push('速度能力优于耐力，适合短距离比赛');
+      }
+    }
+  }
+  
+  return {
+    vo2max: {
+      value: vo2maxValue,
+      level: vo2maxLevel,
+      description: getVo2maxDescription(vo2maxLevel, vo2maxValue),
+    },
+    lactateThreshold: {
+      pace: Math.round(ltPace),
+      heartRate: ltHeartRate,
+      description: `乳酸阈值配速约 ${formatPace(ltPace)}/km，对应10K-15K比赛配速`,
+    },
+    runningEconomy: {
+      score: economyScore,
+      efficiency: Math.round(ltPace * 1.05),
+      description: getEconomyDescription(economyScore, speedEndurance),
+      suggestions,
+    },
+    speedEndurance,
+  };
+}
+
+function getVo2maxDescription(level: string, value: number): string {
+  switch (level) {
+    case 'elite': return `精英级 (${value} ml/kg/min)，接近国家选手水平`;
+    case 'excellent': return `优秀 (${value} ml/kg/min)，超越95%跑者`;
+    case 'good': return `良好 (${value} ml/kg/min)，超过平均水平`;
+    case 'average': return `中等 (${value} ml/kg/min)，有提升空间`;
+    case 'below_average': return `基础水平 (${value} ml/kg/min)，建议加强有氧训练`;
+    default: return `${value} ml/kg/min`;
+  }
+}
+
+function getEconomyDescription(score: string, profile: string): string {
+  const profileText = profile === 'strength' ? '速度型' : profile === 'endurance' ? '耐力型' : '均衡型';
+  switch (score) {
+    case 'excellent': return `${profileText}跑者，跑步经济性优秀，能量利用效率高`;
+    case 'good': return `${profileText}跑者，跑步经济性良好，技术动作合理`;
+    case 'average': return `${profileText}跑者，跑步经济性一般，有优化空间`;
+    case 'needs_improvement': return `${profileText}跑者，建议改善跑姿和增加力量训练`;
+    default: return `${profileText}跑者`;
+  }
 }
 
 const DISTANCE_RANGES = {
@@ -125,7 +259,8 @@ export function classifyActivity(activity: StravaActivity): ActivityClassificati
  */
 export function analyzeTrainingHistory(
   activities: StravaActivity[],
-  currentActivity: StravaActivity
+  currentActivity: StravaActivity,
+  officialPBs?: Record<string, number> | null
 ): TrainingProfile {
   // Filter to runs only
   const runs = activities.filter(a => 
@@ -144,11 +279,14 @@ export function analyzeTrainingHistory(
   );
 
   // Estimate PBs from best efforts and actual race results
-  // Include current activity (which has splits_metric) in the analysis
-  const estimatedPBs = estimatePBs(sortedRuns, currentActivity);
+  // Include current activity (which has splits_metric) and official PBs in the analysis
+  const estimatedPBs = estimatePBs(sortedRuns, currentActivity, officialPBs);
   
   // Calculate pace zones from estimated 5k PB
   const paceZones = calculatePaceZones(estimatedPBs['5k']);
+  
+  // Calculate physiology metrics (VO2max, LT, Running Economy)
+  const physiologyMetrics = calculatePhysiologyMetrics(estimatedPBs);
   
   // Detect training patterns
   const patterns = detectTrainingPatterns(sortedRuns);
@@ -163,6 +301,7 @@ export function analyzeTrainingHistory(
     estimatedPBs,
     paceZones,
     patterns,
+    physiologyMetrics,
     recentLoad,
     similarStats,
     totalRunsAnalyzed: sortedRuns.length,
@@ -177,9 +316,88 @@ export function analyzeTrainingHistory(
  * Estimate personal bests from activity history
  * Uses Riegel formula for projections between distances
  */
-function estimatePBs(runs: StravaActivity[], currentActivity?: StravaActivity): EstimatedPBs {
+function estimatePBs(runs: StravaActivity[], currentActivity?: StravaActivity, officialPBs?: Record<string, number> | null): EstimatedPBs {
   const pbs: Record<string, number> = {};
   const sources: Record<string, 'actual' | 'estimated'> = {};
+  
+  // Priority 0: Use official PBs from Strava if available (most reliable)
+  if (officialPBs) {
+    // Map official PBs to our format
+    const pbMapping: Record<string, string> = {
+      '1k': '1k',
+      '5k': '5k',
+      '10k': '10k',
+      '15k': '15k',
+      '20k': '20k',
+      '21k': '21k',
+      '30k': '30k',
+      '42k': '42k',
+    };
+    
+    for (const [key, value] of Object.entries(officialPBs)) {
+      const mappedKey = pbMapping[key];
+      if (mappedKey && value > 0) {
+        pbs[mappedKey] = value;
+        sources[mappedKey] = 'actual';
+      }
+    }
+    
+    // If we have official PBs, fill missing distances using Riegel formula
+    if (Object.keys(pbs).length >= 1) {
+      // Find the best reference PB (prefer middle distances: 10k > 5k > 21k > 42k)
+      let refDist = 0;
+      let refTime = 0;
+      
+      if (pbs['10k'] && pbs['10k'] > 0) {
+        refDist = 10; refTime = pbs['10k'];
+      } else if (pbs['5k'] && pbs['5k'] > 0) {
+        refDist = 5; refTime = pbs['5k'];
+      } else if (pbs['21k'] && pbs['21k'] > 0) {
+        refDist = 21.0975; refTime = pbs['21k'];
+      } else if (pbs['42k'] && pbs['42k'] > 0) {
+        refDist = 42.195; refTime = pbs['42k'];
+      }
+      
+      if (refDist > 0 && refTime > 0) {
+        // Fill missing distances using Riegel projection from reference
+        if (!pbs['1k'] || pbs['1k'] === 0) {
+          pbs['1k'] = Math.round(refTime * Math.pow(1 / refDist, RIEGEL_EXPONENT));
+          sources['1k'] = 'estimated';
+        }
+        if (!pbs['3k'] || pbs['3k'] === 0) {
+          pbs['3k'] = Math.round(refTime * Math.pow(3 / refDist, RIEGEL_EXPONENT));
+          sources['3k'] = 'estimated';
+        }
+        if (!pbs['5k'] || pbs['5k'] === 0) {
+          pbs['5k'] = Math.round(refTime * Math.pow(5 / refDist, RIEGEL_EXPONENT));
+          sources['5k'] = 'estimated';
+        }
+        if (!pbs['10k'] || pbs['10k'] === 0) {
+          pbs['10k'] = Math.round(refTime * Math.pow(10 / refDist, RIEGEL_EXPONENT));
+          sources['10k'] = 'estimated';
+        }
+        if (!pbs['21k'] || pbs['21k'] === 0) {
+          pbs['21k'] = Math.round(refTime * Math.pow(21.0975 / refDist, RIEGEL_EXPONENT));
+          sources['21k'] = 'estimated';
+        }
+        if (!pbs['42k'] || pbs['42k'] === 0) {
+          pbs['42k'] = Math.round(refTime * Math.pow(42.195 / refDist, RIEGEL_EXPONENT));
+          sources['42k'] = 'estimated';
+        }
+      }
+      
+      return {
+        '1k': pbs['1k'] || 0,
+        '3k': pbs['3k'] || 0,
+        '5k': pbs['5k'] || 0,
+        '10k': pbs['10k'] || 0,
+        '21k': pbs['21k'] || 0,
+        '42k': pbs['42k'] || 0,
+        reliability: 'high',
+        sources,
+      };
+    }
+  }
   
   // First pass: find actual race results for each distance
   for (const [distance, range] of Object.entries(DISTANCE_RANGES)) {
@@ -378,6 +596,30 @@ function findBestSplitTime(runs: StravaActivity[], targetKm: number): number | n
   const sorted = [...splitTimes].sort((a, b) => a - b);
   const index = Math.floor(sorted.length * 0.05);
   return sorted[index] || sorted[0];
+}
+
+/**
+ * Estimate other distances from 5k PB using Riegel formula
+ */
+function estimateFrom5k(pb5k: number | undefined, targetKm: number): number | null {
+  if (!pb5k || pb5k <= 0) return null;
+  return Math.round(pb5k * Math.pow(targetKm / 5, RIEGEL_EXPONENT));
+}
+
+/**
+ * Estimate other distances from 10k PB using Riegel formula
+ */
+function estimateFrom10k(pb10k: number | undefined, targetKm: number): number | null {
+  if (!pb10k || pb10k <= 0) return null;
+  return Math.round(pb10k * Math.pow(targetKm / 10, RIEGEL_EXPONENT));
+}
+
+/**
+ * Estimate other distances from half marathon PB using Riegel formula
+ */
+function estimateFrom21k(pb21k: number | undefined, targetKm: number): number | null {
+  if (!pb21k || pb21k <= 0) return null;
+  return Math.round(pb21k * Math.pow(targetKm / 21.0975, RIEGEL_EXPONENT));
 }
 
 /**

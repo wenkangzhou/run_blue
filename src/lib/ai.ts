@@ -34,7 +34,7 @@ export interface AIAnalysis {
     zone: string;
     description: string;
     appropriateness: 'appropriate' | 'too-fast' | 'too-slow';
-  };
+  } | null;
   trainingLoadContext: string;
   similarActivitiesInsight: string;
   nextWorkoutSuggestion: string;
@@ -93,24 +93,19 @@ export function buildProfessionalPrompt(
     prompt += `\n- 最大心率: ${Math.round(activity.max_heartrate)} bpm`;
   }
 
-  // Training Profile Context
-  prompt += `\n\n## 运动员能力画像（基于${trainingProfile.totalRunsAnalyzed}次历史数据）`;
+  // Simple pace zone guide based on absolute pace (not requiring accurate PB estimates)
+  const paceMin = paceSecKm / 60;
+  let zoneDesc = '';
+  if (paceMin < 3.5) zoneDesc = 'R区(重复跑) - 速度训练';
+  else if (paceMin < 4.0) zoneDesc = 'I区(间歇跑) - VO2max训练';
+  else if (paceMin < 4.5) zoneDesc = 'T区(阈值跑) - 乳酸阈值训练';
+  else if (paceMin < 5.3) zoneDesc = 'M区(马拉松配速) - 比赛节奏训练';
+  else if (paceMin < 6.2) zoneDesc = 'E区(轻松跑) - 有氧基础训练';
+  else zoneDesc = 'E区(恢复跑) - 恢复放松';
   
-  prompt += `\n\n个人最佳成绩:`;
-  prompt += `\n- 1公里: ${formatTime(estimatedPBs['1k'])} ${estimatedPBs.sources['1k'] === 'actual' ? '(实测)' : '(推算)'}`;
-  prompt += `\n- 5公里: ${formatTime(estimatedPBs['5k'])} ${estimatedPBs.sources['5k'] === 'actual' ? '(实测)' : '(推算)'}`;
-  prompt += `\n- 10公里: ${formatTime(estimatedPBs['10k'])} ${estimatedPBs.sources['10k'] === 'actual' ? '(实测)' : '(推算)'}`;
-  prompt += `\n- 半马: ${formatTime(estimatedPBs['21k'])} ${estimatedPBs.sources['21k'] === 'actual' ? '(实测)' : '(推算)'}`;
-  if (estimatedPBs['42k'] > 0) {
-    prompt += `\n- 全马: ${formatTime(estimatedPBs['42k'])} ${estimatedPBs.sources['42k'] === 'actual' ? '(实测)' : '(推算)'}`;
-  }
-
-  prompt += `\n\n训练配速区间（Daniels方法论，基于${formatPace(estimatedPBs['5k'] / 5)}/km的5K配速）:`;
-  prompt += `\n- 轻松跑(E): ${formatPace(paceZones.easy.min)}-${formatPace(paceZones.easy.max)}/km`;
-  prompt += `\n- 马拉松(M): ${formatPace(paceZones.marathon.min)}-${formatPace(paceZones.marathon.max)}/km`;
-  prompt += `\n- 阈值跑(T): ${formatPace(paceZones.threshold.min)}-${formatPace(paceZones.threshold.max)}/km`;
-  prompt += `\n- 间歇跑(I): ${formatPace(paceZones.interval.min)}-${formatPace(paceZones.interval.max)}/km`;
-  prompt += `\n- 重复跑(R): ${formatPace(paceZones.repetition.min)}-${formatPace(paceZones.repetition.max)}/km`;
+  prompt += `\n\n## 配速区间参考`;
+  prompt += `\n本次配速 ${paceStr}/km 约等于 ${paceMin.toFixed(1)} min/km`;
+  prompt += `\n对应 Daniels 五区间中的: ${zoneDesc}`;
 
   // Weekly load trend
   if (recentLoad.length > 0) {
@@ -143,12 +138,17 @@ export function buildProfessionalPrompt(
     prompt += `\n4. 重点分析：比赛表现vs能力预期、配速策略、恢复建议`;
     prompt += `\n5. 下次训练建议：比赛后应该安排轻松恢复跑，不是强度训练`;
   } else {
-    // Normal training analysis
-    prompt += `\n\n1. 配速区间分析: 本次配速${paceStr}/km属于哪个区间？`;
-    prompt += `\n2. 训练负荷评估: 结合近4周负荷，这次训练是否过量/不足/合适？`;
-    prompt += `\n3. 同类型对比: 与历史类似训练相比，这次表现如何？`;
-    prompt += `\n4. 训练缺陷识别: ${patterns.trainingDeficiencies.join('、')}`;
-    prompt += `\n5. 下次训练建议: 给出具体的下次训练安排。`;
+    // Normal training analysis - focused on THIS specific workout
+    prompt += `\n\n本次训练针对性分析:`;
+    prompt += `\n1. 配速区间: 本次配速${paceStr}/km 属于 ${zoneDesc}。`;
+    prompt += `\n2. 训练目的: 基于本次配速和距离，明确说明这次训练主要目的是什么（有氧恢复/有氧基础/阈值提升/VO2max/速度训练）。`;
+    prompt += `\n3. 负荷评估: 结合近4周负荷，判断本次训练量是否合适。`;
+    if (similarStats) {
+      prompt += `\n4. 历史对比: 本次配速${paceStr}/km，历史平均${formatPace(similarStats.avgPace * 60)}/km，最佳${formatPace(similarStats.bestPace * 60)}/km。超过${similarStats.yourPaceRank}%的同类训练。`;
+    } else {
+      prompt += `\n4. 历史对比: 暂无可比历史数据。`;
+    }
+    prompt += `\n6. 下次训练建议: 从三要素角度给出具体的训练安排，明确说明主要训练目的（提升VO2max/乳酸阈值/跑步经济性）。`;
   }
 
   prompt += `\n\n## 输出格式（JSON）`;
@@ -265,11 +265,7 @@ export async function analyzeActivity(
       comparisonToAverage: result.comparisonToAverage || '',
       suggestions: result.suggestions || [],
       generatedAt: Date.now(),
-      paceZoneAnalysis: result.paceZoneAnalysis || {
-        zone: 'unknown',
-        description: '无法确定配速区间',
-        appropriateness: 'appropriate',
-      },
+      paceZoneAnalysis: result.paceZoneAnalysis || null,
       trainingLoadContext: result.trainingLoadContext || '',
       similarActivitiesInsight: result.similarActivitiesInsight || '',
       nextWorkoutSuggestion: result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),
@@ -289,34 +285,38 @@ function generateFallbackAnalysis(
   profile: TrainingProfile,
   classification: ActivityClassification
 ): AIAnalysis {
-  const paceMinKm = activity.moving_time / activity.distance * 1000 / 60;
-  const paceSeconds = paceMinKm * 60;
+  const paceSecKm = activity.moving_time / activity.distance * 1000;
+  const paceMin = paceSecKm / 60;
+  const paceStr = formatPace(paceSecKm);
   
-  // Determine pace zone
-  let zone = 'unknown';
-  let zoneDesc = '无法确定';
+  // Determine pace zone based on absolute pace thresholds
+  let zone = 'E';
+  let zoneDesc = '轻松跑区间';
   
-  if (paceSeconds >= profile.paceZones.easy.min && paceSeconds <= profile.paceZones.easy.max) {
-    zone = 'E';
-    zoneDesc = '轻松跑区间';
-  } else if (paceSeconds >= profile.paceZones.marathon.min && paceSeconds <= profile.paceZones.marathon.max) {
-    zone = 'M';
-    zoneDesc = '马拉松配速区间';
-  } else if (paceSeconds >= profile.paceZones.threshold.min && paceSeconds <= profile.paceZones.threshold.max) {
-    zone = 'T';
-    zoneDesc = '乳酸阈值区间';
-  } else if (paceSeconds >= profile.paceZones.interval.min && paceSeconds <= profile.paceZones.interval.max) {
+  if (paceMin < 3.5) {
+    zone = 'R';
+    zoneDesc = '重复跑区间';
+  } else if (paceMin < 4.0) {
     zone = 'I';
     zoneDesc = '间歇跑区间';
-  } else if (paceSeconds < profile.paceZones.interval.min) {
-    zone = 'R';
-    zoneDesc = '重复跑区间（高强度）';
+  } else if (paceMin < 4.5) {
+    zone = 'T';
+    zoneDesc = '乳酸阈值区间';
+  } else if (paceMin < 5.3) {
+    zone = 'M';
+    zoneDesc = '马拉松配速区间';
+  } else if (paceMin < 6.2) {
+    zone = 'E';
+    zoneDesc = '轻松跑区间';
+  } else {
+    zone = 'E';
+    zoneDesc = '恢复跑区间';
   }
 
   // Race-specific fallback
   if (classification.isRace) {
     return {
-      summary: `${classification.raceType || '比赛'}完成！配速${formatPace(paceSeconds)}/km，${classification.raceType?.includes('半马') ? '半马' : ''}表现出色。`,
+      summary: `${classification.raceType || '比赛'}完成！配速${paceStr}/km，${classification.raceType?.includes('半马') ? '半马' : ''}表现出色。`,
       intensity: 'extreme',
       recoveryHours: activity.distance > 40000 ? 168 : 48,
       comparisonToAverage: profile.similarStats ? `超过${profile.similarStats.yourPaceRank}%的历史表现` : '比赛表现优异',
@@ -349,11 +349,17 @@ function generateFallbackAnalysis(
     suggestions.push('可尝试每周一次400m×6间歇训练，配速控制在I区');
   }
 
+  // Build comparison text based on available data
+  let comparisonText = '暂无历史对比数据';
+  if (profile.similarStats) {
+    comparisonText = `超过${profile.similarStats.yourPaceRank}%的同类训练`;
+  }
+
   return {
-    summary: `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速处于${zoneDesc}。`,
+    summary: `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速${paceStr}/km处于${zoneDesc}。`,
     intensity: 'moderate',
     recoveryHours: activity.distance > 10000 ? 36 : 24,
-    comparisonToAverage: '请参考历史数据对比',
+    comparisonToAverage: comparisonText,
     suggestions,
     generatedAt: Date.now(),
     paceZoneAnalysis: {

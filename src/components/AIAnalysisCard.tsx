@@ -105,34 +105,43 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const intensity = analysis?.intensity ? intensityLabels[analysis.intensity] : null;
   const isRace = classification?.isRace;
   
-  // Calculate pace zone locally based on training profile
-  const currentPaceSecKm = activity.moving_time / activity.distance * 1000; // seconds per km
+  // Calculate pace zone based on best_efforts from this activity
+  // This gives us the runner's actual capability from their recent best performances
+  const currentPaceSecKm = activity.moving_time / activity.distance * 1000;
   
-  // Default pace zones based on common runner profiles
-  // E: <5:30, M: 4:30-5:10, T: 4:00-4:30, I: 3:30-4:00, R: <3:30
-  // Or use personal PB if available
-  const pb5kSec = trainingStats?.estimatedPBs?.['5k'] || 1500; // Default 25:00
-  const pb5kPace = pb5kSec / 5; // pace per km in seconds
+  // Try to get 5K PB from this activity's best_efforts, fallback to default
+  let pb5kSec = 1500; // default 25:00
+  if (activity.best_efforts) {
+    const effort5k = activity.best_efforts.find(e => 
+      e.name?.toLowerCase().includes('5k') || 
+      e.name?.toLowerCase().includes('5 kilometer')
+    );
+    if (effort5k && effort5k.elapsed_time > 0) {
+      pb5kSec = effort5k.elapsed_time;
+    }
+  }
   
-  // Define zones relative to 5K PB pace
+  const pb5kPace = pb5kSec / 5; // seconds per km for 5K
+  
+  // Daniels formula zones relative to 5K pace
   const zones = {
-    E: { min: pb5kPace * 1.25, max: pb5kPace * 1.35, label: 'E-轻松', color: 'text-green-600' },
-    M: { min: pb5kPace * 1.10, max: pb5kPace * 1.20, label: 'M-马拉松', color: 'text-blue-600' },
-    T: { min: pb5kPace * 0.95, max: pb5kPace * 1.05, label: 'T-阈值', color: 'text-orange-600' },
-    I: { min: pb5kPace * 0.88, max: pb5kPace * 0.94, label: 'I-间歇', color: 'text-red-600' },
-    R: { min: 0, max: pb5kPace * 0.87, label: 'R-重复', color: 'text-purple-600' },
+    E: { max: pb5kPace * 1.35, label: 'E-轻松', color: 'text-green-600' },
+    M: { max: pb5kPace * 1.15, label: 'M-马拉松', color: 'text-blue-600' },
+    T: { max: pb5kPace * 1.00, label: 'T-阈值', color: 'text-orange-600' },
+    I: { max: pb5kPace * 0.92, label: 'I-间歇', color: 'text-red-600' },
+    R: { max: pb5kPace * 0.87, label: 'R-重复', color: 'text-purple-600' },
   };
   
-  let calculatedZone = zones.E; // Default
+  let calculatedZone;
   if (currentPaceSecKm <= zones.R.max) calculatedZone = zones.R;
   else if (currentPaceSecKm <= zones.I.max) calculatedZone = zones.I;
   else if (currentPaceSecKm <= zones.T.max) calculatedZone = zones.T;
   else if (currentPaceSecKm <= zones.M.max) calculatedZone = zones.M;
   else calculatedZone = zones.E;
   
-  // Use AI zone only if it's a valid zone (not unknown), otherwise use calculated
+  // Use AI zone if available and valid, otherwise use calculated
   const aiZone = analysis?.paceZoneAnalysis?.zone;
-  const zone = (aiZone && aiZone !== 'unknown') 
+  const zone = (aiZone && aiZone !== 'unknown' && zoneLabels[aiZone]) 
     ? zoneLabels[aiZone] 
     : calculatedZone;
 
@@ -356,55 +365,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
               </div>
             )}
 
-            {/* Training Profile Summary */}
-            {trainingStats?.estimatedPBs && (
-              <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700">
-                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-400 mb-2">
-                  预估能力
-                  {trainingStats.estimatedPBs.reliability === 'high' && (
-                    <span className="ml-1 text-green-600">● 高可靠</span>
-                  )}
-                  {trainingStats.estimatedPBs.reliability === 'medium' && (
-                    <span className="ml-1 text-amber-600">● 中可靠</span>
-                  )}
-                  {trainingStats.estimatedPBs.reliability === 'low' && (
-                    <span className="ml-1 text-red-600">● 估算中</span>
-                  )}
-                </h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 bg-zinc-50 dark:bg-zinc-800">
-                    <span className="font-mono text-[10px] text-zinc-500 block">5K</span>
-                    <span className="font-mono text-sm font-bold">{formatTime(trainingStats.estimatedPBs['5k'])}</span>
-                    {trainingStats.estimatedPBs.sources?.['5k'] === 'actual' && (
-                      <Medal className="w-3 h-3 text-amber-500 mx-auto mt-0.5" />
-                    )}
-                  </div>
-                  <div className="p-2 bg-zinc-50 dark:bg-zinc-800">
-                    <span className="font-mono text-[10px] text-zinc-500 block">10K</span>
-                    <span className="font-mono text-sm font-bold">{formatTime(trainingStats.estimatedPBs['10k'])}</span>
-                    {trainingStats.estimatedPBs.sources?.['10k'] === 'actual' && (
-                      <Medal className="w-3 h-3 text-amber-500 mx-auto mt-0.5" />
-                    )}
-                  </div>
-                  <div className="p-2 bg-zinc-50 dark:bg-zinc-800">
-                    <span className="font-mono text-[10px] text-zinc-500 block">半马</span>
-                    <span className="font-mono text-sm font-bold">{formatTime(trainingStats.estimatedPBs['21k'])}</span>
-                    {trainingStats.estimatedPBs.sources?.['21k'] === 'actual' && (
-                      <Medal className="w-3 h-3 text-amber-500 mx-auto mt-0.5" />
-                    )}
-                  </div>
-                </div>
-                {trainingStats.estimatedPBs['42k'] > 0 && (
-                  <div className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 text-center">
-                    <span className="font-mono text-[10px] text-zinc-500 block">全马</span>
-                    <span className="font-mono text-sm font-bold">{formatTime(trainingStats.estimatedPBs['42k'])}</span>
-                    {trainingStats.estimatedPBs.sources?.['42k'] === 'actual' && (
-                      <span className="ml-1 text-[10px] text-amber-600">(实测)</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+
           </div>
         ) : null}
       </div>
@@ -422,4 +383,11 @@ function formatTime(seconds: number): string {
     return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatPace(secondsPerKm: number): string {
+  if (!secondsPerKm || secondsPerKm === 0) return "--'--\"";
+  const mins = Math.floor(secondsPerKm / 60);
+  const secs = Math.round(secondsPerKm % 60);
+  return `${mins}'${secs.toString().padStart(2, '0')}"`;
 }
