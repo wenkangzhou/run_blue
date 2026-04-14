@@ -18,9 +18,10 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { activity, streams } = body as {
+    const { activity, streams, userProfilePBs } = body as {
       activity: StravaActivity;
       streams: Record<string, any> | null;
+      userProfilePBs?: Record<string, number> | null;
     };
 
     if (!activity) {
@@ -44,15 +45,15 @@ export async function POST(request: NextRequest) {
     // Fetch user's official PBs from Strava stats as fallback
     const officialPBs = await fetchAthleteStats(accessToken);
     
-    // Merge: activity PBs take priority (more recent/accurate)
-    const mergedPBs = { ...officialPBs, ...activityPBs };
+    // Merge priority: user profile PBs > activity PBs > official Strava PBs
+    const mergedPBs = { ...officialPBs, ...activityPBs, ...userProfilePBs };
     
     // Fetch user's activities for training profile analysis
     const recentActivities = await fetchRecentActivities(accessToken, 200);
-    
+
     // Build training profile from history (using merged PBs)
     const trainingProfile = analyzeTrainingHistory(
-      recentActivities, 
+      recentActivities,
       currentActivity,
       mergedPBs
     );

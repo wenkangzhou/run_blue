@@ -5,14 +5,16 @@ import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { PixelButton } from '@/components/ui';
+import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Settings } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
   const { isAuthenticated, user, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
   return (
     <header 
@@ -51,6 +53,14 @@ export function Header() {
             <ThemeToggle />
             {isAuthenticated && (
               <div className="flex items-center gap-3">
+                <PixelButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsProfileOpen(true)}
+                  title={t('profile.title')}
+                >
+                  <Settings size={18} />
+                </PixelButton>
                 {user?.image && (
                   <img
                     src={user.image}
@@ -88,13 +98,24 @@ export function Header() {
           <div className="md:hidden border-t-2 border-zinc-200 dark:border-zinc-700 py-4">
             <nav className="flex flex-col gap-3">
               {isAuthenticated && (
-                <Link
-                  href="/activities"
-                  className="font-mono text-sm font-bold uppercase py-2"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {t('nav.activities')}
-                </Link>
+                <>
+                  <Link
+                    href="/activities"
+                    className="font-mono text-sm font-bold uppercase py-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {t('nav.activities')}
+                  </Link>
+                  <button
+                    className="font-mono text-sm font-bold uppercase py-2 text-left"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsProfileOpen(true);
+                    }}
+                  >
+                    {t('profile.title')}
+                  </button>
+                </>
               )}
               <div className="flex items-center gap-3 py-2">
                 <LanguageToggle />
@@ -109,6 +130,8 @@ export function Header() {
           </div>
         )}
       </div>
+
+      <UserProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </header>
   );
 }

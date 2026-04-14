@@ -942,10 +942,8 @@ function compareSimilarActivities(
   const avgDistance = useRuns.reduce((sum, r) => sum + r.distance, 0) / useRuns.length;
   
   const sortedPaces = [...paces].sort((a, b) => a - b);
-  const rankIndex = sortedPaces.findIndex(p => p > currentPace);
-  const yourPaceRank = rankIndex === -1 
-    ? 100 
-    : Math.round((rankIndex / sortedPaces.length) * 100);
+  const slowerCount = sortedPaces.filter(p => p > currentPace).length;
+  const yourPaceRank = Math.round((slowerCount / sortedPaces.length) * 100);
   
   const recentSimilar = useRuns.slice(0, 5);
   const recentPaces = recentSimilar.map(r => r.moving_time / r.distance * 1000 / 60);

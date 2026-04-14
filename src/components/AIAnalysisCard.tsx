@@ -4,20 +4,21 @@ import React, { useEffect, useState } from 'react';
 import { StravaActivity } from '@/types';
 import { AIAnalysis } from '@/lib/ai';
 import { ActivityClassification } from '@/lib/trainingAnalysis';
-import { 
-  Sparkles, 
-  RefreshCw, 
-  Clock, 
-  Zap, 
-  TrendingUp, 
+import {
+  Sparkles,
+  RefreshCw,
+  Clock,
+  Zap,
+  TrendingUp,
   Target,
   Activity,
   AlertTriangle,
   ChevronRight,
   BarChart3,
   Trophy,
-  Medal
+  Medal,
 } from 'lucide-react';
+import { getUserProfile, getMergedPBsForAnalysis } from '@/lib/userProfile';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -51,7 +52,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   useEffect(() => {
     const cachedKey = `ai_analysis_v2_${activity.id}`;
     const cached = localStorage.getItem(cachedKey);
-    
+
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -65,19 +66,22 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
         // Invalid cache
       }
     }
-    
+
     fetchAnalysis();
   }, [activity.id]);
 
   const fetchAnalysis = async () => {
     setLoading(true);
     setError('');
-    
+
+    const profile = getUserProfile();
+    const userProfilePBs = getMergedPBsForAnalysis(profile, null);
+
     try {
       const response = await fetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activity, streams }),
+        body: JSON.stringify({ activity, streams, userProfilePBs }),
       });
       
       if (!response.ok) {
@@ -109,11 +113,14 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   // This gives us the runner's actual capability from their recent best performances
   const currentPaceSecKm = activity.moving_time / activity.distance * 1000;
   
-  // Try to get 5K PB from this activity's best_efforts, fallback to default
+  // Try to get 5K PB from user profile first, then activity best_efforts, then fallback
   let pb5kSec = 1500; // default 25:00
-  if (activity.best_efforts) {
-    const effort5k = activity.best_efforts.find(e => 
-      e.name?.toLowerCase().includes('5k') || 
+  const userProfile = getUserProfile();
+  if (userProfile?.pbs?.['5k'] && userProfile.pbs['5k'] > 0) {
+    pb5kSec = userProfile.pbs['5k'];
+  } else if (activity.best_efforts) {
+    const effort5k = activity.best_efforts.find(e =>
+      e.name?.toLowerCase().includes('5k') ||
       e.name?.toLowerCase().includes('5 kilometer')
     );
     if (effort5k && effort5k.elapsed_time > 0) {

@@ -157,13 +157,13 @@ export function buildProfessionalPrompt(
     prompt += `\n{\n  "summary": "比赛表现分析（包含与PB对比、配速策略评价）",`;
     prompt += `\n  "intensity": "extreme",`;
     prompt += `\n  "recoveryHours": ${activity.distance > 40000 ? 168 : 48},`;
-    prompt += `\n  "comparisonToAverage": "与历史比赛/训练对比",`;
+    prompt += `\n  "comparisonToAverage": "系统生成，可留空",`;
     prompt += `\n  "suggestions": ["赛后恢复建议1", "避免立即进行强度训练", "下次比赛准备建议"],`;
   } else {
     prompt += `\n{\n  "summary": "总体评价（60字以内，专业教练口吻）",`;
     prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
     prompt += `\n  "recoveryHours": 数字,`;
-    prompt += `\n  "comparisonToAverage": "与历史对比（20字以内）",`;
+    prompt += `\n  "comparisonToAverage": "系统生成，可留空",`;
     prompt += `\n  "suggestions": ["具体建议1（可操作）", "具体建议2", "具体建议3"],`;
   }
   
@@ -181,6 +181,7 @@ export function buildProfessionalPrompt(
   prompt += `\n\n重要提醒:`;
   prompt += `\n- 避免使用"注意休息"、"多喝水"这类泛泛之谈`;
   prompt += `\n- ${classification.isRace ? '这是比赛分析，不要建议增加速度训练' : '提供教练级别的专业洞察和具体可执行的建议'}`;
+  prompt += `\n- "comparisonToAverage" 和 "similarActivitiesInsight" 只需描述配速差异和百分比排名，不要提及总用时差异（如"快2分钟"）或与此无关的描述。`;
   if (estimatedPBs['5k'] > 0) {
     const calculated5k = estimatedPBs['5k'];
     const calculated10k = estimatedPBs['10k'];
@@ -191,6 +192,41 @@ export function buildProfessionalPrompt(
   }
 
   return prompt;
+}
+
+/**
+ * Build accurate comparison text from similarStats to avoid AI hallucinations
+ * like "significantly improved by 2+ minutes total time"
+ */
+function buildAccurateComparison(
+  activity: StravaActivity,
+  similarStats: NonNullable<TrainingProfile['similarStats']>
+): { comparisonToAverage: string; similarActivitiesInsight: string } {
+  const currentPaceSecKm = activity.moving_time / activity.distance * 1000;
+  const avgPaceSecKm = similarStats.avgPace * 60;
+  const diffSec = Math.round(currentPaceSecKm - avgPaceSecKm);
+  const diffAbs = Math.abs(diffSec);
+  const diffText = diffSec < 0 ? '快' : diffSec > 0 ? '慢' : '持平';
+
+  const comparison = diffSec === 0
+    ? `与历史平均持平，超过 ${similarStats.yourPaceRank}% 的同类训练`
+    : `比历史平均${diffText} ${diffAbs} 秒/km，超过 ${similarStats.yourPaceRank}% 的同类训练`;
+
+  let insight = `在 ${similarStats.count} 次同类训练中超过 ${similarStats.yourPaceRank}%。`;
+  if (diffSec === 0) {
+    insight += '本次配速与历史平均基本持平';
+  } else {
+    insight += `本次配速比历史平均${diffText} ${diffAbs} 秒/km`;
+  }
+  if (similarStats.trendDirection === 'improving') {
+    insight += '，近期呈进步趋势';
+  } else if (similarStats.trendDirection === 'declining') {
+    insight += '，近期状态有所下滑';
+  } else {
+    insight += '，近期状态保持稳定';
+  }
+
+  return { comparisonToAverage: comparison, similarActivitiesInsight: insight };
 }
 
 /**
@@ -257,17 +293,23 @@ export async function analyzeActivity(
     
     // Override intensity for races
     const finalIntensity = classification.isRace ? 'extreme' : (result.intensity || 'moderate');
-    
+
+    // Override comparison fields with accurate program-generated text
+    const { similarStats } = trainingProfile;
+    const comparisonOverride = similarStats
+      ? buildAccurateComparison(activity, similarStats)
+      : null;
+
     return {
       summary: result.summary || '训练分析完成',
       intensity: finalIntensity,
       recoveryHours: result.recoveryHours || (classification.isRace ? 48 : 24),
-      comparisonToAverage: result.comparisonToAverage || '',
+      comparisonToAverage: comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
       suggestions: result.suggestions || [],
       generatedAt: Date.now(),
       paceZoneAnalysis: result.paceZoneAnalysis || null,
       trainingLoadContext: result.trainingLoadContext || '',
-      similarActivitiesInsight: result.similarActivitiesInsight || '',
+      similarActivitiesInsight: comparisonOverride?.similarActivitiesInsight || result.similarActivitiesInsight || '',
       nextWorkoutSuggestion: result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),
       warnings: result.warnings || (classification.isRace ? ['这是高强度比赛，需要充分恢复'] : []),
     };
@@ -314,12 +356,16 @@ function generateFallbackAnalysis(
   }
 
   // Race-specific fallback
+  const fallbackComparison = profile.similarStats
+    ? buildAccurateComparison(activity, profile.similarStats)
+    : null;
+
   if (classification.isRace) {
     return {
       summary: `${classification.raceType || '比赛'}完成！配速${paceStr}/km，${classification.raceType?.includes('半马') ? '半马' : ''}表现出色。`,
       intensity: 'extreme',
       recoveryHours: activity.distance > 40000 ? 168 : 48,
-      comparisonToAverage: profile.similarStats ? `超过${profile.similarStats.yourPaceRank}%的历史表现` : '比赛表现优异',
+      comparisonToAverage: fallbackComparison?.comparisonToAverage || '比赛表现优异',
       suggestions: [
         '赛后24小时内避免高强度活动',
         '补充蛋白质和碳水化合物加速恢复',
@@ -332,9 +378,7 @@ function generateFallbackAnalysis(
         appropriateness: 'appropriate',
       },
       trainingLoadContext: '比赛为极限强度，需要充分恢复',
-      similarActivitiesInsight: profile.similarStats 
-        ? `本次表现超过${profile.similarStats.yourPaceRank}%的类似距离`
-        : '比赛完成',
+      similarActivitiesInsight: fallbackComparison?.similarActivitiesInsight || '比赛完成',
       nextWorkoutSuggestion: '建议赛后3天内仅进行轻松恢复跑或休息',
       warnings: ['高强度比赛后需充分恢复，避免立即进行速度训练'],
     };
@@ -349,11 +393,8 @@ function generateFallbackAnalysis(
     suggestions.push('可尝试每周一次400m×6间歇训练，配速控制在I区');
   }
 
-  // Build comparison text based on available data
-  let comparisonText = '暂无历史对比数据';
-  if (profile.similarStats) {
-    comparisonText = `超过${profile.similarStats.yourPaceRank}%的同类训练`;
-  }
+  // Build comparison text based on accurate data
+  let comparisonText = fallbackComparison?.comparisonToAverage || '暂无历史对比数据';
 
   return {
     summary: `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速${paceStr}/km处于${zoneDesc}。`,
@@ -368,9 +409,7 @@ function generateFallbackAnalysis(
       appropriateness: 'appropriate',
     },
     trainingLoadContext: `近4周平均周跑量${(profile.patterns.typicalWeekDistance / 1000).toFixed(1)}km`,
-    similarActivitiesInsight: profile.similarStats 
-      ? `本次表现超过${profile.similarStats.yourPaceRank}%的类似训练`
-      : '暂无类似训练数据',
+    similarActivitiesInsight: fallbackComparison?.similarActivitiesInsight || '暂无类似训练数据',
     nextWorkoutSuggestion: profile.patterns.hasLongRuns 
       ? '建议下次进行轻松跑恢复'
       : '建议下次安排长距离有氧训练',
