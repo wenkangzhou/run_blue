@@ -135,7 +135,7 @@ export function TrainingPlanForm({
           type="date"
           value={raceDate}
           onChange={(e) => setRaceDate(e.target.value)}
-          className="w-full px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
+          className="w-full min-w-0 px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
         />
       </div>
 
