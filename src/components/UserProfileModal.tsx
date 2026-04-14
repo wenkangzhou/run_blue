@@ -161,11 +161,12 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     value={values[key]}
                     onChange={e => handleChange(key, e.target.value)}
                     className={[
-                      'w-full px-3 py-2 font-mono text-sm border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
+                      'w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
                       errors[key]
                         ? 'border-red-500 focus:border-red-600'
                         : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400',
                     ].join(' ')}
+
                   />
                   <Clock
                     size={14}
