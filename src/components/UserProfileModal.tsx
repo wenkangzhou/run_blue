@@ -155,7 +155,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 <div className="relative">
                   <input
                     type="text"
-                    inputMode="numeric"
+                    inputMode="text"
+                    pattern="[0-9:]*"
                     placeholder={t('profile.timeFormat')}
                     value={values[key]}
                     onChange={e => handleChange(key, e.target.value)}
