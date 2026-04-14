@@ -25,6 +25,11 @@ export function PeriodShareModal({
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
 
+  const isIOS = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  }, []);
+
   const filtered = useMemo(() => {
     const now = new Date();
     const cutoff = new Date();
@@ -148,7 +153,7 @@ export function PeriodShareModal({
           </div>
 
           {/* Preview */}
-          <div className="mb-5 flex justify-center">
+          <div className="mb-5 flex flex-col items-center">
             <div
               className="relative rounded-lg overflow-hidden border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-100"
               style={{
@@ -180,6 +185,11 @@ export function PeriodShareModal({
                 </div>
               )}
             </div>
+            {isIOS && dataUrl && (
+              <p className="mt-3 font-mono text-xs text-zinc-500 text-center">
+                {t('sharePoster.iosHint', '长按上方图片即可保存到相册')}
+              </p>
+            )}
           </div>
 
           {/* Actions */}
@@ -189,27 +199,31 @@ export function PeriodShareModal({
             </PixelButton>
             {dataUrl && (
               <>
-                <PixelButton
-                  variant="secondary"
-                  size="md"
-                  onClick={handleCopy}
-                  disabled={showCopied}
-                >
-                  {showCopied ? (
+                {!isIOS && (
+                  <PixelButton
+                    variant="secondary"
+                    size="md"
+                    onClick={handleCopy}
+                    disabled={showCopied}
+                  >
+                    {showCopied ? (
+                      <span className="inline-flex items-center gap-1">
+                        <CheckCircle2 size={14} />
+                        {t('sharePoster.copied', '已复制')}
+                      </span>
+                    ) : (
+                      t('sharePoster.copy', '复制图片')
+                    )}
+                  </PixelButton>
+                )}
+                {!isIOS && (
+                  <PixelButton variant="primary" size="md" onClick={handleDownload}>
                     <span className="inline-flex items-center gap-1">
-                      <CheckCircle2 size={14} />
-                      {t('sharePoster.copied', '已复制')}
+                      <Download size={14} />
+                      {t('sharePoster.download', '下载 PNG')}
                     </span>
-                  ) : (
-                    t('sharePoster.copy', '复制图片')
-                  )}
-                </PixelButton>
-                <PixelButton variant="primary" size="md" onClick={handleDownload}>
-                  <span className="inline-flex items-center gap-1">
-                    <Download size={14} />
-                    {t('sharePoster.download', '下载 PNG')}
-                  </span>
-                </PixelButton>
+                  </PixelButton>
+                )}
               </>
             )}
           </div>

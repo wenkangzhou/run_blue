@@ -142,6 +142,7 @@ const resources = {
         copy: 'Copy Image',
         download: 'Download PNG',
         showStats: 'Show Run Stats',
+        iosHint: 'Long press the image above to save',
       },
       periodShare: {
         title: 'Period Poster',
@@ -335,6 +336,7 @@ const resources = {
         copy: '复制图片',
         download: '下载 PNG',
         showStats: '显示跑步数据',
+        iosHint: '长按上方图片即可保存到相册',
       },
       periodShare: {
         title: '周期海报',
