@@ -4,7 +4,7 @@ import React from 'react';
 import { StravaActivity } from '@/types';
 import { ActivityGridCard } from './ActivityGridCard';
 import { formatDistance, formatDuration } from '@/lib/strava';
-import { Clock, Route, Calendar } from 'lucide-react';
+import { Clock, Route, Calendar, ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 type GroupBy = 'week' | 'month' | 'year';
@@ -13,6 +13,7 @@ interface GroupedActivitiesProps {
   activities: StravaActivity[];
   hasMore?: boolean;
   isLoading?: boolean;
+  onOpenPeriodShare?: () => void;
 }
 
 interface ActivityGroup {
@@ -25,7 +26,7 @@ interface ActivityGroup {
   totalTime: number;
 }
 
-export function GroupedActivities({ activities, hasMore, isLoading }: GroupedActivitiesProps) {
+export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriodShare }: GroupedActivitiesProps) {
   const { t } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
 
@@ -35,23 +36,36 @@ export function GroupedActivities({ activities, hasMore, isLoading }: GroupedAct
 
   return (
     <div>
-      {/* Group By Tabs */}
-      <div className="flex gap-2 mb-4 px-1">
-        {(['week', 'month', 'year'] as GroupBy[]).map((type) => (
+      {/* Group By Tabs + Actions */}
+      <div className="flex items-center justify-between gap-3 mb-4 px-1">
+        <div className="flex gap-2">
+          {(['week', 'month', 'year'] as GroupBy[]).map((type) => (
+            <button
+              key={type}
+              onClick={() => setGroupBy(type)}
+              className={`px-3 py-1.5 text-xs font-mono rounded-full transition-colors ${
+                groupBy === type
+                  ? 'bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {type === 'week' && t('stats.byWeek')}
+              {type === 'month' && t('stats.byMonth')}
+              {type === 'year' && t('stats.byYear')}
+            </button>
+          ))}
+        </div>
+
+        {onOpenPeriodShare && (
           <button
-            key={type}
-            onClick={() => setGroupBy(type)}
-            className={`px-3 py-1.5 text-xs font-mono rounded-full transition-colors ${
-              groupBy === type
-                ? 'bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
-                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-            }`}
+            onClick={onOpenPeriodShare}
+            className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            title={t('periodShare.title', '周期海报')}
           >
-            {type === 'week' && t('stats.byWeek')}
-            {type === 'month' && t('stats.byMonth')}
-            {type === 'year' && t('stats.byYear')}
+            <ImageIcon size={14} />
+            <span className="hidden sm:inline">{t('periodShare.title', '周期海报')}</span>
           </button>
-        ))}
+        )}
       </div>
 
       {/* Grouped Lists */}

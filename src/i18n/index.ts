@@ -143,6 +143,14 @@ const resources = {
         download: 'Download PNG',
         showStats: 'Show Run Stats',
       },
+      periodShare: {
+        title: 'Period Poster',
+        subtitle: 'Combine a week or month of runs into one poster',
+        last7Days: 'Last 7 Days',
+        last30Days: 'Last 30 Days',
+        noData: 'No running data for this period',
+        generating: 'Generating...',
+      },
       features: {
         routeVisualization: {
           title: 'Route Visualization',
@@ -327,6 +335,14 @@ const resources = {
         copy: '复制图片',
         download: '下载 PNG',
         showStats: '显示跑步数据',
+      },
+      periodShare: {
+        title: '周期海报',
+        subtitle: '把一周或一个月的跑步汇总成一张海报',
+        last7Days: '最近7天',
+        last30Days: '最近30天',
+        noData: '该时间段没有跑步记录',
+        generating: '生成中...',
       },
       features: {
         routeVisualization: {

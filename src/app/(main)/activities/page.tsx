@@ -11,6 +11,7 @@ import { Loader2, RefreshCw, ChevronUp } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
+import { PeriodShareModal } from '@/components/PeriodShareModal';
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -41,6 +42,7 @@ export default function ActivitiesPage() {
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isPeriodShareOpen, setIsPeriodShareOpen] = useState(false);
 
   // 直接记录下一页要加载的页码
   const nextPageRef = useRef(1);
@@ -342,8 +344,13 @@ export default function ActivitiesPage() {
         </div>
       ) : (
         <>
-          <GroupedActivities activities={runningActivities} hasMore={hasMore} isLoading={isLoading} />
-          
+          <GroupedActivities
+            activities={runningActivities}
+            hasMore={hasMore}
+            isLoading={isLoading}
+            onOpenPeriodShare={() => setIsPeriodShareOpen(true)}
+          />
+
           {/* Load More Button */}
           {hasMore ? (
             <div className="py-6 flex justify-center">
@@ -372,6 +379,12 @@ export default function ActivitiesPage() {
           <ChevronUp size={20} />
         </button>
       )}
+
+      <PeriodShareModal
+        isOpen={isPeriodShareOpen}
+        onClose={() => setIsPeriodShareOpen(false)}
+        activities={activities}
+      />
     </div>
   );
 }
