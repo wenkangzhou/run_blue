@@ -37,13 +37,13 @@ export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriod
   return (
     <div>
       {/* Group By Tabs + Actions */}
-      <div className="flex items-center justify-between gap-3 mb-4 px-1">
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between gap-2 mb-4 px-1">
+        <div className="flex gap-1.5 sm:gap-2">
           {(['week', 'month', 'year'] as GroupBy[]).map((type) => (
             <button
               key={type}
               onClick={() => setGroupBy(type)}
-              className={`px-3 py-1.5 text-xs font-mono rounded-full transition-colors ${
+              className={`px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-mono rounded-full transition-colors whitespace-nowrap ${
                 groupBy === type
                   ? 'bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
                   : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -59,7 +59,7 @@ export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriod
         {onOpenPeriodShare && (
           <button
             onClick={onOpenPeriodShare}
-            className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 font-mono text-[11px] sm:text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
             title={t('periodShare.title', '周期海报')}
           >
             <ImageIcon size={14} />
@@ -88,7 +88,7 @@ export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriod
                   {formatDuration(group.totalTime)}
                 </span>
                 <span className="text-zinc-400">
-                  {group.activities.length}{t('stats.runs', '次')}
+                  {group.activities.length}{t('stats.runs', '')}
                 </span>
               </div>
             </div>

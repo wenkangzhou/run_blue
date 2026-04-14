@@ -18,10 +18,11 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { activity, streams, userProfilePBs } = body as {
+    const { activity, streams, userProfilePBs, locale } = body as {
       activity: StravaActivity;
       streams: Record<string, any> | null;
       userProfilePBs?: Record<string, number> | null;
+      locale?: string;
     };
 
     if (!activity) {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     const classification = classifyActivity(currentActivity);
     
     // Call AI analysis with training profile
-    const analysis = await analyzeActivity(currentActivity, streams, trainingProfile);
+    const analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale);
 
     return NextResponse.json({ 
       analysis,

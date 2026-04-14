@@ -8,7 +8,7 @@ import { PixelButton } from '@/components/ui';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X, Settings } from 'lucide-react';
+import { Menu, X, Settings, Dumbbell } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -37,13 +37,27 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
+            <Link
+              href="/"
+              className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              {t('nav.home', '首页')}
+            </Link>
             {isAuthenticated && (
-              <Link
-                href="/activities"
-                className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              >
-                {t('nav.activities')}
-              </Link>
+              <>
+                <Link
+                  href="/activities"
+                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  {t('nav.activities')}
+                </Link>
+                <Link
+                  href="/plans"
+                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  {t('trainingPlan.title', '训练计划')}
+                </Link>
+              </>
             )}
           </nav>
 
@@ -97,6 +111,13 @@ export function Header() {
         {isMenuOpen && (
           <div className="md:hidden border-t-2 border-zinc-200 dark:border-zinc-700 py-4">
             <nav className="flex flex-col gap-3">
+              <Link
+                href="/"
+                className="font-mono text-sm font-bold uppercase py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                {t('nav.home', '首页')}
+              </Link>
               {isAuthenticated && (
                 <>
                   <Link
@@ -105,6 +126,13 @@ export function Header() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {t('nav.activities')}
+                  </Link>
+                  <Link
+                    href="/plans"
+                    className="font-mono text-sm font-bold uppercase py-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {t('trainingPlan.title', '训练计划')}
                   </Link>
                   <button
                     className="font-mono text-sm font-bold uppercase py-2 text-left"

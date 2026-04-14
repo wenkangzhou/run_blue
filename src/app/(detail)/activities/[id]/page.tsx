@@ -278,7 +278,7 @@ export default function ActivityDetailPage() {
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
-              返回
+              {t('common.back')}
             </Link>
           </div>
         </div>
@@ -335,7 +335,7 @@ export default function ActivityDetailPage() {
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
-            返回
+            {t('common.back')}
           </Link>
           
           {/* Refresh button - only show if we have data */}
