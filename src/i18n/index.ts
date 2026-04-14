@@ -133,6 +133,16 @@ const resources = {
         rateLimitedDesc: 'Strava API rate limited, please try again in 15 minutes',
         rateLimitedShowCache: 'Rate limited, showing cached data',
       },
+      sharePoster: {
+        title: 'Share Poster',
+        transparentBg: 'Transparent PNG',
+        description: 'Download a transparent route image to overlay text and stickers on social media.',
+        generating: 'Generating...',
+        copied: 'Copied',
+        copy: 'Copy Image',
+        download: 'Download PNG',
+        showStats: 'Show Run Stats',
+      },
       features: {
         routeVisualization: {
           title: 'Route Visualization',
@@ -307,6 +317,16 @@ const resources = {
         rateLimitedTitle: '请求过于频繁',
         rateLimitedDesc: 'Strava API 限流中，请 15 分钟后再试',
         rateLimitedShowCache: '请求过于频繁，显示缓存数据',
+      },
+      sharePoster: {
+        title: '分享海报',
+        transparentBg: '透明背景 PNG',
+        description: '下载透明背景的路线图片，方便你在社交媒体上自由叠加文字和贴纸。',
+        generating: '生成中...',
+        copied: '已复制',
+        copy: '复制图片',
+        download: '下载 PNG',
+        showStats: '显示跑步数据',
       },
       features: {
         routeVisualization: {

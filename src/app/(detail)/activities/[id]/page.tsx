@@ -14,7 +14,8 @@ import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
 import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
-import { ChevronLeft, Loader2, RefreshCw } from 'lucide-react';
+import { SharePosterModal } from '@/components/SharePosterModal';
+import { ChevronLeft, Loader2, RefreshCw, Share2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // 20km threshold for collapsing
@@ -41,7 +42,8 @@ export default function ActivityDetailPage() {
   const [rateLimited, setRateLimited] = useState(false);
   const [forceShow, setForceShow] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(false);
-  
+  const [isShareOpen, setIsShareOpen] = useState(false);
+
   // Use ref to track if we have loaded data to avoid infinite loops
   const hasLoadedRef = useRef(false);
   const activityRef = useRef<StravaActivity | null>(null);
@@ -377,11 +379,23 @@ export default function ActivityDetailPage() {
       ) : activity && (
         <div className="container mx-auto px-4 py-4 max-w-2xl relative">
           {/* Header */}
-          <div className="mb-4">
-            <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
-            <p className="font-mono text-xs text-zinc-500">
-              {formatDateTime(activity.start_date_local)}
-            </p>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
+              <p className="font-mono text-xs text-zinc-500">
+                {formatDateTime(activity.start_date_local)}
+              </p>
+            </div>
+            {activity.map?.polyline && (
+              <button
+                onClick={() => setIsShareOpen(true)}
+                className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title={t('sharePoster.title', '分享海报')}
+              >
+                <Share2 size={14} />
+                <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
+              </button>
+            )}
           </div>
 
           {/* Map - notify when ready */}
@@ -546,6 +560,19 @@ export default function ActivityDetailPage() {
           )}
         </div>
       )}
+
+      <SharePosterModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        activityName={activity?.name || ''}
+        activityDate={activity?.start_date_local?.split('T')[0]?.replace(/-/g, '') || ''}
+        polyline={activity?.map?.polyline || null}
+        stats={activity ? {
+          distance: formatDistance(activity.distance, 'km'),
+          duration: formatDuration(activity.moving_time),
+          pace: formatPace(activity.distance, activity.moving_time, 'min/km'),
+        } : null}
+      />
     </div>
   );
 }
