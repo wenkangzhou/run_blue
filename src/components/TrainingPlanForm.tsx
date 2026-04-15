@@ -100,7 +100,7 @@ export function TrainingPlanForm({
           type="text"
           inputMode="text"
           required
-          placeholder={t('profile.timeFormat', '格式：分:秒 或 时:分:秒')}
+          placeholder={distance === '5k' || distance === '10k' ? 'mm:ss' : 'hh:mm:ss'}
           value={targetTime}
           onChange={(e) => setTargetTime(e.target.value)}
           className="w-full px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
@@ -131,12 +131,15 @@ export function TrainingPlanForm({
         <label className="block font-mono text-xs font-bold uppercase mb-1.5">
           {t('trainingPlan.raceDate', '比赛日期（可选）')}
         </label>
-        <input
-          type="date"
-          value={raceDate}
-          onChange={(e) => setRaceDate(e.target.value)}
-          className="w-full min-w-0 px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
-        />
+        <div className="relative overflow-hidden">
+          <input
+            type="date"
+            value={raceDate}
+            onChange={(e) => setRaceDate(e.target.value)}
+            className="w-full min-w-0 max-w-full appearance-none px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
+            style={{ WebkitAppearance: 'none' }}
+          />
+        </div>
       </div>
 
       <PixelButton variant="primary" size="lg" className="w-full" isLoading={isLoading}>

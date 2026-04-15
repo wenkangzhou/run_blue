@@ -466,21 +466,29 @@ export function buildTrainingPlanPrompt(
   prompt += `\n- 近4周平均周跑量：${Math.round(weeklyVolume)} km`;
   prompt += `\n- 当前能力评估：5K PB配速${formatPaceSec(pb5kSec / 5)}，目标配速${formatPaceSec(targetPace)}`;
 
-  prompt += `\n\n## 训练计划结构要求（非常重要）`;
+  prompt += `\n\n## 训练计划结构要求（非常重要，且必须根据目标赛事差异定制）`;
   prompt += `\n1. 周期划分：基础期(base，前25%周数)→建立期(build，25%-65%周数)→巅峰期(peak，66%-85%周数)→减量期(taper，最后15%周数)。`;
   prompt += `\n2. 每周至少安排1天完全休息(type=rest)，建议放在周六。`;
-  prompt += `\n3. 长距离必须安排在周日（day=6），且任何阶段都不应小于15km，并逐步递进：`;
-  prompt += `\n   - 全程马拉松(42k)：16周计划中，建立期和巅峰期的长距离要逐步增加到30km以上，整个计划至少包含2-3次30km+的长距离。`;
-  prompt += `\n   - 半程马拉松(21k)：长距离最高到18-20km。`;
-  prompt += `\n   - 10公里：长距离最高到12-15km。`;
-  prompt += `\n   - 5公里：长距离最高到10-15km。`;
-  prompt += `\n4. 强度控制（核心规则）：`;
-  prompt += `\n   - 基础期和减量期：不要安排长间歇或长阈值跑。每周二安排一次轻速度激活（如8组200m轻快跑+200m慢跑恢复、或少量strides），只是为了维持神经肌肉兴奋性。`;
-  prompt += `\n   - 建立期和巅峰期：每周只安排一堂真正的大强度课（阈值跑和间歇跑两者轮换，不要每周同时安排）。周四必须安排轻松跑，不要安排大强度课。`;
-  prompt += `\n   - 也就是说，建立期和巅峰期一周只有两堂大课：周二阈值/间歇（轮换）+ 周日长距离。其余全是轻松跑或休息。`;
-  prompt += `\n   - 阈值跑配速范围：${formatPaceSec(zones.T.min)} ~ ${formatPaceSec(zones.T.max)}/km。间歇跑配速范围：${formatPaceSec(zones.I.min)} ~ ${formatPaceSec(zones.I.max)}/km。`;
-  prompt += `\n   - 阈值跑和间歇跑必须在 description 中写清楚具体配速和组数，且要体现进阶。例如建立期前期可以写"6×800m @ ${formatPaceSec((zones.I.min+zones.I.max)/2)}，组间慢跑3分钟（含2km热身+1km放松）"；巅峰期进阶到"5×1200m @ ${formatPaceSec((zones.I.min+zones.I.max)/2)}"；阈值跑从6km逐步进阶到10-12km，且必须写出具体阈值配速。`;
-  prompt += `\n5. 跑量设计：按能力合理设计跑量，全马巅峰期周跑量可以达到初始跑量的1.4-1.5倍，不要刻意压低跑量。`;
+  prompt += `\n3. 周日有氧跑安排（day=6），根据目标赛事差异定制：`;
+  if (distance === '42k') {
+    prompt += `\n   - 全程马拉松：长距离慢跑，逐步增加到30km以上，至少包含2-3次30km+的长距离。建立期和巅峰期的长距离中加入马拉松配速(M配速 ${formatPaceSec(targetPace)}) 段落。`;
+    prompt += `\n   - 强度安排：周二安排一堂大强度课（阈值跑和间歇跑轮换），周四必须是轻松跑，不要再安排大强度课。全马一周只有两堂大课。`;
+  } else if (distance === '21k') {
+    prompt += `\n   - 半程马拉松：长距离慢跑，最高到18-20km。巅峰期/减量期长距离中可加入部分M配速 ${formatPaceSec(targetPace)} 段落。`;
+    prompt += `\n   - 强度安排：半马非常依赖乳酸阈值能力。建立期和巅峰期每周安排两堂强度课：周二间歇或速度训练，周四阈值跑。`;
+  } else if (distance === '10k') {
+    prompt += `\n   - 10公里：周日安排较长有氧跑（10-12km即可），不需要像半马/全马那样跑长距离慢跑。重点是速度耐力和乳酸阈值。`;
+    prompt += `\n   - 强度安排：10k以速度为主。周二固定间歇训练（600m/800m/1000m），周四安排法特莱克或阈值跑。每周两堂强度课。`;
+  } else {
+    prompt += `\n   - 5公里：周日安排较长有氧跑（8-10km即可），重点是 raw speed（速度）和短间歇。`;
+    prompt += `\n   - 强度安排：周二短间歇（400m）或重复跑（200m），周四短阈值跑（3-4km）。每周两堂强度课。`;
+  }
+  prompt += `\n4. 具体配速要求：`;
+  prompt += `\n   - 阈值跑(T)配速范围：${formatPaceSec(zones.T.min)} ~ ${formatPaceSec(zones.T.max)}/km`;
+  prompt += `\n   - 间歇跑(I)配速范围：${formatPaceSec(zones.I.min)} ~ ${formatPaceSec(zones.I.max)}/km`;
+  prompt += `\n   - 重复跑(R)配速范围：${formatPaceSec(zones.R.min)} ~ ${formatPaceSec(zones.R.max)}/km`;
+  prompt += `\n   - 所有阈值跑和间歇跑的 description 必须写清楚"组数×距离 @ 具体配速"，且要体现进阶。`;
+  prompt += `\n5. 跑量设计：按能力和目标赛事合理设计跑量。全马巅峰期周跑量可达初始跑量的1.4-1.5倍；半马约1.3-1.35倍；10公里约1.15-1.2倍（peak周跑量通常24-30km）；5公里约1.1-1.15倍（peak周跑量通常17-22km）。不要给5k/10k套用马拉松的大跑量结构。`;
   prompt += `\n6. 轻松跑要求：每次轻松跑至少5km且不应大于15km。`;
   prompt += `\n7. 力量训练：基础期和减量期负荷较低时，周三可以安排一次力量训练（type=recovery），内容以下肢力量和核心训练为主，替换掉当天的跑步。`;
   prompt += `\n8. 所有 distance 数值请使用整数（km），不要出现小数点后多位的情况。`;
@@ -503,7 +511,7 @@ export function buildTrainingPlanPrompt(
   prompt += `\n        { "day": 3, "type": "easy", "title": "轻松跑", "description": "6km 放松跑", "distance": 6, "paceZone": "E" },`;
   prompt += `\n        { "day": 4, "type": "easy", "title": "轻松跑", "description": "6km 放松跑", "distance": 6, "paceZone": "E" },`;
   prompt += `\n        { "day": 5, "type": "rest", "title": "休息", "description": "完全休息", "distance": 0 },`;
-  prompt += `\n        { "day": 6, "type": "long", "title": "长距离慢跑", "description": "12km 全程匀速 E 配速", "distance": 12, "paceZone": "E" }`;
+  prompt += `\n        { "day": 6, "type": "long", "title": "长距离", "description": "12km 全程匀速 E 配速", "distance": 12, "paceZone": "E" }`;
   prompt += `\n      ]\n    }\n  ]\n}`;
 
   return prompt;

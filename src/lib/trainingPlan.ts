@@ -166,100 +166,196 @@ function calcLongRunDist(
   weeks: number
 ): number {
   const weeksToRace = weeks - w + 1;
-  let dist = 15;
 
   if (distance === '42k') {
     if (phase === 'base') {
-      dist = Math.min(20, 15 + (w - 1) * 1.5);
+      return Math.min(18, 14 + (w - 1) * 1.2);
     } else if (phase === 'build') {
       const buildStart = Math.floor(weeks * 0.25) + 1;
       const progress = Math.min(1, (w - buildStart) / Math.max(1, Math.floor(weeks * 0.4) - buildStart + 1));
-      dist = Math.round(20 + progress * 12);
+      return Math.round(18 + progress * 10);
     } else if (phase === 'peak') {
-      if (w === weeks - Math.floor(weeks * 0.15) || w === weeks - Math.floor(weeks * 0.15) + 1) {
-        dist = 32;
-      } else {
-        dist = 30;
-      }
+      return w === weeks - Math.floor(weeks * 0.15) ? 32 : 28;
     } else {
       // taper
-      if (weeksToRace >= 3) dist = 20;
-      else if (weeksToRace === 2) dist = 15;
-      else dist = 15;
+      if (weeksToRace >= 3) return 20;
+      if (weeksToRace === 2) return 16;
+      return 15;
     }
-  } else if (distance === '21k') {
-    if (phase === 'base') {
-      dist = Math.min(16, 15 + (w - 1) * 0.5);
-    } else if (phase === 'build') {
-      const buildStart = Math.floor(weeks * 0.25) + 1;
-      const progress = Math.min(1, (w - buildStart) / Math.max(1, Math.floor(weeks * 0.4) - buildStart + 1));
-      dist = Math.round(16 + progress * 4);
-    } else if (phase === 'peak') {
-      dist = 18;
-    } else {
-      // taper
-      if (weeksToRace >= 2) dist = 15;
-      else dist = 15;
-    }
-  } else if (distance === '10k') {
-    if (phase === 'base') dist = Math.min(15, 10 + w);
-    else if (phase === 'build') dist = 15;
-    else if (phase === 'peak') dist = 15;
-    else dist = 15;
-  } else {
-    // 5k
-    if (phase === 'base') dist = Math.min(15, 10 + w);
-    else if (phase === 'build') dist = 15;
-    else if (phase === 'peak') dist = 15;
-    else dist = 15;
   }
 
-  return Math.max(15, Math.round(dist));
+  if (distance === '21k') {
+    if (phase === 'base') {
+      return Math.min(15, 12 + (w - 1) * 0.6);
+    } else if (phase === 'build') {
+      const buildStart = Math.floor(weeks * 0.25) + 1;
+      const progress = Math.min(1, (w - buildStart) / Math.max(1, Math.floor(weeks * 0.4) - buildStart + 1));
+      return Math.round(15 + progress * 3);
+    } else if (phase === 'peak') {
+      return 18;
+    } else {
+      // taper
+      if (weeksToRace >= 2) return 14;
+      return 12;
+    }
+  }
+
+  if (distance === '10k') {
+    if (phase === 'base') {
+      return Math.min(10, 8 + (w - 1) * 0.5);
+    } else if (phase === 'build') {
+      return 11;
+    } else if (phase === 'peak') {
+      return 12;
+    } else {
+      // taper
+      if (weeksToRace >= 2) return 10;
+      return 8;
+    }
+  }
+
+  // 5k
+  if (phase === 'base') {
+    return Math.min(8, 6 + (w - 1) * 0.5);
+  } else if (phase === 'build') {
+    return 9;
+  } else if (phase === 'peak') {
+    return 10;
+  } else {
+    // taper
+    if (weeksToRace >= 2) return 8;
+    return 6;
+  }
 }
 
 function getFallbackLabels(locale: string = 'zh') {
   const en = locale.startsWith('en');
   return {
-    longRun: en ? 'Long Run' : '长距离慢跑',
-    easyRun: en ? 'Easy Run' : '轻松跑',
-    speedActivation: en ? 'Speed Activation' : '速度激活',
-    tempoRun: en ? 'Tempo Run' : '乳酸阈值跑',
-    intervalTraining: en ? 'Interval Training' : '间歇训练',
-    strength: en ? 'Strength' : '力量训练',
+    longRun: en ? 'Long' : '长距离',
+    steadyRun: en ? 'Steady' : '有氧跑',
+    easyRun: en ? 'Easy' : '轻松跑',
+    speedActivation: en ? 'Speed' : '速度',
+    tempoRun: en ? 'Tempo' : '阈值跑',
+    intervalTraining: en ? 'Intervals' : '间歇',
+    fartlek: en ? 'Fartlek' : '法特莱克',
+    strength: en ? 'Strength' : '力量',
     rest: en ? 'Rest' : '休息',
     warmUp: en ? 'w/up' : '热身',
     coolDown: en ? 'c/down' : '放松',
-    easyPace: en ? 'easy pace' : '放松跑',
-    strides: en ? '8x 200m strides + 200m jog rec' : '8组 200m 轻快跑+200m 慢跑恢复',
-    totalDistAbout: en ? 'total approx' : '总距离约',
+    easyPace: en ? 'easy' : '放松跑',
+    strides: en ? '8×200m strides + 200m jog' : '8组 200m 轻快跑+200m 慢跑',
+    totalDistAbout: en ? 'total' : '总约',
     phaseBase: en ? 'Base' : '基础期',
     phaseBuild: en ? 'Build' : '建立期',
     phasePeak: en ? 'Peak' : '巅峰期',
     phaseTaper: en ? 'Taper' : '减量期',
-    pbPace: en ? '5K PB pace' : '5K PB配速',
     targetPace: en ? 'Target pace' : '目标配速',
     restDesc: en ? 'Rest day or light stretching' : '完全休息或轻度拉伸',
-    strengthDesc: en ? 'Legs & core strength (~45min)' : '下肢力量 + 核心训练（约45分钟）',
+    strengthDesc: en ? 'Legs & core (~45min)' : '下肢力量+核心（约45分钟）',
     // weekly hints
-    hintBase: en ? 'Focus on aerobic base. Easy runs at conversational pace. Do strength on Wednesday.' : '本周以有氧积累为主，轻松跑保持对话配速，周三进行力量训练。',
-    hintBuild: en ? 'Tuesday quality session (see description), long run can start slow and finish fast.' : '周二强度课注意控制配速，长距离建议前慢后快。',
-    hintPeak: en ? 'Volume and intensity are highest. Include M-pace blocks in the long run. Prioritize recovery.' : '跑量和强度均达峰值，长距离中加入马配段落，务必重视恢复。',
-    hintTaper: en ? 'Reduce volume gradually. Keep muscles active. Add M-pace segments to prepare for race day.' : '逐步降低跑量，保持肌肉弹性，长距离中保留马配段落以维持比赛节奏感。',
-    // M pace labels
+    hintBase: en ? 'Focus on aerobic base. Easy runs at conversational pace.' : '本周以有氧积累为主，轻松跑保持对话配速。',
+    hintBuild: en ? 'Tuesday quality session (see description), maintain good form.' : '周二强度课注意控制配速，保持技术动作。',
+    hintPeak: en ? 'Volume and intensity are highest. Prioritize recovery.' : '跑量和强度均达峰值，务必重视恢复。',
+    hintTaper: en ? 'Reduce volume gradually. Keep muscles active.' : '逐步降低跑量，保持肌肉弹性。',
+    // M pace labels (marathon/half only)
     mp: en ? 'M pace' : 'M配速',
-    longRunProgression: en ? '{{dist}}km Long Run (first {{easy}}km E + last {{m}}km @ {{mp}})' : '{{dist}}km 长距离慢跑（前{{easy}}km E + 后{{m}}km @ {{mp}}）',
-    longRunEven: en ? '{{dist}}km Long Run (steady E pace)' : '{{dist}}km 长距离慢跑（全程匀速 E 配速）',
+    longRunProgression: en ? '{{dist}}km ({{easy}}km E + {{m}}km @ {{mp}})' : '{{dist}}km（前{{easy}}km E + 后{{m}}km @ {{mp}}）',
+    longRunEven: en ? '{{dist}}km steady E' : '{{dist}}km 匀速 E',
   };
 }
 
-function getQualitySession(
+/**
+ * Build a speed-activation session (strides / short reps)
+ */
+function getSpeedActivation(
+  distance: RaceDistance,
+  labels: ReturnType<typeof getFallbackLabels>
+): TrainingSession {
+  const speedDist = distance === '42k' ? 8 : distance === '21k' ? 6 : 5;
+  return session(1, 'interval', labels.speedActivation, `${labels.strides}, ${labels.totalDistAbout} ${speedDist}km`, speedDist, 'R');
+}
+
+/**
+ * Build Tuesday quality session.
+ */
+function getTuesdaySession(
   phase: WeeklyPlan['phase'],
   w: number,
   weeks: number,
   distance: RaceDistance,
   pb5kSec: number,
   labels: ReturnType<typeof getFallbackLabels>
-): { type: TrainingSession['type']; title: string; description: string; distance: number; paceZone: string } | null {
+): TrainingSession | null {
+  if (phase !== 'build' && phase !== 'peak') return null;
+
+  const zones = calculatePaceZones(pb5kSec);
+  const tPace = formatPaceSec((zones.T.min + zones.T.max) / 2);
+  const iPace = formatPaceSec((zones.I.min + zones.I.max) / 2);
+  const rPace = formatPaceSec((zones.R.min + zones.R.max) / 2);
+
+  const baseWeeksEnd = Math.max(1, Math.floor(weeks * 0.25));
+  const buildWeeksEnd = Math.max(baseWeeksEnd + 1, Math.floor(weeks * 0.65));
+  const buildMid = Math.round((baseWeeksEnd + buildWeeksEnd) / 2);
+  const isLateBuild = w > buildMid;
+  const isPeak = phase === 'peak';
+
+  // Marathon: tempo / interval alternate
+  if (distance === '42k') {
+    if (w % 2 === 0) {
+      const tempoDist = isPeak ? 12 : isLateBuild ? 10 : 8;
+      return session(1, 'tempo', labels.tempoRun, `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(tempoDist + 3), 'T');
+    }
+    const repDist = isPeak ? 1200 : isLateBuild ? 1000 : 800;
+    const reps = isPeak ? 5 : 6;
+    const intervalMain = (repDist * reps) / 1000;
+    return session(1, 'interval', labels.intervalTraining, `${reps}×${repDist}m @ ${iPace}, 3min jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(intervalMain + 3), 'I');
+  }
+
+  // Half marathon: interval / tempo alternate
+  if (distance === '21k') {
+    if (w % 2 === 0) {
+      const tempoDist = isPeak ? 10 : isLateBuild ? 8 : 6;
+      return session(1, 'tempo', labels.tempoRun, `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(tempoDist + 3), 'T');
+    }
+    const repDist = isPeak ? 1000 : isLateBuild ? 800 : 600;
+    const reps = isPeak ? 6 : isLateBuild ? 7 : 8;
+    const intervalMain = (repDist * reps) / 1000;
+    return session(1, 'interval', labels.intervalTraining, `${reps}×${repDist}m @ ${iPace}, 2.5min jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(intervalMain + 3), 'I');
+  }
+
+  // 10k: cruise intervals / intervals (emphasize speed endurance)
+  if (distance === '10k') {
+    if (w % 2 === 0) {
+      const reps = isPeak ? 5 : isLateBuild ? 4 : 4;
+      const totalInterval = reps * 1.6; // 1km fast + 400m jog ≈ 1.6km each
+      return session(1, 'interval', labels.intervalTraining, `${reps}×(1km @ ${tPace} + 2min jog), ${labels.warmUp} 2km + ${labels.coolDown} 1km`, Math.round(totalInterval + 3), 'T');
+    }
+    const repDist = isPeak ? 800 : isLateBuild ? 800 : 600;
+    const reps = isPeak ? 6 : isLateBuild ? 6 : 8;
+    const intervalMain = (repDist * reps) / 1000;
+    return session(1, 'interval', labels.intervalTraining, `${reps}×${repDist}m @ ${iPace}, 3min jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(intervalMain + 3), 'I');
+  }
+
+  // 5k: short reps / short intervals alternate (emphasize raw speed)
+  if (w % 2 === 0) {
+    const reps = isPeak ? 10 : isLateBuild ? 8 : 6;
+    return session(1, 'interval', labels.intervalTraining, `${reps}×400m @ ${iPace}, 90s jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round((reps * 0.4) + 3), 'I');
+  }
+  const reps = isPeak ? 10 : isLateBuild ? 12 : 10;
+  return session(1, 'interval', labels.speedActivation, `${reps}×200m @ ${rPace}, 200m jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round((reps * 0.4) + 3), 'R');
+}
+
+/**
+ * Build Thursday session.
+ */
+function getThursdaySession(
+  phase: WeeklyPlan['phase'],
+  w: number,
+  weeks: number,
+  distance: RaceDistance,
+  pb5kSec: number,
+  labels: ReturnType<typeof getFallbackLabels>
+): TrainingSession | null {
   if (phase !== 'build' && phase !== 'peak') return null;
 
   const zones = calculatePaceZones(pb5kSec);
@@ -272,61 +368,31 @@ function getQualitySession(
   const isLateBuild = w > buildMid;
   const isPeak = phase === 'peak';
 
-  // Alternate tempo (even weeks) and interval (odd weeks)
-  if (w % 2 === 0) {
-    let tempoDist = 5;
-    if (distance === '42k') tempoDist = isPeak ? 12 : isLateBuild ? 10 : 8;
-    else if (distance === '21k') tempoDist = isPeak ? 10 : isLateBuild ? 8 : 6;
-    else if (distance === '10k') tempoDist = isPeak ? 8 : isLateBuild ? 6 : 5;
-    else tempoDist = isPeak ? 6 : isLateBuild ? 5 : 4;
+  // Marathon: easy run on Thursday (only 2 hard sessions per week)
+  if (distance === '42k') return null;
 
-    return {
-      type: 'tempo',
-      title: labels.tempoRun,
-      description: `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`,
-      distance: Math.round(tempoDist + 3),
-      paceZone: 'T',
-    };
+  // Half marathon: tempo on Thursday
+  if (distance === '21k') {
+    const tempoDist = isPeak ? 8 : isLateBuild ? 6 : 5;
+    return session(3, 'tempo', labels.tempoRun, `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(tempoDist + 3), 'T');
   }
 
-  let repDist: number, reps: number;
-  if (distance === '42k') {
-    if (isPeak) { repDist = 1200; reps = 5; }
-    else if (isLateBuild) { repDist = 1000; reps = 6; }
-    else { repDist = 800; reps = 6; }
-  } else if (distance === '21k') {
-    if (isPeak) { repDist = 1000; reps = 5; }
-    else if (isLateBuild) { repDist = 1000; reps = 6; }
-    else { repDist = 800; reps = 5; }
-  } else if (distance === '10k') {
-    if (isPeak) { repDist = 800; reps = 6; }
-    else if (isLateBuild) { repDist = 600; reps = 6; }
-    else { repDist = 400; reps = 8; }
-  } else {
-    if (isPeak) { repDist = 600; reps = 6; }
-    else if (isLateBuild) { repDist = 400; reps = 8; }
-    else { repDist = 200; reps = 10; }
+  // 10k: tempo or fartlek on Thursday
+  if (distance === '10k') {
+    if (w % 2 === 0) {
+      const tempoDist = isPeak ? 5 : isLateBuild ? 4 : 4;
+      return session(3, 'tempo', labels.tempoRun, `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(tempoDist + 3), 'T');
+    }
+    return session(3, 'interval', labels.fartlek, `1min fast / 1min easy ×${isPeak ? 10 : 8}, ${labels.totalDistAbout} 7km`, 7, 'I');
   }
 
-  const intervalMain = (repDist * reps) / 1000;
-  return {
-    type: 'interval',
-    title: labels.intervalTraining,
-    description: `${reps}×${repDist}m @ ${iPace}, 3min jog rec (${labels.warmUp} 2km + ${labels.coolDown} 1km)`,
-    distance: Math.round(intervalMain + 3),
-    paceZone: 'I',
-  };
+  // 5k: short tempo on Thursday
+  const tempoDist = isPeak ? 4 : isLateBuild ? 3 : 3;
+  return session(3, 'tempo', labels.tempoRun, `${tempoDist}km @ ${tPace} (${labels.warmUp} 2km + ${labels.coolDown} 1km)`, Math.round(tempoDist + 3), 'T');
 }
 
 /**
  * Generate a structured fallback training plan when AI fails.
- *
- * Improvements:
- * - All distances rounded to integers (no decimals like 6.2000).
- * - Easy runs minimum 5km.
- * - Strength training on Wednesday during base/taper.
- * - Higher volume progression (peakVolume up to 1.5x base for marathon).
- * - Quality sessions with specific paces and progression.
  */
 export function generateFallbackTrainingPlan(
   distance: RaceDistance,
@@ -344,9 +410,14 @@ export function generateFallbackTrainingPlan(
   const labels = getFallbackLabels(locale);
   const targetPaceStr = formatPaceSec(targetPace);
 
-  // More aggressive volume targets
-  const baseVolume = Math.max(weeklyVolume, distance === '42k' ? 40 : distance === '21k' ? 30 : distance === '10k' ? 25 : 20);
-  const peakVolume = Math.round(baseVolume * (distance === '42k' ? 1.5 : distance === '21k' ? 1.35 : distance === '10k' ? 1.25 : 1.2));
+  // Volume targets vary by distance (5k/10k much lower than marathon)
+  const baseVolume = Math.max(
+    weeklyVolume,
+    distance === '42k' ? 40 : distance === '21k' ? 30 : distance === '10k' ? 20 : 15
+  );
+  const peakVolume = Math.round(
+    baseVolume * (distance === '42k' ? 1.5 : distance === '21k' ? 1.35 : distance === '10k' ? 1.2 : 1.15)
+  );
 
   const baseWeeksEnd = Math.max(1, Math.floor(weeks * 0.25));
   const buildWeeksEnd = Math.max(baseWeeksEnd + 1, Math.floor(weeks * 0.65));
@@ -380,67 +451,70 @@ export function generateFallbackTrainingPlan(
     }
 
     const longRunDist = Math.round(calcLongRunDist(distance, phase, w, weeks));
-
     const sessions: TrainingSession[] = [];
 
-    // Sunday: Long run - with M-pace blocks in late build/peak/taper for marathon/half
+    // Sunday: Long run for marathon/half; steady aerobic run for 10k/5k
+    const isMarathonOrHalf = distance === '42k' || distance === '21k';
+    const longTitle = isMarathonOrHalf ? labels.longRun : labels.steadyRun;
     let longDesc: string;
-    const isFullOrHalf = distance === '42k' || distance === '21k';
-    const shouldAddMPace = isFullOrHalf && (phase === 'peak' || (phase === 'taper' && weeksToRace <= 2) || (phase === 'build' && w > buildWeeksEnd - 2));
-    if (shouldAddMPace) {
-      const mKm = Math.max(4, Math.round(longRunDist * 0.3));
+    if (isMarathonOrHalf && (phase === 'peak' || (phase === 'taper' && weeksToRace <= 2) || (phase === 'build' && w > buildWeeksEnd - 2))) {
+      const mKm = Math.max(3, Math.round(longRunDist * 0.25));
       const easyKm = longRunDist - mKm;
       longDesc = labels.longRunProgression
         .replace('{{dist}}', String(longRunDist))
         .replace('{{easy}}', String(easyKm))
         .replace('{{m}}', String(mKm))
         .replace('{{mp}}', targetPaceStr);
-    } else if (distance === '42k' && longRunDist >= 26) {
-      const lastPartKm = Math.min(longRunDist, Math.round(longRunDist * 0.25));
-      longDesc = `${longRunDist}km ${labels.longRun}（最后${lastPartKm}km 可加入 ${labels.mp} ${targetPaceStr}）`;
     } else {
       longDesc = labels.longRunEven.replace('{{dist}}', String(longRunDist));
     }
-    sessions.push(session(6, 'long', labels.longRun, longDesc, longRunDist, 'E'));
+    sessions.push(session(6, 'long', longTitle, longDesc, longRunDist, 'E'));
 
-    // Tuesday: Quality session (tempo/interval) or speed activation
-    const quality = getQualitySession(phase, w, weeks, distance, pb5kSec, labels);
-    if (quality) {
-      sessions.push(session(1, quality.type, quality.title, quality.description, quality.distance, quality.paceZone));
+    // Tuesday: Quality session
+    const tueSession = getTuesdaySession(phase, w, weeks, distance, pb5kSec, labels);
+    if (tueSession) {
+      sessions.push(tueSession);
     } else {
-      const speedDist = Math.max(5, distance === '42k' ? 8 : distance === '21k' ? 6 : 5);
-      sessions.push(session(1, 'interval', labels.speedActivation, `${labels.strides}, ${labels.totalDistAbout} ${speedDist}km`, speedDist, 'R'));
+      sessions.push(getSpeedActivation(distance, labels));
+    }
+
+    // Thursday: Quality session (for 10k/half/5k) or easy run (for marathon)
+    const thuSession = getThursdaySession(phase, w, weeks, distance, pb5kSec, labels);
+    if (thuSession) {
+      sessions.push(thuSession);
     }
 
     // Saturday: Rest
     sessions.push(session(5, 'rest', labels.rest, labels.restDesc, 0));
 
-    // Wednesday: Strength during base/taper, otherwise easy run
+    // Wednesday: Strength during base/taper for all distances
     if (phase === 'base' || phase === 'taper') {
       sessions.push(session(2, 'recovery', labels.strength, labels.strengthDesc, 0));
     }
 
-    // Distribute easy runs across Mon, Thu, Fri (and Wed if build/peak)
-    const qualityDist = quality ? quality.distance : (distance === '42k' ? 8 : distance === '21k' ? 6 : 5);
-    const fixedDist = longRunDist + qualityDist;
-    const remaining = Math.max(15, vol - fixedDist);
+    // Easy runs fill remaining days (skip days already occupied)
+    const fixedDist = sessions.reduce((sum, s) => sum + s.distance, 0);
+    const remaining = Math.max(0, vol - fixedDist);
 
-    const easyDays = phase === 'base' || phase === 'taper'
+    const occupiedDays = new Set(sessions.map((s) => s.day));
+    const candidateEasyDays = phase === 'base' || phase === 'taper'
       ? [0, 3, 4] // Mon, Thu, Fri
       : [0, 2, 3, 4]; // Mon, Wed, Thu, Fri
+    const easyDays = candidateEasyDays.filter((d) => !occupiedDays.has(d));
 
-    // Allocate easy run distances: Mon slightly longer, Thu medium, Fri shorter
     const monRatio = 0.4;
     const thuRatio = 0.35;
-    const otherCount = easyDays.length - 2;
-    const monDist = Math.max(5, Math.round(remaining * monRatio));
-    const thuDist = Math.max(5, Math.round(remaining * thuRatio));
+    const hasMon = easyDays.includes(0);
+    const hasThu = easyDays.includes(3);
+    const otherCount = easyDays.length - (hasMon ? 1 : 0) - (hasThu ? 1 : 0);
+    const monDist = hasMon ? Math.max(5, Math.min(15, Math.round(remaining * monRatio))) : 0;
+    const thuDist = hasThu ? Math.max(5, Math.min(15, Math.round(remaining * thuRatio))) : 0;
     const otherTotal = Math.max(5 * otherCount, remaining - monDist - thuDist);
-    const otherDist = otherCount > 0 ? Math.max(5, Math.round(otherTotal / otherCount)) : 0;
+    const otherDist = otherCount > 0 ? Math.max(5, Math.min(15, Math.round(otherTotal / otherCount))) : 0;
 
     easyDays.forEach((d) => {
       let dist = d === 0 ? monDist : d === 3 ? thuDist : otherDist;
-      dist = Math.max(5, Math.min(15, dist)); // ensure 5km <= easy run <= 15km
+      dist = Math.max(5, Math.min(15, dist));
       sessions.push(session(d, 'easy', labels.easyRun, `${dist}km ${labels.easyPace}`, dist, 'E'));
     });
 
@@ -453,7 +527,6 @@ export function generateFallbackTrainingPlan(
         fri.distance = Math.max(5, Math.min(15, fri.distance + diff));
         fri.description = `${fri.distance}km ${labels.easyPace}`;
       } else {
-        // Adjust Monday if Friday can't absorb
         const mon = sessions.find((s) => s.day === 0 && s.type === 'easy');
         if (mon && mon.distance + diff >= 5) {
           mon.distance = Math.max(5, Math.min(15, mon.distance + diff));

@@ -67,12 +67,12 @@ export function TrainingPlanCard({ week, isCurrent }: TrainingPlanCardProps) {
 
       {/* Sessions */}
       <div className="p-2">
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 min-w-0">
           {week.sessions.map((session, idx) => (
             <div
               key={idx}
               className={[
-                'border p-1.5 min-h-[72px] flex flex-col',
+                'border p-1 min-h-[64px] flex flex-col min-w-0 overflow-hidden',
                 TYPE_COLORS[session.type] || 'bg-white border-zinc-200',
               ].join(' ')}
             >
@@ -81,10 +81,10 @@ export function TrainingPlanCard({ week, isCurrent }: TrainingPlanCardProps) {
               </span>
               {session.type !== 'rest' ? (
                 <>
-                  <span className="text-[10px] font-mono font-bold leading-tight" title={session.description}>
+                  <span className="text-[10px] font-mono font-bold leading-tight truncate" title={session.description}>
                     {session.title}
                   </span>
-                  <span className="text-[9px] font-mono text-zinc-500 leading-tight mt-0.5 line-clamp-2" title={session.description}>
+                  <span className="text-[9px] font-mono text-zinc-500 leading-tight mt-0.5 line-clamp-2 break-words" title={session.description}>
                     {session.type === 'easy' || session.type === 'long'
                       ? `${session.distance > 0 ? `${session.distance}km` : ''}${session.paceZone ? ` · ${session.paceZone}` : ''}`
                       : session.description}

@@ -49,7 +49,6 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
   };
 
   const targetPaceSec = plan.goal.targetTimeSeconds / (plan.goal.distance === '5k' ? 5 : plan.goal.distance === '10k' ? 10 : plan.goal.distance === '21k' ? 21.0975 : 42.195);
-  const pb5kPaceSec = plan.currentAbility.pb5k ? plan.currentAbility.pb5k / 5 : undefined;
 
   const zones = plan.currentAbility.pb5k ? calculatePaceZones(plan.currentAbility.pb5k) : null;
 
@@ -66,8 +65,6 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
               {t('trainingPlan.targetTime', '目标时间')}: {formatTime(plan.goal.targetTimeSeconds)} · {plan.weeks.length}{t('trainingPlan.weeksUnit', '周')}
             </p>
             <p className="font-mono text-[10px] text-zinc-400 mt-0.5">
-              {pb5kPaceSec ? `5K PB ${formatPaceSec(pb5kPaceSec)}/km` : ''}
-              {pb5kPaceSec ? ' · ' : ''}
               {t('trainingPlan.targetPace', '目标配速')}: {formatPaceSec(targetPaceSec)}/km
             </p>
             {plan.goal.raceDate && (
