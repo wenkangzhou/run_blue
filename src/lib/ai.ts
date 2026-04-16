@@ -366,7 +366,7 @@ export async function analyzeActivity(
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'moonshot-v1-8k',
+      model: 'kimi-k2.5',
       messages: [
         {
           role: 'system',
@@ -377,7 +377,10 @@ export async function analyzeActivity(
           content: prompt,
         },
       ],
-      temperature: 1,
+      temperature: 0.6,
+      thinking: {
+        type: 'disabled'
+      }
     }),
   });
 
@@ -543,7 +546,7 @@ export async function generateTrainingPlan(
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'moonshot-v1-8k',
+      model: 'kimi-k2.5',
       messages: [
         {
           role: 'system',
@@ -554,7 +557,10 @@ export async function generateTrainingPlan(
           content: prompt,
         },
       ],
-      temperature: 1,
+      temperature: 0.6,
+      thinking: {
+        type: 'disabled'
+      }
     }),
   });
 
