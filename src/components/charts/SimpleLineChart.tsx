@@ -10,42 +10,69 @@ interface SimpleLineChartProps {
   xLabels?: string[];
   yUnit?: string;
   formatYLabel?: (value: number) => string;
+  domain?: [number, number];
 }
 
 export function SimpleLineChart({ 
   data, 
   color, 
-  height = 120, 
+  height = 140, 
   fill = false,
   xLabels,
   yUnit = '',
-  formatYLabel
+  formatYLabel,
+  domain
 }: SimpleLineChartProps) {
   if (!data || data.length === 0) return null;
 
-  const sampleRate = Math.ceil(data.length / 100);
+  const sampleRate = Math.ceil(data.length / 120);
   const sampledData = sampleRate > 1 
     ? data.filter((_, i) => i % sampleRate === 0)
     : data;
 
-  const min = Math.min(...sampledData);
-  const max = Math.max(...sampledData);
+  const dataMin = Math.min(...sampledData);
+  const dataMax = Math.max(...sampledData);
+
+  const min = domain ? domain[0] : dataMin;
+  const max = domain ? domain[1] : dataMax;
   const range = max - min || 1;
 
-  const labelWidth = 50;
-  const xLabelHeight = 22;
+  const labelWidth = 52;
+  const xLabelHeight = 24;
   const chartWidth = 800;
   const chartHeight = height - xLabelHeight;
-  
-  const points = sampledData.map((value, index) => {
-    const x = labelWidth + (index / (sampledData.length - 1)) * (chartWidth - labelWidth - 15);
-    const y = ((max - value) / range) * chartHeight;
-    return [x, y];
-  });
 
-  const linePath = points.map((p, i) => (i === 0 ? 'M' : 'L') + ` ${p[0]},${p[1]}`).join(' ');
-  const fillPath = fill 
-    ? `${linePath} L ${points[points.length - 1][0]},${chartHeight} L ${points[0][0]},${chartHeight} Z`
+  // Build segments: split path when values are outside domain
+  type Point = { x: number; y: number };
+  const segments: Point[][] = [];
+  let currentSeg: Point[] = [];
+
+  sampledData.forEach((value, index) => {
+    const x = labelWidth + (index / (sampledData.length - 1)) * (chartWidth - labelWidth - 15);
+    if (value < min || value > max) {
+      if (currentSeg.length) {
+        segments.push(currentSeg);
+        currentSeg = [];
+      }
+    } else {
+      const y = ((max - value) / range) * chartHeight;
+      currentSeg.push({ x, y });
+    }
+  });
+  if (currentSeg.length) segments.push(currentSeg);
+
+  const linePath = segments
+    .map((seg) => seg.map((p, i) => (i === 0 ? 'M' : 'L') + ` ${p.x},${p.y}`).join(' '))
+    .join(' ');
+
+  const fillPath = fill
+    ? segments
+        .map((seg) => {
+          if (seg.length === 0) return '';
+          const path = seg.map((p, i) => (i === 0 ? 'M' : 'L') + ` ${p.x},${p.y}`).join(' ');
+          return `${path} L ${seg[seg.length - 1].x},${chartHeight} L ${seg[0].x},${chartHeight} Z`;
+        })
+        .join(' ')
     : linePath;
 
   const yTicks = [min, (min + max) / 2, max];
