@@ -439,7 +439,7 @@ export default function ActivityDetailPage() {
 
           {/* Charts */}
           {streams && (
-            <div className="space-y-5">
+            <div className="space-y-5 mb-4">
               {streams.heartrate && (
                 <ChartSection 
                   title={t('activity.heartRate')}
