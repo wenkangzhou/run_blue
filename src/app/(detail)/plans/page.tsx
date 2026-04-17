@@ -15,7 +15,7 @@ import {
   type RaceDistance,
   type TrainingPlan,
 } from '@/lib/trainingPlan';
-import { Plus, Trash2, ChevronRight, Calendar } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, Calendar, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TrainingPlansListPage() {
@@ -129,19 +129,34 @@ export default function TrainingPlansListPage() {
   };
 
   return (
-    <div className="container mx-auto px-3 py-4 max-w-2xl">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="font-pixel text-xl font-bold">{t('trainingPlan.title')}</h1>
-        {plans.length > 0 && (
-          <PixelButton variant="primary" size="sm" onClick={() => setShowForm((s) => !s)}>
-            <span className="inline-flex items-center gap-1">
-              <Plus size={14} />
-              {t('trainingPlan.create', '新建计划')}
-            </span>
-          </PixelButton>
-        )}
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      {/* Minimal Header */}
+      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
+          <div className="flex-1">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            >
+              <ChevronLeft size={16} />
+              {t('common.back')}
+            </Link>
+          </div>
+          <h1 className="font-pixel text-base font-bold">{t('trainingPlan.title')}</h1>
+          <div className="flex-1 flex justify-end">
+            {plans.length > 0 && (
+              <PixelButton variant="primary" size="sm" onClick={() => setShowForm((s) => !s)}>
+                <span className="inline-flex items-center gap-1">
+                  <Plus size={14} />
+                  <span className="hidden sm:inline">{t('trainingPlan.create', '新建')}</span>
+                </span>
+              </PixelButton>
+            )}
+          </div>
+        </div>
       </div>
 
+      <div className="container mx-auto px-3 py-4 max-w-2xl">
       {error && (
         <div className="mb-4 p-3 border-2 border-red-400 bg-red-50 dark:bg-red-950/30">
           <p className="font-mono text-xs text-red-700 dark:text-red-300">{error}</p>
@@ -200,6 +215,7 @@ export default function TrainingPlansListPage() {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }
