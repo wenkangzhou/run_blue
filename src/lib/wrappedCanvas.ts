@@ -147,19 +147,21 @@ export function drawWrappedToCanvas(
       ctx.textBaseline = 'top';
       ctx.fillText(card.label, x + cardPadding, y + cardPadding);
 
-      // Value
+      // Value + Unit aligned on same baseline
       ctx.fillStyle = textColor;
-      ctx.font = `bold ${cardHeight === bigCardHeight ? '72px' : '48px'} ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
-      ctx.textBaseline = 'bottom';
-      const valueY = y + cardHeight - cardPadding - (card.sub ? 32 : 0);
+      const valueFontSize = cardHeight === bigCardHeight ? 72 : 48;
+      ctx.font = `bold ${valueFontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
+      ctx.textBaseline = 'alphabetic';
+      const valueY = y + cardHeight - cardPadding - (card.sub ? 36 : 10);
       ctx.fillText(card.value, x + cardPadding, valueY);
 
-      // Unit (drawn next to value)
       if (card.unit) {
         const valueWidth = ctx.measureText(card.value).width;
         ctx.fillStyle = subColor;
-        ctx.font = `400 ${cardHeight === bigCardHeight ? '36px' : '28px'} ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
-        ctx.fillText(card.unit, x + cardPadding + valueWidth + 8, valueY);
+        const unitFontSize = cardHeight === bigCardHeight ? 32 : 24;
+        ctx.font = `400 ${unitFontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(card.unit, x + cardPadding + valueWidth + 10, valueY);
       }
 
       // Sub

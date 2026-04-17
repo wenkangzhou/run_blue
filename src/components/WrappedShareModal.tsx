@@ -2,12 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/hooks/useAuth';
 import { PixelButton, PixelCard } from '@/components/ui';
 import { drawWrappedToCanvas } from '@/lib/wrappedCanvas';
 import { calculateWrapped, getAvailableWrappedYears, type WrappedPeriod } from '@/lib/wrapped';
 import { downloadPNG } from '@/lib/multiRouteCanvas';
+import { getActivities } from '@/lib/strava';
 import type { StravaActivity } from '@/types';
-import { X, Download, ImageIcon, CheckCircle2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Download, CheckCircle2, Calendar, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 interface WrappedShareModalProps {
   isOpen: boolean;
@@ -21,6 +23,7 @@ export function WrappedShareModal({
   activities,
 }: WrappedShareModalProps) {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const locale = i18n.language;
   const isZh = locale === 'zh';
 
@@ -29,8 +32,47 @@ export function WrappedShareModal({
   const [quarter, setQuarter] = useState<number>(1);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
+  const [allActivities, setAllActivities] = useState<StravaActivity[]>(activities);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const availableYears = useMemo(() => getAvailableWrappedYears(activities), [activities]);
+  useEffect(() => {
+    setAllActivities(activities);
+  }, [activities]);
+
+  useEffect(() => {
+    if (!isOpen || !user?.accessToken) return;
+    let cancelled = false;
+
+    const loadAll = async () => {
+      setLoadingHistory(true);
+      let page = 1;
+      let merged = [...allActivities];
+      try {
+        while (!cancelled) {
+          const res = await getActivities(user.accessToken, page, 200);
+          if (res.length === 0) break;
+          const existingIds = new Set(merged.map((a) => a.id));
+          const newOnes = res.filter((a) => !existingIds.has(a.id));
+          if (newOnes.length === 0 && res.length < 200) break;
+          merged = [...merged, ...newOnes];
+          setAllActivities(merged);
+          page++;
+          if (res.length < 200) break;
+        }
+      } catch (e) {
+        console.error('Failed to load all activities for wrapped:', e);
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    };
+
+    loadAll();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, user?.accessToken]);
+
+  const availableYears = useMemo(() => getAvailableWrappedYears(allActivities), [allActivities]);
 
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(year)) {
@@ -39,8 +81,8 @@ export function WrappedShareModal({
   }, [availableYears, year]);
 
   const wrappedData = useMemo(() => {
-    return calculateWrapped(activities, period, year, period === 'quarter' ? quarter : undefined);
-  }, [activities, period, year, quarter]);
+    return calculateWrapped(allActivities, period, year, period === 'quarter' ? quarter : undefined);
+  }, [allActivities, period, year, quarter]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -204,6 +246,8 @@ export function WrappedShareModal({
                   <span className="font-mono text-xs text-zinc-500 text-center px-4">
                     {!wrappedData
                       ? t('wrapped.noData', '该时间段没有跑步记录')
+                      : loadingHistory
+                      ? t('wrapped.loadingHistory', '正在加载历史数据...')
                       : t('wrapped.generating', '生成中...')}
                   </span>
                 </div>
@@ -221,6 +265,12 @@ export function WrappedShareModal({
             <PixelButton variant="outline" size="md" onClick={onClose}>
               {t('common.close')}
             </PixelButton>
+            {loadingHistory && (
+              <span className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400">
+                <Loader2 size={14} className="animate-spin" />
+                {t('wrapped.loadingHistory', '加载历史数据中')}
+              </span>
+            )}
             {dataUrl && (
               <>
                 {!isIOS && (
