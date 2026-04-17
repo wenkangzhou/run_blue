@@ -1,25 +1,6 @@
-export interface WrappedCanvasData {
-  year: number;
-  quarter?: number;
-  totalDistanceKm: number;
-  totalRuns: number;
-  totalDurationSec: number;
-  longestRunKm: number;
-  longestRunDate: string;
-  avgPaceSecPerKm: number;
-  totalElevationGainM: number;
-  favoriteMonth: { month: number; distanceKm: number };
-  timeOfDay: {
-    morning: number;
-    afternoon: number;
-    evening: number;
-    night: number;
-  };
-  longestStreakDays: number;
-  monthlyDistances: { month: number; distanceKm: number }[];
-  bestPaceSecPerKm: number;
-  bestPaceDate: string;
-}
+import type { WrappedData } from './wrapped';
+
+export interface WrappedCanvasData extends WrappedData {}
 
 function formatDuration(sec: number): string {
   const h = Math.floor(sec / 3600);
@@ -61,19 +42,22 @@ export function drawWrappedToCanvas(
   const accentColor = '#3b82f6';
   const cardBg = '#ffffff';
   const cardBorder = '#e4e4e7';
+  const personaBg = '#eff6ff';
+  const personaBorder = '#bfdbfe';
 
-  // Layout constants
-  const paddingX = 60;
-  const cardGap = 24;
-  const cardPadding = 32;
-  const headerHeight = 220;
-  const footerHeight = 140;
-  const chartHeight = 320;
-  const bigCardHeight = 180;
-  const smallCardHeight = 140;
+  const paddingX = 56;
+  const cardGap = 20;
+  const cardPadding = 28;
+  const headerHeight = 200;
+  const personaHeight = 180;
+  const footerHeight = 120;
+  const chartHeight = 280;
+  const bigCardHeight = 150;
+  const smallCardHeight = 120;
+  const badgeHeight = 64;
+  const extremesHeight = 110;
 
-  // Calculate rows of cards
-  const rows = [
+  const statsRows = [
     [{ key: 'distance', label: isEn ? 'Total Distance' : '总跑量', value: `${data.totalDistanceKm}`, unit: 'km', sub: `${data.totalRuns} ${isEn ? 'runs' : '次跑步'}` }],
     [
       { key: 'duration', label: isEn ? 'Total Time' : '总时长', value: formatDuration(data.totalDurationSec), unit: '', sub: '' },
@@ -89,12 +73,23 @@ export function drawWrappedToCanvas(
     ],
   ];
 
-  const contentHeight = rows.reduce((sum, row) => {
+  const contentHeight = statsRows.reduce((sum, row) => {
     const h = row.length === 1 ? bigCardHeight : smallCardHeight;
     return sum + h + cardGap;
   }, 0);
 
-  const height = headerHeight + contentHeight + chartHeight + footerHeight + paddingX * 2;
+  const height =
+    headerHeight +
+    personaHeight +
+    contentHeight +
+    badgeHeight +
+    40 + // fun facts padding
+    40 + // time of day
+    chartHeight +
+    extremesHeight +
+    footerHeight +
+    paddingX * 2 +
+    cardGap * 4;
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -106,24 +101,43 @@ export function drawWrappedToCanvas(
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, width, height);
 
+  const fontStack = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+
   // Header
   ctx.fillStyle = textColor;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 80px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-  const periodText = data.quarter
-    ? `${data.year} Q${data.quarter}`
-    : `${data.year}`;
-  ctx.fillText(periodText, width / 2, headerHeight / 2 - 20);
+  ctx.font = `bold 72px ${fontStack}`;
+  const periodText = data.quarter ? `${data.year} Q${data.quarter}` : `${data.year}`;
+  ctx.fillText(periodText, width / 2, headerHeight / 2 - 16);
 
-  ctx.font = '400 32px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+  ctx.font = `400 28px ${fontStack}`;
   ctx.fillStyle = subColor;
-  ctx.fillText(isEn ? 'Running Wrapped' : '年度跑步回顾', width / 2, headerHeight / 2 + 50);
+  ctx.fillText(isEn ? 'Running Wrapped' : '年度跑步回顾', width / 2, headerHeight / 2 + 40);
 
-  // Draw cards
-  let currentY = headerHeight + paddingX;
+  let currentY = headerHeight + paddingX / 2;
 
-  rows.forEach((row) => {
+  // Persona card
+  ctx.fillStyle = personaBg;
+  ctx.fillRect(paddingX, currentY, width - paddingX * 2, personaHeight);
+  ctx.strokeStyle = personaBorder;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(paddingX, currentY, width - paddingX * 2, personaHeight);
+
+  ctx.fillStyle = accentColor;
+  ctx.font = `bold 56px ${fontStack}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(data.persona.title, width / 2, currentY + personaHeight / 2 - 16);
+
+  ctx.fillStyle = '#1d4ed8';
+  ctx.font = `400 24px ${fontStack}`;
+  ctx.fillText(data.persona.desc, width / 2, currentY + personaHeight / 2 + 36);
+
+  currentY += personaHeight + cardGap;
+
+  // Stats cards
+  statsRows.forEach((row) => {
     const cardHeight = row.length === 1 ? bigCardHeight : smallCardHeight;
     const cardWidth = (width - paddingX * 2 - cardGap * (row.length - 1)) / row.length;
 
@@ -131,43 +145,40 @@ export function drawWrappedToCanvas(
       const x = paddingX + idx * (cardWidth + cardGap);
       const y = currentY;
 
-      // Card background
       ctx.fillStyle = cardBg;
       ctx.fillRect(x, y, cardWidth, cardHeight);
-
-      // Card border
       ctx.strokeStyle = cardBorder;
       ctx.lineWidth = 4;
       ctx.strokeRect(x, y, cardWidth, cardHeight);
 
       // Label
       ctx.fillStyle = subColor;
-      ctx.font = '400 24px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+      ctx.font = `400 22px ${fontStack}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(card.label, x + cardPadding, y + cardPadding);
 
-      // Value + Unit aligned on same baseline
+      // Value + Unit
       ctx.fillStyle = textColor;
-      const valueFontSize = cardHeight === bigCardHeight ? 72 : 48;
-      ctx.font = `bold ${valueFontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
+      const valueFontSize = cardHeight === bigCardHeight ? 64 : 44;
+      ctx.font = `bold ${valueFontSize}px ${fontStack}`;
       ctx.textBaseline = 'alphabetic';
-      const valueY = y + cardHeight - cardPadding - (card.sub ? 36 : 10);
+      const valueY = y + cardHeight - cardPadding - (card.sub ? 32 : 8);
       ctx.fillText(card.value, x + cardPadding, valueY);
 
       if (card.unit) {
         const valueWidth = ctx.measureText(card.value).width;
         ctx.fillStyle = subColor;
-        const unitFontSize = cardHeight === bigCardHeight ? 32 : 24;
-        ctx.font = `400 ${unitFontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
+        const unitFontSize = cardHeight === bigCardHeight ? 28 : 22;
+        ctx.font = `400 ${unitFontSize}px ${fontStack}`;
         ctx.textBaseline = 'alphabetic';
-        ctx.fillText(card.unit, x + cardPadding + valueWidth + 10, valueY);
+        ctx.fillText(card.unit, x + cardPadding + valueWidth + 8, valueY);
       }
 
       // Sub
       if (card.sub) {
         ctx.fillStyle = subColor;
-        ctx.font = '400 20px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+        ctx.font = `400 18px ${fontStack}`;
         ctx.textBaseline = 'bottom';
         ctx.fillText(card.sub, x + cardPadding, y + cardHeight - cardPadding);
       }
@@ -176,46 +187,118 @@ export function drawWrappedToCanvas(
     currentY += cardHeight + cardGap;
   });
 
-  // Time of day badge (floating style under cards)
+  // Fun facts badges
+  currentY += 10;
+  const badgeGap = 16;
+  const badgeCount = data.funFacts.length || 1;
+  const badgeTotalWidth = width - paddingX * 2;
+  const singleBadgeWidth = (badgeTotalWidth - (badgeCount - 1) * badgeGap) / badgeCount;
+
+  data.funFacts.forEach((fact, i) => {
+    const x = paddingX + i * (singleBadgeWidth + badgeGap);
+    const y = currentY;
+
+    ctx.fillStyle = '#f3f4f6';
+    ctx.fillRect(x, y, singleBadgeWidth, badgeHeight);
+    ctx.strokeStyle = cardBorder;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, singleBadgeWidth, badgeHeight);
+
+    ctx.fillStyle = textColor;
+    ctx.font = `400 20px ${fontStack}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fact, x + singleBadgeWidth / 2, y + badgeHeight / 2);
+  });
+
+  currentY += badgeHeight + 24;
+
+  // Time of day
   const todEntries = Object.entries(data.timeOfDay).sort((a, b) => b[1] - a[1]);
   const topTod = todEntries[0];
   if (topTod && topTod[1] > 0) {
-    currentY += 10;
     ctx.fillStyle = accentColor;
-    ctx.font = 'bold 28px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    ctx.font = `bold 24px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const todText = `${isEn ? 'You mostly run in the' : '你最常在'} ${timeOfDayLabel(topTod[0])}${isEn ? '' : ''}`;
+    const todText = isEn
+      ? `You mostly run in the ${timeOfDayLabel(topTod[0])}`
+      : `你最常在 ${timeOfDayLabel(topTod[0])}`;
     ctx.fillText(todText, width / 2, currentY);
     currentY += 50;
   }
 
   // Monthly bar chart
-  const chartTop = currentY + 20;
+  const chartTop = currentY;
   const barAreaWidth = width - paddingX * 2;
-  const barMaxHeight = chartHeight - 80;
+  const barMaxHeight = chartHeight - 70;
   const maxMonthDist = Math.max(...data.monthlyDistances.map((d) => d.distanceKm), 1);
-  const barWidth = (barAreaWidth - (data.monthlyDistances.length - 1) * 16) / data.monthlyDistances.length;
+  const barWidth = (barAreaWidth - (data.monthlyDistances.length - 1) * 14) / data.monthlyDistances.length;
 
   data.monthlyDistances.forEach((d, i) => {
     const barH = (d.distanceKm / maxMonthDist) * barMaxHeight;
-    const x = paddingX + i * (barWidth + 16);
+    const x = paddingX + i * (barWidth + 14);
     const y = chartTop + barMaxHeight - barH;
 
     ctx.fillStyle = d.distanceKm === maxMonthDist ? accentColor : '#d4d4d8';
     ctx.fillRect(x, y, barWidth, barH);
 
-    // Month label
     ctx.fillStyle = subColor;
-    ctx.font = '400 22px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    ctx.font = `400 20px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(monthLabel(d.month), x + barWidth / 2, chartTop + barMaxHeight + 12);
+    ctx.fillText(monthLabel(d.month), x + barWidth / 2, chartTop + barMaxHeight + 10);
   });
+
+  currentY = chartTop + chartHeight + 24;
+
+  // Extremes
+  const extremeItems = [
+    data.extremes.highestElevation
+      ? { label: isEn ? 'Highest Alt' : '海拔最高', value: `${data.extremes.highestElevation.value}m`, sub: data.extremes.highestElevation.date }
+      : null,
+    data.extremes.highestHeartRate
+      ? { label: isEn ? 'Peak HR' : '心率最顶', value: `${data.extremes.highestHeartRate.value}bpm`, sub: data.extremes.highestHeartRate.date }
+      : null,
+    data.extremes.earliestStart
+      ? { label: isEn ? 'Earliest' : '最早起跑', value: data.extremes.earliestStart.value, sub: data.extremes.earliestStart.date }
+      : null,
+  ].filter(Boolean) as { label: string; value: string; sub: string }[];
+
+  if (extremeItems.length > 0) {
+    const extremeCardWidth = (width - paddingX * 2 - (extremeItems.length - 1) * cardGap) / extremeItems.length;
+    extremeItems.forEach((item, i) => {
+      const x = paddingX + i * (extremeCardWidth + cardGap);
+      const y = currentY;
+
+      ctx.fillStyle = cardBg;
+      ctx.fillRect(x, y, extremeCardWidth, extremesHeight);
+      ctx.strokeStyle = cardBorder;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, extremeCardWidth, extremesHeight);
+
+      ctx.fillStyle = subColor;
+      ctx.font = `400 20px ${fontStack}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(item.label, x + cardPadding, y + cardPadding);
+
+      ctx.fillStyle = textColor;
+      ctx.font = `bold 28px ${fontStack}`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(item.value, x + cardPadding, y + extremesHeight - cardPadding - 20);
+
+      ctx.fillStyle = subColor;
+      ctx.font = `400 16px ${fontStack}`;
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(item.sub, x + cardPadding, y + extremesHeight - cardPadding);
+    });
+    currentY += extremesHeight + cardGap;
+  }
 
   // Footer slogan
   ctx.fillStyle = textColor;
-  ctx.font = 'bold 40px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+  ctx.font = `bold 36px ${fontStack}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const slogan = isEn ? 'Still Running.' : `${data.year}，我还在跑`;

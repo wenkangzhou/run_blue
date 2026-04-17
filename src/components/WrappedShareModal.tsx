@@ -81,8 +81,8 @@ export function WrappedShareModal({
   }, [availableYears, year]);
 
   const wrappedData = useMemo(() => {
-    return calculateWrapped(allActivities, period, year, period === 'quarter' ? quarter : undefined);
-  }, [allActivities, period, year, quarter]);
+    return calculateWrapped(allActivities, period, year, period === 'quarter' ? quarter : undefined, locale);
+  }, [allActivities, period, year, quarter, locale]);
 
   useEffect(() => {
     if (!isOpen) {
