@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { TrainingPlanForm } from '@/components/TrainingPlanForm';
+import { GeneratingOverlay } from '@/components/GeneratingOverlay';
 import { PixelButton } from '@/components/ui';
 import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
 import {
@@ -30,6 +31,7 @@ export default function TrainingPlansListPage() {
   const [error, setError] = useState('');
   const [hasPB, setHasPB] = useState(false);
   const [weeklyVolume, setWeeklyVolume] = useState(30);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -87,11 +89,13 @@ export default function TrainingPlansListPage() {
 
     setLoading(true);
     setError('');
+    abortControllerRef.current = new AbortController();
 
     try {
       const res = await fetch('/api/ai/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           distance: data.distance,
           targetTimeSeconds: targetSeconds,
@@ -115,9 +119,20 @@ export default function TrainingPlansListPage() {
       // Navigate to detail page
       router.push(`/plans/${json.plan.id}`);
     } catch (err: any) {
-      setError(err.message || t('trainingPlan.generateError'));
+      if (err.name === 'AbortError') {
+        setError(isZh ? '已取消生成' : 'Generation cancelled');
+      } else {
+        setError(err.message || t('trainingPlan.generateError'));
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleCancelGenerate = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -215,6 +230,8 @@ export default function TrainingPlansListPage() {
           ))}
         </div>
       )}
+
+      <GeneratingOverlay isOpen={loading} onCancel={handleCancelGenerate} />
     </div>
     </div>
   );
