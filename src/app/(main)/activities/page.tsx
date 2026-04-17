@@ -12,6 +12,7 @@ import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
+import { WrappedShareModal } from '@/components/WrappedShareModal';
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function ActivitiesPage() {
   const [rateLimited, setRateLimited] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isPeriodShareOpen, setIsPeriodShareOpen] = useState(false);
+  const [isWrappedShareOpen, setIsWrappedShareOpen] = useState(false);
 
   // 直接记录下一页要加载的页码
   const nextPageRef = useRef(1);
@@ -349,6 +351,7 @@ export default function ActivitiesPage() {
             hasMore={hasMore}
             isLoading={isLoading}
             onOpenPeriodShare={() => setIsPeriodShareOpen(true)}
+            onOpenWrappedShare={() => setIsWrappedShareOpen(true)}
           />
 
           {/* Load More Button */}
@@ -383,6 +386,12 @@ export default function ActivitiesPage() {
       <PeriodShareModal
         isOpen={isPeriodShareOpen}
         onClose={() => setIsPeriodShareOpen(false)}
+        activities={activities}
+      />
+
+      <WrappedShareModal
+        isOpen={isWrappedShareOpen}
+        onClose={() => setIsWrappedShareOpen(false)}
         activities={activities}
       />
     </div>

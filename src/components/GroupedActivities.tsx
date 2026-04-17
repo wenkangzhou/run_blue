@@ -4,7 +4,7 @@ import React from 'react';
 import { StravaActivity } from '@/types';
 import { ActivityGridCard } from './ActivityGridCard';
 import { formatDistance, formatDuration } from '@/lib/strava';
-import { Clock, Route, Calendar, ImageIcon } from 'lucide-react';
+import { Clock, Route, Calendar, ImageIcon, Trophy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 type GroupBy = 'week' | 'month' | 'year';
@@ -14,6 +14,7 @@ interface GroupedActivitiesProps {
   hasMore?: boolean;
   isLoading?: boolean;
   onOpenPeriodShare?: () => void;
+  onOpenWrappedShare?: () => void;
 }
 
 interface ActivityGroup {
@@ -26,7 +27,7 @@ interface ActivityGroup {
   totalTime: number;
 }
 
-export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriodShare }: GroupedActivitiesProps) {
+export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriodShare, onOpenWrappedShare }: GroupedActivitiesProps) {
   const { t } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
 
@@ -56,16 +57,28 @@ export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriod
           ))}
         </div>
 
-        {onOpenPeriodShare && (
-          <button
-            onClick={onOpenPeriodShare}
-            className="inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 font-mono text-[11px] sm:text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-            title={t('periodShare.title', '周期海报')}
-          >
-            <ImageIcon size={14} />
-            <span className="hidden sm:inline">{t('periodShare.title', '周期海报')}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onOpenWrappedShare && (
+            <button
+              onClick={onOpenWrappedShare}
+              className="inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 font-mono text-[11px] sm:text-xs font-bold uppercase border-2 border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 bg-white dark:bg-zinc-900 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors shrink-0"
+              title={t('wrapped.title', '年度回顾')}
+            >
+              <Trophy size={14} />
+              <span className="hidden sm:inline">{t('wrapped.title', '年度回顾')}</span>
+            </button>
+          )}
+          {onOpenPeriodShare && (
+            <button
+              onClick={onOpenPeriodShare}
+              className="inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 font-mono text-[11px] sm:text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title={t('periodShare.title', '周期海报')}
+            >
+              <ImageIcon size={14} />
+              <span className="hidden sm:inline">{t('periodShare.title', '周期海报')}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grouped Lists */}
