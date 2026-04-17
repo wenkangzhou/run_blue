@@ -180,23 +180,22 @@ export function PeriodShareModal({
           </div>
 
           {/* Preview */}
-          <div className="mb-5 flex flex-col items-center">
+          <div className="mb-5 flex flex-col items-center w-full">
             <div
-              className="relative rounded-lg overflow-hidden border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-100"
+              className="relative rounded-lg overflow-hidden border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-100 w-full"
               style={{
-                width: '100%',
                 maxWidth: canvasSize === 'large' ? 320 : 280,
-                aspectRatio: canvasSize === 'large' ? '2 / 3' : '3 / 4',
               }}
             >
               {dataUrl ? (
                 <img
                   src={dataUrl}
                   alt="Period summary"
-                  className="w-full h-full object-contain"
+                  className="w-full h-auto object-contain"
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center"
+                <div
+                  className="flex items-center justify-center min-h-[140px]"
                   style={{
                     backgroundImage:
                       'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',

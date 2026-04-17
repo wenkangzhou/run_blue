@@ -28,12 +28,14 @@ export function WrappedShareModal({
   const isZh = locale === 'zh';
 
   const [period, setPeriod] = useState<WrappedPeriod>('year');
-  const [year, setYear] = useState<number>(() => new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState<number>(currentYear);
   const [quarter, setQuarter] = useState<number>(1);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
   const [allActivities, setAllActivities] = useState<StravaActivity[]>(activities);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
 
   useEffect(() => {
     setAllActivities(activities);
@@ -45,15 +47,25 @@ export function WrappedShareModal({
 
     const loadAll = async () => {
       setLoadingHistory(true);
+      setHistoryError(false);
       let page = 1;
+      const maxPages = 10;
       let merged = [...allActivities];
       try {
-        while (!cancelled) {
+        while (!cancelled && page <= maxPages) {
           const res = await getActivities(user.accessToken, page, 200);
           if (res.length === 0) break;
           const existingIds = new Set(merged.map((a) => a.id));
           const newOnes = res.filter((a) => !existingIds.has(a.id));
-          if (newOnes.length === 0 && res.length < 200) break;
+          // If no new activities and we got a full page, keep going one more time to be safe,
+          // but if we get two empty pages in a row, break.
+          if (newOnes.length === 0) {
+            if (res.length < 200) break;
+            // Safety: if full page but all duplicates, try next page once
+            const nextRes = await getActivities(user.accessToken, page + 1, 200);
+            const nextNew = nextRes.filter((a) => !existingIds.has(a.id));
+            if (nextNew.length === 0) break;
+          }
           merged = [...merged, ...newOnes];
           setAllActivities(merged);
           page++;
@@ -61,6 +73,7 @@ export function WrappedShareModal({
         }
       } catch (e) {
         console.error('Failed to load all activities for wrapped:', e);
+        if (!cancelled) setHistoryError(true);
       } finally {
         if (!cancelled) setLoadingHistory(false);
       }
@@ -72,13 +85,14 @@ export function WrappedShareModal({
     };
   }, [isOpen, user?.accessToken]);
 
-  const availableYears = useMemo(() => getAvailableWrappedYears(allActivities), [allActivities]);
-
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(year)) {
-      setYear(availableYears[0]);
+  // Allow year navigation freely within a reasonable range regardless of loaded history
+  const { minYear, maxYear } = useMemo(() => {
+    const years = getAvailableWrappedYears(allActivities);
+    if (years.length === 0) {
+      return { minYear: currentYear, maxYear: currentYear };
     }
-  }, [availableYears, year]);
+    return { minYear: Math.min(...years), maxYear: Math.max(...years) };
+  }, [allActivities, currentYear]);
 
   const wrappedData = useMemo(() => {
     return calculateWrapped(allActivities, period, year, period === 'quarter' ? quarter : undefined, locale);
@@ -90,11 +104,11 @@ export function WrappedShareModal({
       setShowCopied(false);
       return;
     }
+    if (!wrappedData) {
+      setDataUrl(null);
+      return;
+    }
     const timer = setTimeout(() => {
-      if (!wrappedData) {
-        setDataUrl(null);
-        return;
-      }
       const url = drawWrappedToCanvas(wrappedData, locale);
       setDataUrl(url);
     }, 50);
@@ -130,8 +144,8 @@ export function WrappedShareModal({
     }
   };
 
-  const canPrevYear = availableYears.includes(year - 1);
-  const canNextYear = availableYears.includes(year + 1);
+  const canPrevYear = year > minYear;
+  const canNextYear = year < maxYear;
 
   return (
     <div
@@ -225,7 +239,6 @@ export function WrappedShareModal({
               style={{
                 width: '100%',
                 maxWidth: 300,
-                aspectRatio: '3 / 5',
               }}
             >
               {dataUrl ? (
@@ -260,46 +273,57 @@ export function WrappedShareModal({
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2">
-            <PixelButton variant="outline" size="md" onClick={onClose}>
-              {t('common.close')}
-            </PixelButton>
-            {loadingHistory && (
-              <span className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400">
-                <Loader2 size={14} className="animate-spin" />
-                {t('wrapped.loadingHistory', '加载历史数据中')}
-              </span>
+          {/* Status / Actions */}
+          <div className="space-y-3">
+            {(loadingHistory || historyError) && (
+              <div className="flex items-center justify-end gap-2 min-h-[36px]">
+                {loadingHistory && (
+                  <span className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400">
+                    <Loader2 size={14} className="animate-spin" />
+                    {t('wrapped.loadingHistory', '加载历史数据中')}
+                  </span>
+                )}
+                {historyError && (
+                  <span className="font-mono text-xs text-amber-600">
+                    {t('wrapped.loadHistoryFailed', '历史数据加载失败')}
+                  </span>
+                )}
+              </div>
             )}
-            {dataUrl && (
-              <>
-                {!isIOS && (
-                  <PixelButton
-                    variant="secondary"
-                    size="md"
-                    onClick={handleCopy}
-                    disabled={showCopied}
-                  >
-                    {showCopied ? (
+            <div className="flex items-center justify-end gap-2">
+              <PixelButton variant="outline" size="md" onClick={onClose}>
+                {t('common.close')}
+              </PixelButton>
+              {dataUrl && (
+                <>
+                  {!isIOS && (
+                    <PixelButton
+                      variant="secondary"
+                      size="md"
+                      onClick={handleCopy}
+                      disabled={showCopied}
+                    >
+                      {showCopied ? (
+                        <span className="inline-flex items-center gap-1">
+                          <CheckCircle2 size={14} />
+                          {t('sharePoster.copied', '已复制')}
+                        </span>
+                      ) : (
+                        t('sharePoster.copy', '复制图片')
+                      )}
+                    </PixelButton>
+                  )}
+                  {!isIOS && (
+                    <PixelButton variant="primary" size="md" onClick={handleDownload}>
                       <span className="inline-flex items-center gap-1">
-                        <CheckCircle2 size={14} />
-                        {t('sharePoster.copied', '已复制')}
+                        <Download size={14} />
+                        {t('sharePoster.download', '下载 PNG')}
                       </span>
-                    ) : (
-                      t('sharePoster.copy', '复制图片')
-                    )}
-                  </PixelButton>
-                )}
-                {!isIOS && (
-                  <PixelButton variant="primary" size="md" onClick={handleDownload}>
-                    <span className="inline-flex items-center gap-1">
-                      <Download size={14} />
-                      {t('sharePoster.download', '下载 PNG')}
-                    </span>
-                  </PixelButton>
-                )}
-              </>
-            )}
+                    </PixelButton>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </PixelCard>
@@ -344,7 +368,7 @@ function QuarterButton({
     <button
       onClick={onClick}
       className={[
-        'px-3 py-2 font-mono text-sm font-bold border-2 transition-colors',
+        'w-full px-3 py-2 font-mono text-sm font-bold border-2 transition-colors',
         active
           ? 'bg-blue-600 text-white border-blue-600'
           : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800',

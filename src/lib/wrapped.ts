@@ -25,11 +25,8 @@ export interface WrappedData {
   bestPaceDate: string;
   persona: { title: string; desc: string };
   funFacts: string[];
-  extremes: {
-    highestElevation: { value: number; date: string; name: string } | null;
-    highestHeartRate: { value: number; date: string; name: string } | null;
-    earliestStart: { value: string; date: string; name: string } | null;
-  };
+  favoriteRoute: { count: number; distanceKm: number } | null;
+  longestRouteName: string;
 }
 
 function formatDate(iso: string): string {
@@ -164,16 +161,14 @@ export function calculateWrapped(
   let totalElevation = 0;
   let longestRun = 0;
   let longestRunDate = '';
+  let longestRouteName = '';
   let bestPace = Infinity;
   let bestPaceDate = '';
   const monthMap = new Map<number, number>();
   const timeOfDay = { morning: 0, afternoon: 0, evening: 0, night: 0 };
   const dateSet = new Set<string>();
   const paces: number[] = [];
-
-  let highestElevation: WrappedData['extremes']['highestElevation'] = null;
-  let highestHeartRate: WrappedData['extremes']['highestHeartRate'] = null;
-  let earliestStart: WrappedData['extremes']['earliestStart'] = null;
+  const routeMap = new Map<string, { count: number; distanceKm: number }>();
 
   runs.forEach((run) => {
     const distKm = run.distance / 1000;
@@ -184,6 +179,7 @@ export function calculateWrapped(
     if (distKm > longestRun) {
       longestRun = distKm;
       longestRunDate = formatDate(run.start_date_local);
+      longestRouteName = run.name;
     }
 
     const pace = secToPaceSec(run.distance, run.moving_time);
@@ -208,17 +204,18 @@ export function calculateWrapped(
     const dateKey = run.start_date_local.split('T')[0];
     dateSet.add(dateKey);
 
-    // Extremes
-    if (run.elev_high && (!highestElevation || run.elev_high > highestElevation.value)) {
-      highestElevation = { value: Math.round(run.elev_high), date: formatDate(run.start_date_local), name: run.name };
-    }
-    if (run.max_heartrate && (!highestHeartRate || run.max_heartrate > highestHeartRate.value)) {
-      highestHeartRate = { value: run.max_heartrate, date: formatDate(run.start_date_local), name: run.name };
-    }
-    const startHour = date.getHours();
-    const startMinute = date.getMinutes();
-    if (!earliestStart || startHour < parseInt(earliestStart.value.split(':')[0]) || (startHour === parseInt(earliestStart.value.split(':')[0]) && startMinute < parseInt(earliestStart.value.split(':')[1]))) {
-      earliestStart = { value: formatTime(startHour, startMinute), date: formatDate(run.start_date_local), name: run.name };
+    // Favorite route clustering by start_latlng (1 decimal ~ 11km radius)
+    if (run.start_latlng && run.start_latlng.length >= 2) {
+      const lat = Math.round(run.start_latlng[0] * 10) / 10;
+      const lng = Math.round(run.start_latlng[1] * 10) / 10;
+      const key = `${lat},${lng}`;
+      const existing = routeMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.distanceKm += distKm;
+      } else {
+        routeMap.set(key, { count: 1, distanceKm: distKm });
+      }
     }
   });
 
@@ -258,6 +255,13 @@ export function calculateWrapped(
     }
   }
 
+  let favoriteRoute: WrappedData['favoriteRoute'] = null;
+  routeMap.forEach((v) => {
+    if (!favoriteRoute || v.count > favoriteRoute.count || (v.count === favoriteRoute.count && v.distanceKm > favoriteRoute.distanceKm)) {
+      favoriteRoute = v;
+    }
+  });
+
   const persona = getPersona(isZh, timeOfDay, totalDistance, totalElevation, longestStreak, longestRun, paces);
   const funFacts = getFunFacts(isZh, totalDistance, totalElevation, totalDuration);
 
@@ -279,7 +283,8 @@ export function calculateWrapped(
     bestPaceDate: bestPace === Infinity ? '' : bestPaceDate,
     persona,
     funFacts,
-    extremes: { highestElevation, highestHeartRate, earliestStart },
+    favoriteRoute,
+    longestRouteName,
   };
 }
 

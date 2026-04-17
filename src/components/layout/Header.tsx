@@ -8,7 +8,7 @@ import { PixelButton } from '@/components/ui';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X, Settings, Dumbbell } from 'lucide-react';
+import { Menu, X, Settings, Dumbbell, Trophy } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -56,6 +56,13 @@ export function Header() {
                   className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                 >
                   {t('trainingPlan.title', '训练计划')}
+                </Link>
+                <Link
+                  href="/activities?wrapped=1"
+                  className="font-mono text-sm font-bold uppercase hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center gap-1"
+                >
+                  <Trophy size={14} />
+                  {t('wrapped.title', '年度回顾')}
                 </Link>
               </>
             )}
@@ -133,6 +140,14 @@ export function Header() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {t('trainingPlan.title', '训练计划')}
+                  </Link>
+                  <Link
+                    href="/activities?wrapped=1"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-1"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Trophy size={14} />
+                    {t('wrapped.title', '年度回顾')}
                   </Link>
                   <button
                     className="font-mono text-sm font-bold uppercase py-2 text-left"
