@@ -98,9 +98,15 @@ export function drawMultiRouteToCanvas(
   options: MultiRouteCanvasOptions
 ): string | null {
   const { items, lineColor = '#f97316' } = options;
-  if (items.length === 0) return null;
+  // Filter out items with empty or un-decodable polylines
+  const validItems = items.filter((item) => {
+    if (!item.polyline || item.polyline.trim().length === 0) return false;
+    const points = decodePolyline(item.polyline);
+    return points.length >= 2;
+  });
+  if (validItems.length === 0) return null;
 
-  const config = getCanvasConfig(items.length);
+  const config = getCanvasConfig(validItems.length);
   const cols = config.cols;
   const rows = Math.ceil(items.length / cols);
   const cellSize = (config.width - config.padding * 2 - config.gap * (cols - 1)) / cols;
@@ -114,7 +120,7 @@ export function drawMultiRouteToCanvas(
 
   // Transparent background - do not fill anything
 
-  items.forEach((item, index) => {
+  validItems.forEach((item, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
     const x = config.padding + col * (cellSize + config.gap);
