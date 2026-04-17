@@ -439,7 +439,7 @@ export default function ActivityDetailPage() {
 
           {/* Charts */}
           {streams && (
-            <div>
+            <div className="space-y-5">
               {streams.heartrate && (
                 <ChartSection 
                   title={t('activity.heartRate')}
@@ -448,16 +448,16 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.heartrate.data as number[]}
                     color="#ef4444"
-                    height={140}
+                    height={220}
                     yUnit=""
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                     domain={(() => {
-                      const valid = (streams.heartrate.data as number[]).filter(v => v > 30);
+                      const data = streams.heartrate.data as number[];
+                      const valid = data.filter(v => v > 50);
                       if (valid.length === 0) return undefined;
                       const min = Math.min(...valid);
                       const max = Math.max(...valid);
-                      const pad = Math.max(1, (max - min) * 0.08);
-                      return [Math.max(30, min - pad), max + pad];
+                      return [min, max];
                     })()}
                   />
                 </ChartSection>
@@ -478,10 +478,15 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={processPaceData(streams.velocity_smooth.data as number[])}
                     color="#3b82f6"
-                    height={140}
+                    height={220}
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                     formatYLabel={(v) => formatPaceValue(v)}
-                    domain={getPaceDomain(streams.velocity_smooth.data as number[])}
+                    domain={(() => {
+                      const paces = processPaceData(streams.velocity_smooth.data as number[]).filter(p => p > 0);
+                      if (paces.length === 0) return undefined;
+                      return [Math.min(...paces), Math.max(...paces)];
+                    })()}
+                    smooth={5}
                   />
                 </ChartSection>
               )}
@@ -494,16 +499,14 @@ export default function ActivityDetailPage() {
                   <SimpleLineChart 
                     data={streams.altitude.data as number[]}
                     color="#22c55e"
-                    height={140}
+                    height={220}
                     yUnit="m"
                     fill
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                     domain={(() => {
                       const data = streams.altitude.data as number[];
-                      const min = Math.min(...data);
-                      const max = Math.max(...data);
-                      const pad = Math.max(1, (max - min) * 0.1);
-                      return [min - pad, max + pad];
+                      if (data.length === 0) return undefined;
+                      return [Math.min(...data), Math.max(...data)];
                     })()}
                   />
                 </ChartSection>
@@ -605,24 +608,13 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function ChartSection({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-1">
+      <div className="flex items-baseline justify-between mb-3">
         <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">{title}</h3>
         {subtitle && <span className="font-mono text-[10px] text-zinc-400">{subtitle}</span>}
       </div>
       {children}
     </div>
   );
-}
-
-function getPaceDomain(velocityData: number[]): [number, number] | undefined {
-  const rawPaces = velocityData.map(v => v > 0 ? 1000 / v / 60 : 0);
-  const validPaces = rawPaces.filter(p => p > 0);
-  if (validPaces.length === 0) return undefined;
-  const sorted = [...validPaces].sort((a, b) => a - b);
-  const lower = sorted[Math.floor(sorted.length * 0.02)] ?? sorted[0];
-  const upper = sorted[Math.floor(sorted.length * 0.98)] ?? sorted[sorted.length - 1];
-  const pad = Math.max(0.05, (upper - lower) * 0.05);
-  return [Math.max(0, lower - pad), upper + pad];
 }
 
 // Process pace data with percentile-based clamping
