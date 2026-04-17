@@ -443,13 +443,20 @@ export default function ActivityDetailPage() {
               {streams.heartrate && (
                 <ChartSection 
                   title={t('activity.heartRate')}
-                  subtitle={`${Math.round(activity.average_heartrate || 0)} bpm ~ ${Math.round(activity.max_heartrate || 0)} bpm`}
+                  subtitle={(() => {
+                    const data = streams.heartrate.data as number[];
+                    const valid = data.filter(v => v > 50);
+                    if (valid.length === 0) return '';
+                    const min = Math.min(...valid);
+                    const max = Math.max(...valid);
+                    return `${Math.round(min)} bpm ~ ${Math.round(max)} bpm`;
+                  })()}
                 >
                   <SimpleLineChart 
                     data={streams.heartrate.data as number[]}
                     color="#ef4444"
                     height={220}
-                    yUnit=""
+                    yUnit="bpm"
                     xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
                     domain={(() => {
                       const data = streams.heartrate.data as number[];

@@ -148,8 +148,10 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   else if (currentPaceSecKm <= zones.M.max) calculatedZoneKey = 'M';
   
   // Use AI zone if available and valid, otherwise use calculated
-  const aiZone = analysis?.paceZoneAnalysis?.zone;
-  const zoneKey = (aiZone && aiZone !== 'unknown') ? aiZone : calculatedZoneKey;
+  const aiZone = analysis?.paceZoneAnalysis?.zone?.trim();
+  const normalizedAiZone = aiZone ? aiZone.charAt(0).toUpperCase() + aiZone.slice(1).toLowerCase() : '';
+  const validZones = ['E', 'M', 'T', 'I', 'R'];
+  const zoneKey = (normalizedAiZone && validZones.includes(normalizedAiZone)) ? normalizedAiZone : calculatedZoneKey;
   const zoneLabel = t(`aiAnalysis.zone${zoneKey}`, zoneKey === 'E' ? 'E-Easy' : zoneKey === 'M' ? 'M-Marathon' : zoneKey === 'T' ? 'T-Threshold' : zoneKey === 'I' ? 'I-Interval' : zoneKey === 'R' ? 'R-Repetition' : 'Unknown');
   const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.unknown };
 
