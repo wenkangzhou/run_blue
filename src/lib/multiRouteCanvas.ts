@@ -9,16 +9,23 @@ export interface MultiRouteCanvasOptions {
   lineColor?: string;
 }
 
-const CANVAS_WIDTH = 1080;
-const PADDING = 40;
-const GAP = 8;
-
-function getColCount(count: number) {
-  if (count <= 4) return 2;
-  if (count <= 9) return 3;
-  if (count <= 16) return 4;
-  if (count <= 20) return 5;
-  return 6;
+function getCanvasConfig(count: number) {
+  if (count <= 9) {
+    return { width: 1080, cols: 3, gap: 8, padding: 36 };
+  }
+  if (count <= 16) {
+    return { width: 1200, cols: 4, gap: 6, padding: 32 };
+  }
+  if (count <= 25) {
+    return { width: 1350, cols: 5, gap: 5, padding: 28 };
+  }
+  if (count <= 42) {
+    return { width: 1600, cols: 7, gap: 4, padding: 24 };
+  }
+  if (count <= 70) {
+    return { width: 1800, cols: 8, gap: 4, padding: 20 };
+  }
+  return { width: 2000, cols: 10, gap: 3, padding: 20 };
 }
 
 function drawRouteInCell(
@@ -54,7 +61,7 @@ function drawRouteInCell(
   const expandedLatRange = maxLat - minLat;
   const expandedLngRange = maxLng - minLng;
 
-  const available = cellSize - 24; // inner padding
+  const available = cellSize - 12; // inner padding, tighter for larger canvases
   const scale = Math.min(
     available / expandedLngRange,
     available / expandedLatRange
@@ -76,7 +83,7 @@ function drawRouteInCell(
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2.5, scale * 0.0001);
+  ctx.lineWidth = Math.max(3, cellSize * 0.022);
   ctx.strokeStyle = lineColor;
   ctx.beginPath();
   ctx.moveTo(projected[0].x, projected[0].y);
@@ -93,14 +100,15 @@ export function drawMultiRouteToCanvas(
   const { items, lineColor = '#f97316' } = options;
   if (items.length === 0) return null;
 
-  const cols = getColCount(items.length);
+  const config = getCanvasConfig(items.length);
+  const cols = config.cols;
   const rows = Math.ceil(items.length / cols);
-  const cellSize = (CANVAS_WIDTH - PADDING * 2 - GAP * (cols - 1)) / cols;
-  const canvasHeight = PADDING * 2 + rows * cellSize + (rows - 1) * GAP;
+  const cellSize = (config.width - config.padding * 2 - config.gap * (cols - 1)) / cols;
+  const canvasHeight = config.padding * 2 + rows * cellSize + (rows - 1) * config.gap;
 
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_WIDTH;
-  canvas.height = Math.max(canvasHeight, CANVAS_WIDTH); // at least square
+  canvas.width = config.width;
+  canvas.height = Math.max(canvasHeight, config.width * 0.6); // at least 0.6x width for compact layouts
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
@@ -109,8 +117,8 @@ export function drawMultiRouteToCanvas(
   items.forEach((item, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
-    const x = PADDING + col * (cellSize + GAP);
-    const y = PADDING + row * (cellSize + GAP);
+    const x = config.padding + col * (cellSize + config.gap);
+    const y = config.padding + row * (cellSize + config.gap);
     drawRouteInCell(ctx, item, x, y, cellSize, lineColor);
   });
 

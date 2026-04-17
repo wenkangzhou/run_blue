@@ -7,7 +7,7 @@ import { drawMultiRouteToCanvas, downloadPNG } from '@/lib/multiRouteCanvas';
 import type { StravaActivity } from '@/types';
 import { X, Download, ImageIcon, CheckCircle2, Calendar } from 'lucide-react';
 
-type PeriodType = 'week' | 'month';
+type PeriodType = 'week' | 'month' | 'quarter' | 'halfYear';
 
 interface PeriodShareModalProps {
   isOpen: boolean;
@@ -22,6 +22,7 @@ export function PeriodShareModal({
 }: PeriodShareModalProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<PeriodType>('week');
+  const [canvasSize, setCanvasSize] = useState<'normal' | 'large'>('normal');
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
 
@@ -33,11 +34,19 @@ export function PeriodShareModal({
   const filtered = useMemo(() => {
     const now = new Date();
     const cutoff = new Date();
-    if (period === 'week') {
-      cutoff.setDate(now.getDate() - 7);
-    } else {
-      cutoff.setDate(now.getDate() - 30);
-    }
+    const limits: Record<PeriodType, number> = {
+      week: 7,
+      month: 24,
+      quarter: 42,
+      halfYear: 70,
+    };
+    const daysMap: Record<PeriodType, number> = {
+      week: 7,
+      month: 30,
+      quarter: 60,
+      halfYear: 100,
+    };
+    cutoff.setDate(now.getDate() - daysMap[period]);
     cutoff.setHours(0, 0, 0, 0);
 
     const runs = activities
@@ -47,7 +56,7 @@ export function PeriodShareModal({
         return date >= cutoff;
       })
       .sort((a, b) => new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime())
-      .slice(0, period === 'week' ? 7 : 24);
+      .slice(0, limits[period]);
 
     return runs;
   }, [activities, period]);
@@ -69,6 +78,8 @@ export function PeriodShareModal({
         polyline: a.map?.summary_polyline || a.map?.polyline || '',
       }));
 
+      const isLarge = items.length > 24;
+      setCanvasSize(isLarge ? 'large' : 'normal');
       const url = drawMultiRouteToCanvas({
         items,
         lineColor: '#f97316',
@@ -79,7 +90,13 @@ export function PeriodShareModal({
   }, [isOpen, filtered, period, t]);
 
   const filename = useMemo(() => {
-    const prefix = period === 'week' ? 'weekly' : 'monthly';
+    const prefixMap: Record<PeriodType, string> = {
+      week: 'weekly',
+      month: 'monthly',
+      quarter: '60days',
+      halfYear: '100days',
+    };
+    const prefix = prefixMap[period];
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
     return `runblue_${prefix}_${dateStr}.png`;
   }, [period]);
@@ -139,7 +156,7 @@ export function PeriodShareModal({
           </div>
 
           {/* Period selector */}
-          <div className="flex items-center gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <PeriodButton
               active={period === 'week'}
               onClick={() => setPeriod('week')}
@@ -150,6 +167,16 @@ export function PeriodShareModal({
               onClick={() => setPeriod('month')}
               label={t('periodShare.last30Days', '最近30天')}
             />
+            <PeriodButton
+              active={period === 'quarter'}
+              onClick={() => setPeriod('quarter')}
+              label={t('periodShare.last60Days', '最近60天')}
+            />
+            <PeriodButton
+              active={period === 'halfYear'}
+              onClick={() => setPeriod('halfYear')}
+              label={t('periodShare.last100Days', '最近100天')}
+            />
           </div>
 
           {/* Preview */}
@@ -158,8 +185,8 @@ export function PeriodShareModal({
               className="relative rounded-lg overflow-hidden border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-100"
               style={{
                 width: '100%',
-                maxWidth: 280,
-                aspectRatio: '3 / 4',
+                maxWidth: canvasSize === 'large' ? 320 : 280,
+                aspectRatio: canvasSize === 'large' ? '2 / 3' : '3 / 4',
               }}
             >
               {dataUrl ? (
