@@ -246,6 +246,9 @@ export function WrappedShareModal({
                   src={dataUrl}
                   alt="Wrapped summary"
                   className="w-full h-full object-contain"
+                  draggable={false}
+                  onContextMenu={() => {}}
+                  style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }}
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center"

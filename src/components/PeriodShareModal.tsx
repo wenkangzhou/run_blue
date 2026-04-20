@@ -192,6 +192,9 @@ export function PeriodShareModal({
                   src={dataUrl}
                   alt="Period summary"
                   className="w-full h-auto object-contain"
+                  draggable={false}
+                  onContextMenu={() => {}}
+                  style={{ WebkitTouchCallout: 'default', userSelect: 'auto' }}
                 />
               ) : (
                 <div
