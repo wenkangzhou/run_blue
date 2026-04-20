@@ -94,11 +94,19 @@ function buildAccurateComparison(
       ? `This pace is ${diffAbs}s/km ${diffText} than the historical average`
       : `本次配速比历史平均${diffText} ${diffAbs} 秒/km`;
   }
-  const trendText = similarStats.trendDirection === 'improving'
-    ? (en ? ', showing an improving trend recently' : '，近期呈进步趋势')
-    : similarStats.trendDirection === 'declining'
-      ? (en ? ', recent state has declined' : '，近期状态有所下滑')
-      : (en ? ', recent state remains stable' : '，近期状态保持稳定');
+  const trendText = (() => {
+    // If this workout is significantly better than average, praise it regardless of short-term trend
+    if (similarStats.yourPaceRank >= 80 && diffSec <= 0) {
+      return en ? ', an excellent performance in this session' : '，本次训练表现优异';
+    }
+    if (similarStats.trendDirection === 'improving') {
+      return en ? ', showing an improving trend recently' : '，近期呈进步趋势';
+    }
+    if (similarStats.trendDirection === 'declining') {
+      return en ? ', recent state has declined' : '，近期状态有所下滑';
+    }
+    return en ? ', recent state remains stable' : '，近期状态保持稳定';
+  })();
   insight += trendText;
 
   return { comparisonToAverage: comparison, similarActivitiesInsight: insight };
@@ -183,18 +191,27 @@ export function buildProfessionalPrompt(
     ? `\nCorresponds to Daniels 5-zone: ${zoneDesc}`
     : `\n对应 Daniels 五区间中的: ${zoneDesc}`;
 
-  // Weekly load trend
+  // Weekly load trend: show current week, last week, and 4-week average
   if (recentLoad.length > 0) {
-    const recentWeeks = recentLoad.slice(-4);
-    const avgWeeklyDistance = recentWeeks.reduce((sum, w) => sum + w.totalDistance, 0) / recentWeeks.length;
-    const recentRuns = recentWeeks.reduce((sum, w) => sum + w.runs, 0);
-    prompt += en ? `\n\nRecent 4-Week Load:` : `\n\n近4周负荷:`;
+    const currentWeek = recentLoad[recentLoad.length - 1];
+    const lastWeek = recentLoad.length > 1 ? recentLoad[recentLoad.length - 2] : null;
+    const recent4Weeks = recentLoad.slice(-4);
+    const avg4WeekDistance = recent4Weeks.reduce((sum, w) => sum + w.totalDistance, 0) / recent4Weeks.length;
+    prompt += en ? `\n\nWeekly Load (last 4 weeks):` : `\n\n周跑量趋势（近4周）:`;
     prompt += en
-      ? `\n- Avg weekly distance: ${(avgWeeklyDistance / 1000).toFixed(1)}km`
-      : `\n- 平均周跑量: ${(avgWeeklyDistance / 1000).toFixed(1)}km`;
+      ? `\n- Current week: ${(currentWeek.totalDistance / 1000).toFixed(1)}km (${currentWeek.runs} runs)`
+      : `\n- 本周: ${(currentWeek.totalDistance / 1000).toFixed(1)}km (${currentWeek.runs}次)`;
+    if (lastWeek) {
+      const changePct = lastWeek.totalDistance > 0
+        ? ((currentWeek.totalDistance - lastWeek.totalDistance) / lastWeek.totalDistance * 100).toFixed(1)
+        : '0';
+      prompt += en
+        ? `, ${changePct > '0' ? '+' : ''}${changePct}% vs last week`
+        : `，环比上周${changePct > '0' ? '+' : ''}${changePct}%`;
+    }
     prompt += en
-      ? `\n- Total runs: ${recentRuns}`
-      : `\n- 总次数: ${recentRuns}次`;
+      ? `\n- 4-week avg: ${(avg4WeekDistance / 1000).toFixed(1)}km`
+      : `\n- 近4周平均: ${(avg4WeekDistance / 1000).toFixed(1)}km`;
   }
 
   // Similar activities comparison
@@ -211,14 +228,12 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- This workout: faster than ${similarStats.yourPaceRank}% of similar workouts`
       : `\n- 本次表现: 超过${similarStats.yourPaceRank}%的同类型训练`;
-    const trendText = similarStats.trendDirection === 'improving'
-      ? (en ? 'improving trend' : '进步中')
-      : similarStats.trendDirection === 'declining'
-        ? (en ? 'declining trend' : '有所下滑')
-        : (en ? 'stable trend' : '保持稳定');
     prompt += en
-      ? `\n- Trend: ${trendText}`
-      : `\n- 趋势: ${trendText}`;
+      ? `\n- Recent 5 similar avg pace: ${formatPace(similarStats.recentAvgPace * 60)}/km`
+      : `\n- 最近5次同类平均配速: ${formatPace(similarStats.recentAvgPace * 60)}/km`;
+    prompt += en
+      ? `\n- Next 5 older similar avg pace: ${formatPace(similarStats.olderAvgPace * 60)}/km`
+      : `\n- 再早5次同类平均配速: ${formatPace(similarStats.olderAvgPace * 60)}/km`;
   }
 
   // Instructions for analysis
@@ -252,8 +267,8 @@ export function buildProfessionalPrompt(
       ? `\n2. Training purpose: Based on pace and distance, clearly state the main purpose (aerobic recovery / aerobic base / threshold / VO2max / speed).`
       : `\n2. 训练目的: 基于本次配速和距离，明确说明这次训练主要目的是什么（有氧恢复/有氧基础/阈值提升/VO2max/速度训练）。`;
     prompt += en
-      ? `\n3. Load assessment: Combine with recent 4-week load to judge if this volume is appropriate.`
-      : `\n3. 负荷评估: 结合近4周负荷，判断本次训练量是否合适。`;
+      ? `\n3. Load assessment: Judge based on (a) this workout's intensity and distance ratio to current week volume, (b) week-over-week change. If current week volume jumped >15% vs last week, FLAG it as "volume increase too fast, injury risk". If the workout itself is hard (T/I/R zone) and >15% of weekly volume, FLAG it as "high single-session load". Do NOT mechanically say "volume is too low" when weekly volume is actually rising.`
+      : `\n3. 负荷评估: 基于以下两点判断：(a)本次训练强度及占本周跑量比例，(b)本周 vs 上周跑量环比变化。如果本周跑量环比上周增长>15%，必须标记为"跑量增加过快，注意受伤风险"。如果单次高强度训练（T/I/R区）占本周跑量>15%，标记为"单次负荷较大"。不要在周跑量实际处于上升期时机械地说"跑量偏低"。`;
     if (similarStats) {
       prompt += en
         ? `\n4. Historical comparison: this pace ${paceStr}/km vs historical avg ${formatPace(similarStats.avgPace * 60)}/km and best ${formatPace(similarStats.bestPace * 60)}/km. Faster than ${similarStats.yourPaceRank}% of similar workouts.`
@@ -262,8 +277,8 @@ export function buildProfessionalPrompt(
       prompt += en ? `\n4. Historical comparison: no comparable historical data yet.` : `\n4. 历史对比: 暂无可比历史数据。`;
     }
     prompt += en
-      ? `\n5. Next workout suggestion: Give specific next-session recommendations from the three-components perspective, clearly stating the main goal (improve VO2max / lactate threshold / running economy).`
-      : `\n5. 下次训练建议: 从三要素角度给出具体的训练安排，明确说明主要训练目的（提升VO2max/乳酸阈值/跑步经济性）。`;
+      ? `\n5. Next workout suggestion: CRITICAL RULE — If this workout intensity is "hard"/"extreme" OR pace zone is T/I/R, the next session MUST be an easy recovery run (E zone, 5-8km, 30-60s/km slower than marathon pace), with the goal of active recovery. NO intensity workouts (tempo, interval, or repetition) should be suggested after a hard session. Only if this was an easy/moderate aerobic run, you may suggest a specific quality session from the three-components perspective.`
+      : `\n5. 下次训练建议: 关键规则 — 如果本次强度为"hard"/"extreme"或配速区间落在T/I/R，下次训练必须是轻松恢复跑（E区，5-8km，比马拉松配速慢30-60秒/km），目的是促进恢复。严禁在高强度训练后建议乳酸阈值跑、间歇跑或重复跑。只有本次是有氧轻松跑时，才可以从三要素角度建议具体质量课。`;
   }
 
   prompt += en ? `\n\n## Output Format (JSON)` : `\n\n## 输出格式（JSON）`;
@@ -282,8 +297,8 @@ export function buildProfessionalPrompt(
       : `\n  "suggestions": ["赛后恢复建议1", "避免立即进行强度训练", "下次比赛准备建议"],`;
   } else {
     prompt += en
-      ? `\n{\n  "summary": "Overall evaluation (within 60 words, professional coach tone)",`
-      : `\n{\n  "summary": "总体评价（60字以内，专业教练口吻）",`;
+      ? `\n{\n  "summary": "Overall evaluation (120 words max, professional coach tone). Include: (1) what type of workout this was, (2) one sentence performance assessment, (3) one specific highlight or area to watch.",`
+      : `\n{\n  "summary": "总体评价（120字以内，专业教练口吻）。必须包含：(1)本次训练类型判定，(2)一句话表现点评，(3)一个具体亮点或注意点。不要简单复述数据。",`;
     prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
     prompt += en ? `\n  "recoveryHours": number,` : `\n  "recoveryHours": 数字,`;
     prompt += en
@@ -297,19 +312,19 @@ export function buildProfessionalPrompt(
   prompt += `\n  "paceZoneAnalysis": {`;
   prompt += `\n    "zone": "E|M|T|I|R|unknown",`;
   prompt += en
-    ? `\n    "description": "pace zone description",`
-    : `\n    "description": "配速区间描述",`;
+    ? `\n    "description": "Describe what this pace zone means for the athlete in one sentence.",`
+    : `\n    "description": "用一句话说明该配速区间对这位运动员的意义。",`;
   prompt += `\n    "appropriateness": "appropriate|too-fast|too-slow"`;
   prompt += `\n  },`;
   prompt += en
-    ? `\n  "trainingLoadContext": "load assessment explanation",`
-    : `\n  "trainingLoadContext": "负荷评估说明",`;
+    ? `\n  "trainingLoadContext": "Load assessment: combine single-session intensity + weekly volume trend. Do NOT just report numbers. Give a coach-style conclusion like 'This tempo run accounts for 23% of weekly volume, load is moderate; weekly volume up 12% WoW, within safe range.'",`
+    : `\n  "trainingLoadContext": "负荷评估：结合单次强度+周跑量趋势给出教练式结论。不要只报数字。例如'本次节奏跑占本周跑量23%，单次负荷适中；本周跑量环比+12%，处于安全上升区间'。",`;
   prompt += en
-    ? `\n  "similarActivitiesInsight": "similar workout comparison insight",`
-    : `\n  "similarActivitiesInsight": "同类型对比洞察",`;
+    ? `\n  "similarActivitiesInsight": "Based on the historical comparison data provided in the prompt, write an insightful observation about THIS workout's standing. If it ranks top 10%, praise the execution quality. If pace was inconsistent, note that. Do NOT just repeat numbers.",`
+    : `\n  "similarActivitiesInsight": "基于prompt中提供的历史对比数据，写出对本次训练站位的一句有洞察的评价。如果排名前10%，表扬执行质量。如果配速波动大，指出这一点。不要简单重复数字。",`;
   prompt += en
-    ? `\n  "nextWorkoutSuggestion": "${classification.isRace ? 'post-race recovery advice' : 'specific next workout plan'}",`
-    : `\n  "nextWorkoutSuggestion": "${classification.isRace ? '赛后恢复建议' : '下次训练具体安排'}",`;
+    ? `\n  "nextWorkoutSuggestion": "Give SPECIFIC details: exact distance, pace zone, and 1 recovery tip. Example: 'Easy run 6km @ E pace (5:30/km), focus on relaxed stride and sleep early.'",`
+    : `\n  "nextWorkoutSuggestion": "给出具体方案：精确距离、配速区间、1条恢复注意点。例如'轻松跑6km，E区配速5分30秒，注意放松步频、早睡'。",`;
   prompt += en
     ? `\n  "warnings": [${classification.isRace ? '"Ensure adequate recovery after the race"' : ''}]`
     : `\n  "warnings": [${classification.isRace ? '"赛后注意充分恢复"' : ''}]`;
@@ -325,6 +340,9 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- "comparisonToAverage" and "similarActivitiesInsight" should only describe pace differences and percentile ranking. Do NOT mention total time differences (e.g., "2 minutes faster") or unrelated descriptions.`
     : `\n- "comparisonToAverage" 和 "similarActivitiesInsight" 只需描述配速差异和百分比排名，不要提及总用时差异（如"快2分钟"）或与此无关的描述。`;
+  prompt += en
+    ? `\n- In "suggestions", do NOT mechanically recommend "increase weekly volume to X km". Instead, focus on: (1) if weekly volume spiked, warn about injury risk and recommend rest; (2) if this was a hard session, recommend recovery; (3) give 1-2 specific, actionable technique or pacing tips relevant to THIS workout.`
+    : `\n- "suggestions" 中不要机械建议"把周跑量提升到XXkm"。应聚焦：(1)如果本周跑量环比大增，提醒受伤风险并建议休息；(2)如果本次是高强度训练，建议恢复；(3)给出1-2条与本次训练直接相关的技术或配速建议。`;
   if (estimatedPBs['5k'] > 0) {
     const calculated5k = estimatedPBs['5k'];
     const calculated10k = estimatedPBs['10k'];
@@ -423,7 +441,7 @@ export async function analyzeActivity(
       generatedAt: Date.now(),
       paceZoneAnalysis: result.paceZoneAnalysis || null,
       trainingLoadContext: result.trainingLoadContext || '',
-      similarActivitiesInsight: comparisonOverride?.similarActivitiesInsight || result.similarActivitiesInsight || '',
+      similarActivitiesInsight: result.similarActivitiesInsight || comparisonOverride?.similarActivitiesInsight || '',
       nextWorkoutSuggestion: result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),
       warnings: result.warnings || (classification.isRace ? ['这是高强度比赛，需要充分恢复'] : []),
     };

@@ -51,6 +51,8 @@ export interface SimilarActivityStats {
   avgDistance: number;
   yourPaceRank: number;
   trendDirection: 'improving' | 'stable' | 'declining';
+  recentAvgPace: number; // avg pace of most recent 5 similar workouts (min/km)
+  olderAvgPace: number;  // avg pace of next 5 older similar workouts (min/km)
 }
 
 // Running physiology metrics (the three key factors)
@@ -953,13 +955,17 @@ function compareSimilarActivities(
   if (recentPaces.length >= 3 && olderPaces.length >= 3) {
     const recentAvg = recentPaces.reduce((a, b) => a + b, 0) / recentPaces.length;
     const olderAvg = olderPaces.reduce((a, b) => a + b, 0) / olderPaces.length;
-    if (recentAvg < olderAvg * 0.98) {
+    // Use 5% threshold to avoid noise from easy/recovery runs in recent sessions
+    if (recentAvg < olderAvg * 0.95) {
       trendDirection = 'improving';
-    } else if (recentAvg > olderAvg * 1.02) {
+    } else if (recentAvg > olderAvg * 1.05) {
       trendDirection = 'declining';
     }
   }
   
+  const recentAvgPace = recentPaces.length > 0 ? recentPaces.reduce((a, b) => a + b, 0) / recentPaces.length : avgPace;
+  const olderAvgPace = olderPaces.length > 0 ? olderPaces.reduce((a, b) => a + b, 0) / olderPaces.length : avgPace;
+
   return {
     count: useRuns.length,
     avgPace,
@@ -967,6 +973,8 @@ function compareSimilarActivities(
     avgDistance,
     yourPaceRank,
     trendDirection,
+    recentAvgPace,
+    olderAvgPace,
   };
 }
 
