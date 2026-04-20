@@ -1,26 +1,57 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
+import { getActivities } from '@/lib/strava';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { Loader2 } from 'lucide-react';
 
 export default function StatsPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
-  const { activities, isLoading } = useActivitiesStore();
+  const { isAuthenticated, user } = useAuth();
+  const {
+    activities,
+    isLoading: storeLoading,
+    setActivities,
+    setLoading,
+    setError,
+    setLastFetchedAt,
+  } = useActivitiesStore();
+  const [localLoading, setLocalLoading] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isAuthenticated) {
       router.push('/');
+      return;
     }
-  }, [isAuthenticated, router]);
+
+    // Load activities if store is empty
+    if (activities.length === 0 && user?.accessToken && !storeLoading && !localLoading) {
+      setLocalLoading(true);
+      setLoading(true);
+      getActivities(user.accessToken, 1, 200)
+        .then((data) => {
+          setActivities(data);
+          setLastFetchedAt(Date.now());
+        })
+        .catch((err) => {
+          console.error('Failed to load activities:', err);
+          setError(t('errors.generic'));
+        })
+        .finally(() => {
+          setLoading(false);
+          setLocalLoading(false);
+        });
+    }
+  }, [isAuthenticated, activities.length, user?.accessToken, storeLoading, localLoading, router, setActivities, setLoading, setError, setLastFetchedAt, t]);
 
   if (!isAuthenticated) return null;
+
+  const isLoading = storeLoading || localLoading;
 
   return (
     <div className="container mx-auto px-3 py-4">

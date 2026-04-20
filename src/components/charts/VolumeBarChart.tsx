@@ -46,7 +46,7 @@ export function VolumeBarChart({ data, metric, onBarClick }: VolumeBarChartProps
     <div className={needsScroll ? 'overflow-x-auto pb-2' : undefined}>
       <div style={{ minWidth: typeof minChartWidth === 'number' ? minChartWidth : undefined }}>
         <ResponsiveContainer width="100%" height={280} minWidth={typeof minChartWidth === 'number' ? minChartWidth : undefined}>
-          <BarChart
+          <BarChart style={{ outline: 'none' }}
             data={data}
             margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
             barCategoryGap="20%"
