@@ -17,10 +17,9 @@ import { ChartDataPoint, MetricType, formatMetricValue, getMetricUnit } from '@/
 interface VolumeBarChartProps {
   data: ChartDataPoint[];
   metric: MetricType;
-  onBarClick?: (data: ChartDataPoint) => void;
 }
 
-export function VolumeBarChart({ data, metric, onBarClick }: VolumeBarChartProps) {
+export function VolumeBarChart({ data, metric }: VolumeBarChartProps) {
   const { t } = useTranslation();
 
   if (!data || data.length === 0) {
@@ -44,7 +43,7 @@ export function VolumeBarChart({ data, metric, onBarClick }: VolumeBarChartProps
 
   return (
     <div className={needsScroll ? 'overflow-x-auto pb-2' : undefined}>
-      <div style={{ minWidth: typeof minChartWidth === 'number' ? minChartWidth : undefined }}>
+      <div className="[&_rect]:focus:outline-none" style={{ minWidth: typeof minChartWidth === 'number' ? minChartWidth : undefined }}>
         <ResponsiveContainer width="100%" height={280} minWidth={typeof minChartWidth === 'number' ? minChartWidth : undefined}>
           <BarChart style={{ outline: 'none' }}
             data={data}
@@ -95,11 +94,7 @@ export function VolumeBarChart({ data, metric, onBarClick }: VolumeBarChartProps
               radius={[0, 0, 0, 0]}
               maxBarSize={40}
               animationDuration={600}
-              onClick={(_, index) => {
-                if (onBarClick && data[index]) {
-                  onBarClick(data[index]);
-                }
-              }}
+              tabIndex={-1}
             >
               {data.map((entry, index) => (
                 <Cell

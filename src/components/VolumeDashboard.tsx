@@ -245,7 +245,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
           <StatsCard
             title={t('activity.averageHeartRate')}
             value={
-              summary.avgHeartRate > 0
+              summary.hasHeartRateData
                 ? `${Math.round(summary.avgHeartRate)} bpm`
                 : '--'
             }
@@ -260,14 +260,18 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
           />
           <StatsCard
             title={t('stats.totalCalories')}
-            value={`${Math.round(summary.totalCalories)} kcal`}
+            value={
+              summary.hasCaloriesData
+                ? `${Math.round(summary.totalCalories)} kcal`
+                : '--'
+            }
             icon={Flame}
             variant="warning"
           />
           <StatsCard
             title={t('activity.averagePower')}
             value={
-              summary.avgPower > 0
+              summary.hasPowerData
                 ? `${Math.round(summary.avgPower)} W`
                 : '--'
             }

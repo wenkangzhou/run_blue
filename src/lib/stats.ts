@@ -23,6 +23,9 @@ export interface SummaryStats {
   activityCount: number;
   totalDuration: number;      // seconds
   avgDuration: number;        // seconds
+  hasHeartRateData: boolean;
+  hasPowerData: boolean;
+  hasCaloriesData: boolean;
 }
 
 const METRIC_LABELS: Record<MetricType, { zh: string; en: string; unit: string }> = {
@@ -325,6 +328,10 @@ export function calculateSummaryStats(
         nonEmptyPeriods.length
       : 0;
 
+  const hasHeartRateData = hrActivities.length > 0;
+  const hasPowerData = powerActivities.length > 0;
+  const hasCaloriesData = allActivities.some((a) => a.calories && a.calories > 0);
+
   return {
     totalDistance,
     avgPeriodValue,
@@ -336,6 +343,9 @@ export function calculateSummaryStats(
     activityCount,
     totalDuration,
     avgDuration,
+    hasHeartRateData,
+    hasPowerData,
+    hasCaloriesData,
   };
 }
 

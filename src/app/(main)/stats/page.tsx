@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +9,8 @@ import { getActivities } from '@/lib/strava';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { Loader2 } from 'lucide-react';
 
+const MAX_LOAD_PAGES = 10; // Safety limit: 2000 activities max
+
 export default function StatsPage() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -16,38 +18,95 @@ export default function StatsPage() {
   const {
     activities,
     isLoading: storeLoading,
+    hasMore: storeHasMore,
+    loadedPages,
     setActivities,
+    appendActivities,
     setLoading,
     setError,
+    setHasMore,
+    setLoadedPages,
     setLastFetchedAt,
   } = useActivitiesStore();
   const [localLoading, setLocalLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState('');
+  const hasInitiatedRef = useRef(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/');
+    if (!isAuthenticated || !user?.accessToken || hasInitiatedRef.current) {
+      if (!isAuthenticated) router.push('/');
       return;
     }
 
-    // Load activities if store is empty
-    if (activities.length === 0 && user?.accessToken && !storeLoading && !localLoading) {
-      setLocalLoading(true);
-      setLoading(true);
-      getActivities(user.accessToken, 1, 200)
-        .then((data) => {
+    hasInitiatedRef.current = true;
+
+    const loadAll = async () => {
+      // Case 1: Store is empty — load page 1
+      if (activities.length === 0) {
+        setLocalLoading(true);
+        setLoading(true);
+        try {
+          const data = await getActivities(user.accessToken, 1, 200);
           setActivities(data);
+          setHasMore(data.length === 200);
+          setLoadedPages(1);
           setLastFetchedAt(Date.now());
-        })
-        .catch((err) => {
+
+          // If there's more, continue loading
+          if (data.length === 200) {
+            await loadRemaining(2);
+          }
+        } catch (err) {
           console.error('Failed to load activities:', err);
           setError(t('errors.generic'));
-        })
-        .finally(() => {
+        } finally {
           setLoading(false);
           setLocalLoading(false);
-        });
-    }
-  }, [isAuthenticated, activities.length, user?.accessToken, storeLoading, localLoading, router, setActivities, setLoading, setError, setLastFetchedAt, t]);
+        }
+        return;
+      }
+
+      // Case 2: Store has data but more pages available — continue loading
+      if (storeHasMore && loadedPages > 0) {
+        setLocalLoading(true);
+        setLoading(true);
+        try {
+          await loadRemaining(loadedPages + 1);
+        } catch (err) {
+          console.error('Failed to load more activities:', err);
+        } finally {
+          setLoading(false);
+          setLocalLoading(false);
+        }
+      }
+    };
+
+    const loadRemaining = async (startPage: number) => {
+      let page = startPage;
+      let hasMoreData = true;
+
+      while (hasMoreData && page <= MAX_LOAD_PAGES) {
+        setLoadProgress(t('common.loading') + ` (${page} ${t('stats.pages', '页')})`);
+        const data = await getActivities(user.accessToken, page, 200);
+
+        if (data.length === 0) {
+          hasMoreData = false;
+          break;
+        }
+
+        appendActivities(data);
+        hasMoreData = data.length === 200;
+        page++;
+      }
+
+      setHasMore(hasMoreData);
+      setLoadedPages(page - 1);
+      setLastFetchedAt(Date.now());
+      setLoadProgress('');
+    };
+
+    loadAll();
+  }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isAuthenticated) return null;
 
@@ -68,7 +127,7 @@ export default function StatsPage() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-pulse font-mono text-xl flex items-center gap-2">
             <Loader2 className="animate-spin" />
-            {t('common.loading')}
+            {loadProgress || t('common.loading')}
           </div>
         </div>
       ) : activities.length === 0 ? (
@@ -77,6 +136,14 @@ export default function StatsPage() {
         </div>
       ) : (
         <VolumeDashboard activities={activities} />
+      )}
+
+      {/* Loading more indicator */}
+      {isLoading && activities.length > 0 && (
+        <div className="mt-4 flex items-center justify-center gap-2 text-zinc-500 font-mono text-xs">
+          <Loader2 size={14} className="animate-spin" />
+          {loadProgress || t('common.loading')}
+        </div>
       )}
     </div>
   );
