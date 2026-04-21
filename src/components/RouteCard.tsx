@@ -22,17 +22,11 @@ export function RouteCard({ route, activities }: RouteCardProps) {
   const routeActivities = activities.filter((a) => route.activityIds.includes(a.id));
   const count = routeActivities.length;
 
-  if (count === 0) {
-    return (
-      <PixelCard className="p-4">
-        <p className="font-mono text-sm text-zinc-500">{t('routes.noActivities')}</p>
-      </PixelCard>
-    );
-  }
-
-  const sorted = [...routeActivities].sort(
-    (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-  );
+  const sorted = count > 0
+    ? [...routeActivities].sort(
+        (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+      )
+    : [];
 
   const latest = sorted[0];
   const totalDistance = routeActivities.reduce((sum, a) => sum + a.distance, 0);
@@ -42,15 +36,19 @@ export function RouteCard({ route, activities }: RouteCardProps) {
     ? formatPace(bestPaceActivity.distance, bestPaceActivity.moving_time, 'min/km')
     : '--';
 
-  const polyline = latest.map?.summary_polyline || null;
+  const polyline = latest?.map?.summary_polyline || null;
 
   return (
     <Link href={`/routes/${encodeURIComponent(route.key)}`}>
       <PixelCard className="overflow-hidden hover:-translate-y-0.5 transition-transform">
         {/* Map Preview */}
         <div className="h-36 bg-zinc-100 dark:bg-zinc-800">
-          {polyline && (
+          {polyline ? (
             <RouteOnlyMap polyline={polyline} height="100%" />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <MapPin size={32} className="text-zinc-300 dark:text-zinc-700" />
+            </div>
           )}
         </div>
 
@@ -64,33 +62,35 @@ export function RouteCard({ route, activities }: RouteCardProps) {
               </p>
             </div>
             <span className="shrink-0 px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-mono text-xs border-2 border-blue-200 dark:border-blue-700">
-              {count}{t('routes.runs', '次')}
+              {count > 0 ? `${count}${t('routes.runs')}` : t('routes.noActivities')}
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp size={14} className="text-green-600 dark:text-green-400 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] text-zinc-500">{t('stats.avgPace')}</p>
-                <p className="font-mono text-xs font-bold truncate">{bestPace}</p>
+          {count > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp size={14} className="text-green-600 dark:text-green-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.avgPace')}</p>
+                  <p className="font-mono text-xs font-bold truncate">{bestPace}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Clock size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalTime')}</p>
+                  <p className="font-mono text-xs font-bold truncate">{formatDuration(totalDuration)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Calendar size={14} className="text-orange-600 dark:text-orange-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalDistance')}</p>
+                  <p className="font-mono text-xs font-bold truncate">{formatDistance(totalDistance, 'km')}</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Clock size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalTime')}</p>
-                <p className="font-mono text-xs font-bold truncate">{formatDuration(totalDuration)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Calendar size={14} className="text-orange-600 dark:text-orange-400 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalDistance')}</p>
-                <p className="font-mono text-xs font-bold truncate">{formatDistance(totalDistance, 'km')}</p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </PixelCard>
     </Link>
