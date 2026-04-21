@@ -15,6 +15,7 @@ import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
 import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
 import { SharePosterModal } from '@/components/SharePosterModal';
+import { SaveRouteButton } from '@/components/SaveRouteButton';
 import { ChevronLeft, Loader2, RefreshCw, Share2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -386,16 +387,19 @@ export default function ActivityDetailPage() {
                 {formatDateTime(activity.start_date_local)}
               </p>
             </div>
-            {activity.map?.polyline && (
-              <button
-                onClick={() => setIsShareOpen(true)}
-                className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                title={t('sharePoster.title', '分享海报')}
-              >
-                <Share2 size={14} />
-                <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
-              </button>
-            )}
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <SaveRouteButton activity={activity} />
+              {activity.map?.polyline && (
+                <button
+                  onClick={() => setIsShareOpen(true)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  title={t('sharePoster.title', '分享海报')}
+                >
+                  <Share2 size={14} />
+                  <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Map - notify when ready */}

@@ -8,7 +8,7 @@ import { PixelButton } from '@/components/ui';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X, Settings, Dumbbell, Trophy, BarChart3 } from 'lucide-react';
+import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -63,6 +63,13 @@ export function Header() {
                 >
                   <BarChart3 size={14} />
                   {t('nav.stats', '统计')}
+                </Link>
+                <Link
+                  href="/routes"
+                  className="font-mono text-sm font-bold uppercase hover:text-purple-600 dark:hover:text-purple-400 transition-colors inline-flex items-center gap-1"
+                >
+                  <MapPinned size={14} />
+                  {t('nav.routes', '路线')}
                 </Link>
                 <Link
                   href="/activities?wrapped=1"
@@ -155,6 +162,14 @@ export function Header() {
                   >
                     <BarChart3 size={14} />
                     {t('nav.stats', '统计')}
+                  </Link>
+                  <Link
+                    href="/routes"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-1"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <MapPinned size={14} />
+                    {t('nav.routes', '路线')}
                   </Link>
                   <Link
                     href="/activities?wrapped=1"
