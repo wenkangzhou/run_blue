@@ -71,7 +71,7 @@ export function RouteCard({ route, activities }: RouteCardProps) {
               <div className="flex items-center gap-1.5">
                 <TrendingUp size={14} className="text-green-600 dark:text-green-400 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.avgPace')}</p>
+                  <p className="font-mono text-[10px] text-zinc-500">{t('routes.bestPace', '最快配速')}</p>
                   <p className="font-mono text-xs font-bold truncate">{bestPace}</p>
                 </div>
               </div>

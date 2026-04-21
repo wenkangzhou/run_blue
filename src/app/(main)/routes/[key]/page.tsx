@@ -148,13 +148,15 @@ export default function RouteDetailPage() {
             {route.key}
           </p>
         </div>
-        <button
-          onClick={handleUnsave}
-          className="p-2 border-2 border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-900/20 transition-colors"
-          title={t('common.delete')}
-        >
-          <Trash2 size={16} />
-        </button>
+        {!isEditingName && (
+          <button
+            onClick={handleUnsave}
+            className="p-2 border-2 border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-900/20 transition-colors shrink-0"
+            title={t('common.delete')}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
       </div>
 
       {/* Map + Stats */}
@@ -183,7 +185,7 @@ export default function RouteDetailPage() {
             <p className="font-mono text-2xl font-bold">{formatDuration(totalDuration)}</p>
           </PixelCard>
           <PixelCard className="p-3">
-            <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('stats.avgPace')}</p>
+            <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('routes.bestPace', '最快配速')}</p>
             <p className="font-mono text-2xl font-bold text-green-600 dark:text-green-400">{bestPace}</p>
           </PixelCard>
         </div>
