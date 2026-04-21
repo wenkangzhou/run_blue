@@ -185,6 +185,14 @@ export default function RouteDetailPage() {
             <p className="font-mono text-2xl font-bold">{formatDuration(totalDuration)}</p>
           </PixelCard>
           <PixelCard className="p-3">
+            <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('routes.avgPace', '平均配速')}</p>
+            <p className="font-mono text-2xl font-bold">
+              {routeActivities.length > 0 && totalDistance > 0
+                ? formatPace(totalDistance, totalDuration, 'min/km')
+                : '--'}
+            </p>
+          </PixelCard>
+          <PixelCard className="p-3">
             <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('routes.bestPace', '最快配速')}</p>
             <p className="font-mono text-2xl font-bold text-green-600 dark:text-green-400">{bestPace}</p>
           </PixelCard>

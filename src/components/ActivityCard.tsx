@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { StravaActivity } from '@/types';
 import { PixelCard, PixelBadge } from '@/components/ui';
@@ -31,27 +32,29 @@ export function ActivityCard({ activity, showMap = false, compact = false }: Act
 
   if (compact) {
     return (
-      <div className="flex items-center gap-3 p-3 border-2 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
-        <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 flex-shrink-0">
-          {activity.map?.summary_polyline && (
-            <MiniMap polyline={activity.map.summary_polyline} height="100%" />
-          )}
+      <Link href={`/activities/${activity.id}`} className="block">
+        <div className="flex items-center gap-3 p-3 border-2 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+          <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 flex-shrink-0">
+            {activity.map?.summary_polyline && (
+              <MiniMap polyline={activity.map.summary_polyline} height="100%" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-mono font-bold text-sm truncate">{activity.name}</h3>
+            <p className="font-mono text-xs text-zinc-500">
+              {formatDate(activity.start_date_local, i18n.language === 'zh' ? 'zh-CN' : 'en-US')}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="font-mono font-bold text-sm">
+              {formatDistance(activity.distance, unit === 'imperial' ? 'mi' : 'km')}
+            </p>
+            <p className="font-mono text-xs text-zinc-500">
+              {formatDuration(activity.moving_time)}
+            </p>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-mono font-bold text-sm truncate">{activity.name}</h3>
-          <p className="font-mono text-xs text-zinc-500">
-            {formatDate(activity.start_date_local, i18n.language === 'zh' ? 'zh-CN' : 'en-US')}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="font-mono font-bold text-sm">
-            {formatDistance(activity.distance, unit === 'imperial' ? 'mi' : 'km')}
-          </p>
-          <p className="font-mono text-xs text-zinc-500">
-            {formatDuration(activity.moving_time)}
-          </p>
-        </div>
-      </div>
+      </Link>
     );
   }
 
