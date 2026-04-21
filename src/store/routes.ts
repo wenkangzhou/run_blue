@@ -1,7 +1,37 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, StorageValue } from 'zustand/middleware';
 import { StravaActivity } from '@/types';
 import { getRouteKey, getDefaultRouteName } from '@/lib/routeClustering';
+
+/** Safe localStorage wrapper that catches QuotaExceededError. */
+const safeLocalStorage = {
+  getItem: (name: string) => {
+    if (typeof window === 'undefined') return null;
+    const str = localStorage.getItem(name);
+    return str ? JSON.parse(str) : null;
+  },
+  setItem: (name: string, value: StorageValue<any>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(name, JSON.stringify(value));
+    } catch (e) {
+      if (
+        e instanceof DOMException &&
+        (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+      ) {
+        console.error(
+          `[Persist] localStorage quota exceeded for "${name}".`
+        );
+      } else {
+        throw e;
+      }
+    }
+  },
+  removeItem: (name: string) => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(name);
+  },
+};
 
 export interface SavedRoute {
   key: string;
@@ -195,6 +225,7 @@ export const useRoutesStore = create<RoutesState>()(
     }),
     {
       name: 'routes-storage',
+      storage: safeLocalStorage,
       partialize: (state) => ({
         savedRoutes: state.savedRoutes,
       }),
