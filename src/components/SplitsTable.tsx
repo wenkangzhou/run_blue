@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StravaSplit } from '@/types';
 import { formatDuration, formatPace } from '@/lib/strava';
 
@@ -10,6 +11,8 @@ interface SplitsTableProps {
 }
 
 export function SplitsTable({ splits, showHeader = true }: SplitsTableProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="overflow-x-auto -mx-2 scrollbar-hide">
       <table className="w-full min-w-[400px]">
@@ -17,10 +20,10 @@ export function SplitsTable({ splits, showHeader = true }: SplitsTableProps) {
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
               <th className="text-left py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">km</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">时间</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">配速</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">爬升</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">心率</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.time')}</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.pace')}</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.elevation')}</th>
+              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.heartRate')}</th>
             </tr>
           </thead>
         )}

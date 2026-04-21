@@ -88,7 +88,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || '分析失败');
+        throw new Error(err.error || t('errors.aiAnalysisFailed', 'AI analysis failed'));
       }
       
       const data = await response.json();
@@ -102,7 +102,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
         classification: data.classification,
       }));
     } catch (err: any) {
-      setError(err.message || 'AI 分析失败');
+      setError(err.message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
       setLoading(false);
     }

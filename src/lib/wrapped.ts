@@ -29,9 +29,13 @@ export interface WrappedData {
   longestRouteName: string;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, isZh: boolean): string {
   const d = new Date(iso);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (isZh) {
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${monthNames[d.getMonth()]} ${d.getDate()}`;
 }
 
 function formatTime(hour: number, minute: number): string {
@@ -178,7 +182,7 @@ export function calculateWrapped(
 
     if (distKm > longestRun) {
       longestRun = distKm;
-      longestRunDate = formatDate(run.start_date_local);
+      longestRunDate = formatDate(run.start_date_local, isZh);
       longestRouteName = run.name;
     }
 
@@ -187,7 +191,7 @@ export function calculateWrapped(
       paces.push(pace);
       if (pace < bestPace) {
         bestPace = pace;
-        bestPaceDate = formatDate(run.start_date_local);
+        bestPaceDate = formatDate(run.start_date_local, isZh);
       }
     }
 

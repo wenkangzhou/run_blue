@@ -16,11 +16,24 @@ function formatPace(secPerKm: number): string {
   return `${m}'${s.toString().padStart(2, '0')}"`;
 }
 
-function monthLabel(m: number): string {
+function monthLabel(m: number, isEn: boolean): string {
+  if (isEn) {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[m - 1] || `${m}`;
+  }
   return `${m}月`;
 }
 
-function timeOfDayLabel(key: string): string {
+function timeOfDayLabel(key: string, isEn: boolean): string {
+  if (isEn) {
+    const map: Record<string, string> = {
+      morning: 'Morning',
+      afternoon: 'Afternoon',
+      evening: 'Evening',
+      night: 'Night',
+    };
+    return map[key] || key;
+  }
   const map: Record<string, string> = {
     morning: '晨跑',
     afternoon: '午跑',
@@ -175,8 +188,8 @@ export function drawWrappedToCanvas(
   const topTod = todEntries[0];
   if (topTod && topTod[1] > 0) {
     const todText = isEn
-      ? `${timeOfDayLabel(topTod[0])}`
-      : `${timeOfDayLabel(topTod[0])}达人`;
+      ? `${timeOfDayLabel(topTod[0], true)}`
+      : `${timeOfDayLabel(topTod[0], false)}达人`;
     ctx.font = `bold 16px ${fontStack}`;
     const textW = ctx.measureText(todText).width;
     const stW = textW + 20;
@@ -373,7 +386,7 @@ export function drawWrappedToCanvas(
     ctx.font = `400 16px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(monthLabel(d.month), x + barWidth / 2, chartTop + barMaxHeight + 8);
+    ctx.fillText(monthLabel(d.month, isEn), x + barWidth / 2, chartTop + barMaxHeight + 8);
   });
 
   currentY = chartTop + chartHeight + 20;
