@@ -15,17 +15,23 @@ interface SaveRouteButtonProps {
 
 export function SaveRouteButton({ activity, variant = 'button' }: SaveRouteButtonProps) {
   const { t } = useTranslation();
-  const { isRouteSaved, saveRoute, unsaveRoute } = useRoutesStore();
+  const { isActivitySaved, saveRoute, unsaveActivity } = useRoutesStore();
   const { activities } = useActivitiesStore();
 
   const routeKey = getRouteKey(activity);
-  const saved = routeKey ? isRouteSaved(routeKey) : false;
+  const saved = isActivitySaved(activity.id);
+  const canSave = !!routeKey;
 
   const handleToggle = () => {
-    if (!routeKey) return;
+    if (!canSave) {
+      console.warn('[SaveRouteButton] Cannot save: missing start_latlng', activity);
+      return;
+    }
     if (saved) {
-      unsaveRoute(routeKey);
+      console.log('[SaveRouteButton] Unsaving activity', activity.id);
+      unsaveActivity(activity.id);
     } else {
+      console.log('[SaveRouteButton] Saving activity', activity.id, 'routeKey:', routeKey);
       // Ensure current activity is included in the search pool
       const pool = activities.some((a) => a.id === activity.id)
         ? activities
@@ -38,12 +44,21 @@ export function SaveRouteButton({ activity, variant = 'button' }: SaveRouteButto
     return (
       <button
         onClick={handleToggle}
+        disabled={!canSave}
         className={`p-2 border-2 transition-colors ${
-          saved
-            ? 'border-blue-600 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
-            : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+          !canSave
+            ? 'border-zinc-100 dark:border-zinc-800 text-zinc-300 dark:text-zinc-700 cursor-not-allowed'
+            : saved
+              ? 'border-blue-600 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+              : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
         }`}
-        title={saved ? t('routes.saved') : t('routes.save')}
+        title={
+          !canSave
+            ? t('routes.cannotSave', '无法收藏：缺少位置数据')
+            : saved
+              ? t('routes.saved')
+              : t('routes.save')
+        }
       >
         {saved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
       </button>
@@ -53,14 +68,23 @@ export function SaveRouteButton({ activity, variant = 'button' }: SaveRouteButto
   return (
     <button
       onClick={handleToggle}
+      disabled={!canSave}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border-2 transition-colors ${
-        saved
-          ? 'border-blue-600 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-400'
-          : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+        !canSave
+          ? 'border-zinc-100 dark:border-zinc-800 text-zinc-300 dark:text-zinc-700 cursor-not-allowed'
+          : saved
+            ? 'border-blue-600 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-400'
+            : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
       }`}
     >
       {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-      <span>{saved ? t('routes.saved') : t('routes.save')}</span>
+      <span>
+        {!canSave
+          ? t('routes.cannotSave', '无法收藏')
+          : saved
+            ? t('routes.saved')
+            : t('routes.save')}
+      </span>
     </button>
   );
 }

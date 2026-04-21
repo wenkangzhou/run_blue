@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
+import { useRoutesStore } from '@/store/routes';
 import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
 import { Loader2, RefreshCw, ChevronUp } from 'lucide-react';
@@ -135,6 +136,9 @@ export default function ActivitiesPage() {
       setLastFetchedAt(Date.now());
       setNeedsReauth(false);
       setRateLimited(false);
+
+      // Sync saved routes with newly loaded activities
+      useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
     } catch (err: any) {
       const errorMessage = err?.message || '';
       
@@ -227,6 +231,8 @@ export default function ActivitiesPage() {
         setLatestActivityId(page1Activities[0]?.id || null);
         setLastFetchedAt(Date.now());
         console.log('[CheckNew] prepended new activities');
+        // Sync saved routes with newly loaded activities
+        useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
       } else {
         // 新数据>=200条，可能错过数据，需要完全刷新
         console.log('[CheckNew] too many new activities, full refresh needed');
@@ -236,6 +242,8 @@ export default function ActivitiesPage() {
         setLatestActivityId(page1Activities[0]?.id || null);
         setLastFetchedAt(Date.now());
         setHasMore(page1Activities.length === 200);
+        // Sync saved routes with newly loaded activities
+        useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
       }
     } catch (err) {
       console.error('[CheckNew] failed:', err);
