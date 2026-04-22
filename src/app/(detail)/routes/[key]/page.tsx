@@ -127,7 +127,7 @@ export default function RouteDetailPage() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="font-mono text-sm font-bold px-2 py-1 border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 w-full max-w-[200px]"
+                  className="font-mono text-base font-bold px-2 py-1 border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 w-full max-w-[200px]"
                   autoFocus
                 />
                 <button
