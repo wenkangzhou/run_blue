@@ -150,7 +150,7 @@ export default function TrainingPlansListPage() {
         <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
           <div className="flex-1">
             <Link
-              href="/"
+              href="/activities"
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />

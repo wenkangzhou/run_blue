@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAccessToken } from '@/lib/strava';
 
+// In-memory cache to reduce Strava API calls (30s TTL)
+const sessionCache = new Map<string, { data: any; timestamp: number }>();
+const SESSION_CACHE_TTL = 30 * 1000; // 30 seconds
+
 export async function GET(request: NextRequest) {
   // Get cookies from request headers
   const cookieHeader = request.headers.get('cookie') || '';
@@ -12,6 +16,14 @@ export async function GET(request: NextRequest) {
 
   if (!accessToken || !userId) {
     return NextResponse.json({ user: null, error: 'no_token' });
+  }
+
+  // Check in-memory cache first
+  const cacheKey = `${userId}:${accessToken.slice(-8)}`;
+  const cached = sessionCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SESSION_CACHE_TTL) {
+    console.log('[Session] returning cached session');
+    return NextResponse.json(cached.data);
   }
 
   // Try to get user info from Strava
@@ -48,8 +60,8 @@ export async function GET(request: NextRequest) {
       }
       
       const athlete = await response.json();
-      
-      const res = NextResponse.json({
+
+      const sessionData = {
         user: {
           id: userId,
           name: `${athlete.firstname} ${athlete.lastname}`,
@@ -61,7 +73,13 @@ export async function GET(request: NextRequest) {
         stravaId: athlete.id,
         accessToken,
         refreshToken,
-      });
+      };
+
+      // Update cache with new token
+      const newCacheKey = `${userId}:${accessToken.slice(-8)}`;
+      sessionCache.set(newCacheKey, { data: sessionData, timestamp: Date.now() });
+
+      const res = NextResponse.json(sessionData);
       
       res.headers.set('Set-Cookie', `access_token=${accessToken}${cookieOptions}`);
       res.headers.append('Set-Cookie', `refresh_token=${refreshToken}${cookieOptions}`);
@@ -87,7 +105,7 @@ export async function GET(request: NextRequest) {
 
   const athlete = await response.json();
 
-  return NextResponse.json({
+  const sessionData = {
     user: {
       id: userId,
       name: `${athlete.firstname} ${athlete.lastname}`,
@@ -99,7 +117,10 @@ export async function GET(request: NextRequest) {
     stravaId: athlete.id,
     accessToken,
     refreshToken,
-  });
+  };
+
+  sessionCache.set(cacheKey, { data: sessionData, timestamp: Date.now() });
+  return NextResponse.json(sessionData);
 }
 
 function parseCookies(cookieHeader: string): Record<string, string> {

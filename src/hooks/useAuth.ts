@@ -22,6 +22,12 @@ export function useAuth() {
 
   // Check auth status on mount
   useEffect(() => {
+    // Skip if already authenticated (reduces Strava API calls)
+    if (user) {
+      setIsReady(true);
+      return;
+    }
+
     const checkAuth = async () => {
       try {
         // Try to get user from cookie/localStorage or API
@@ -58,7 +64,7 @@ export function useAuth() {
     };
 
     checkAuth();
-  }, [setUser, logout]);
+  }, [setUser, logout, user]);
 
   // Force refresh session - useful after OAuth callback
   const refreshSession = useCallback(async () => {

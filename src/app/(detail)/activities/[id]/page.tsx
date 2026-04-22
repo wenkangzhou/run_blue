@@ -291,15 +291,7 @@ export default function ActivityDetailPage() {
                 <p className="font-mono text-sm text-zinc-500 mb-4">Strava API 限流中，请 15 分钟后再试</p>
               </>
             ) : needsReauth ? (
-              <>
-                <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">登录已过期，请重新登录</p>
-                <button 
-                  onClick={() => router.push('/api/auth/signin/strava')}
-                  className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  {t('auth.relogin')}
-                </button>
-              </>
+              <p className="font-mono text-zinc-600 dark:text-zinc-400">登录已过期，请重新登录</p>
             ) : (
               <>
                 <p className="font-mono text-red-500">{error}</p>
@@ -347,7 +339,7 @@ export default function ActivityDetailPage() {
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {rateLimited ? t('errors.rateLimited', '限流中') : needsReauth ? t('auth.relogin', '需重新登录') : refreshing ? t('common.refreshing', '刷新中') : isFromCache ? t('common.cached', '缓存') : ''}
+              {rateLimited ? t('errors.rateLimited', '限流中') : refreshing ? t('common.refreshing', '刷新中') : isFromCache ? t('common.cached', '缓存') : ''}
             </button>
           )}
         </div>
@@ -356,18 +348,10 @@ export default function ActivityDetailPage() {
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activity && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
-          <div className="container mx-auto px-4 py-2 max-w-2xl flex items-center justify-between">
+          <div className="container mx-auto px-4 py-2 max-w-2xl">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
               {rateLimited ? t('errors.rateLimitedShowCache', '请求过于频繁，显示缓存数据') : t('auth.sessionExpiredShowCache', '登录已过期，显示缓存数据')}
             </span>
-            {needsReauth && (
-              <button 
-                onClick={() => router.push('/api/auth/signin/strava')}
-                className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline"
-              >
-                重新登录
-              </button>
-            )}
           </div>
         </div>
       )}

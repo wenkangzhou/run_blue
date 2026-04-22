@@ -202,10 +202,21 @@ export default function ActivitiesPage() {
     }
   };
 
+  // 限制 checkForNewActivities 调用频率：最少间隔 5 分钟
+  const lastCheckRef = useRef<number>(0);
+  const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
   // 检查是否有新数据
   const checkForNewActivities = useCallback(async () => {
     if (!user?.accessToken || !latestActivityId) return;
-    
+
+    const now = Date.now();
+    if (now - lastCheckRef.current < CHECK_NEW_INTERVAL) {
+      console.log('[CheckNew] skipped: too soon since last check');
+      return;
+    }
+    lastCheckRef.current = now;
+
     try {
       console.log('[CheckNew] checking for new activities...');
       // 获取 page 1 的前 200 条
@@ -295,12 +306,7 @@ export default function ActivitiesPage() {
               <p className="font-mono text-sm text-zinc-500 mb-4">{t('errors.rateLimitedDesc')}</p>
             </>
           ) : needsReauth ? (
-            <>
-              <p className="font-mono text-zinc-600 dark:text-zinc-400 mb-4">{t('auth.sessionExpired')}</p>
-              <button onClick={handleReauth} className="px-4 py-2 font-mono text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
-                {t('auth.relogin')}
-              </button>
-            </>
+            <p className="font-mono text-zinc-600 dark:text-zinc-400">{t('auth.sessionExpired')}</p>
           ) : (
             <>
               <p className="font-mono text-red-500">{error}</p>
@@ -329,31 +335,18 @@ export default function ActivitiesPage() {
           )}
         </div>
 
-        {needsReauth ? (
-          <button onClick={handleReauth} className="shrink-0 inline-flex items-center gap-1 font-mono text-xs text-amber-600 hover:text-amber-700 dark:hover:text-amber-400 p-2">
-            {t('auth.relogin')}
-          </button>
-        ) : (
-          <button onClick={handleRefresh} disabled={refreshing || isLoading} className="shrink-0 inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
-          </button>
-        )}
+        <button onClick={handleRefresh} disabled={refreshing || isLoading} className="shrink-0 inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
+        </button>
       </div>
 
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activities.length > 0 && (
         <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
-              {rateLimited ? t('errors.rateLimitedShowCache') : t('auth.sessionExpiredShowCache')}
-            </span>
-            {needsReauth && (
-              <button onClick={handleReauth} className="font-mono text-xs text-amber-700 dark:text-amber-400 hover:underline">
-                {t('auth.relogin')}
-              </button>
-            )}
-          </div>
+          <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
+            {rateLimited ? t('errors.rateLimitedShowCache') : t('auth.sessionExpiredShowCache')}
+          </span>
         </div>
       )}
 

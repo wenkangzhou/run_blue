@@ -37,12 +37,6 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
-            <Link
-              href="/"
-              className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              {t('nav.home', '首页')}
-            </Link>
             {isAuthenticated && (
               <>
                 <Link
@@ -132,13 +126,6 @@ export function Header() {
         {isMenuOpen && (
           <div className="md:hidden border-t-2 border-zinc-200 dark:border-zinc-700 py-4">
             <nav className="flex flex-col gap-3">
-              <Link
-                href="/"
-                className="font-mono text-sm font-bold uppercase py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                {t('nav.home', '首页')}
-              </Link>
               {isAuthenticated && (
                 <>
                   <Link
