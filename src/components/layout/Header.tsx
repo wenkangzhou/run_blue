@@ -12,7 +12,7 @@ import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned } from 'lucid
 
 export function Header() {
   const { t } = useTranslation();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, needsReauth, login } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
@@ -80,7 +80,14 @@ export function Header() {
           <div className="hidden md:flex items-center gap-3">
             <LanguageToggle />
             <ThemeToggle />
-            {isAuthenticated && (
+            {needsReauth ? (
+              <button
+                onClick={login}
+                className="px-3 py-1.5 font-mono text-xs font-bold uppercase bg-amber-100 text-amber-700 border-2 border-amber-400 hover:bg-amber-200 transition-colors"
+              >
+                {t('auth.relogin', '重新登录')}
+              </button>
+            ) : isAuthenticated && (
               <div className="flex items-center gap-3">
                 <PixelButton
                   variant="ghost"
@@ -181,8 +188,15 @@ export function Header() {
                 <LanguageToggle />
                 <ThemeToggle />
               </div>
-              {isAuthenticated && (
-                <PixelButton variant="outline" size="sm" onClick={logout}>
+              {needsReauth ? (
+                <button
+                  onClick={() => { setIsMenuOpen(false); login(); }}
+                  className="font-mono text-sm font-bold uppercase py-2 text-amber-700"
+                >
+                  {t('auth.relogin', '重新登录')}
+                </button>
+              ) : isAuthenticated && (
+                <PixelButton variant="outline" size="sm" onClick={() => { setIsMenuOpen(false); logout(); }}>
                   {t('common.logout')}
                 </PixelButton>
               )}

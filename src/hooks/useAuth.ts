@@ -12,6 +12,7 @@ export function useAuth() {
   const { language } = useSettingsStore();
   const { i18n } = useTranslation();
   const [isReady, setIsReady] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   // Initialize language
   useEffect(() => {
@@ -47,7 +48,8 @@ export function useAuth() {
             });
           } else if (session.error === 'token_expired') {
             // Token expired, need to re-login
-            console.log('Token expired, redirecting to login');
+            console.log('Token expired');
+            setNeedsReauth(true);
             logout();
           } else {
             // No session, set loading to false
@@ -106,6 +108,7 @@ export function useAuth() {
     user,
     isAuthenticated,
     isLoading: isLoading && !isReady,
+    needsReauth,
     login: handleLogin,
     logout: handleLogout,
     setUser,
