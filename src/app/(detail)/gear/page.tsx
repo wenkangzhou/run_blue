@@ -28,11 +28,37 @@ interface StravaGear {
   retired: boolean;
 }
 
+interface CachedActivityEntry {
+  activity: StravaActivity;
+  timestamp: number;
+}
+
+/** Scan localStorage for activity caches that contain gear data. */
+function scanActivityCaches(): StravaActivity[] {
+  if (typeof window === 'undefined') return [];
+  const activities: StravaActivity[] = [];
+  const prefix = 'run_blue_cache_activity_';
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(prefix)) continue;
+    try {
+      const data: CachedActivityEntry = JSON.parse(localStorage.getItem(key)!);
+      if (data?.activity && (data.activity.gear_id || data.activity.gear)) {
+        activities.push(data.activity);
+      }
+    } catch {
+      // ignore malformed cache entries
+    }
+  }
+  return activities;
+}
+
 function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance'>> {
   const stats = new Map<string, { distance: number; time: number; count: number; speedSum: number; speedCount: number }>();
 
   for (const a of activities) {
-    const gearId = a.gear_id;
+    // Use gear_id or fall back to gear.id from detailed activity data
+    const gearId = a.gear_id || a.gear?.id;
     if (!gearId) continue;
     // Only count running activities for shoe stats
     if (a.sport_type !== 'Run' && a.type !== 'Run') continue;
@@ -68,19 +94,52 @@ export default function GearPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Merge activities from store + activity caches (which may have gear data from detail pages)
+  const allActivitiesWithGear = React.useMemo(() => {
+    const cachedActivities = scanActivityCaches();
+    // Start with cached activities (they have detailed gear data)
+    const merged = new Map<number, StravaActivity>();
+    for (const a of cachedActivities) {
+      merged.set(a.id, a);
+    }
+    // Overlay with store activities (they have the full list)
+    for (const a of activities) {
+      const existing = merged.get(a.id);
+      // Prefer store activity unless cache has gear data that store lacks
+      if (existing && (existing.gear_id || existing.gear) && !(a.gear_id || a.gear)) {
+        // keep cache version
+      } else {
+        merged.set(a.id, a);
+      }
+    }
+    return Array.from(merged.values());
+  }, [activities]);
+
   // Extract unique gear IDs from running activities
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
-    for (const a of activities) {
-      if (a.gear_id && (a.sport_type === 'Run' || a.type === 'Run')) {
-        ids.add(a.gear_id);
+    for (const a of allActivitiesWithGear) {
+      const gearId = a.gear_id || a.gear?.id;
+      if (gearId && (a.sport_type === 'Run' || a.type === 'Run')) {
+        ids.add(gearId);
       }
     }
     return Array.from(ids);
-  }, [activities]);
+  }, [allActivitiesWithGear]);
+
+  // Also build gear name lookup from cached activities that have gear objects
+  const gearNameFromCache = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of allActivitiesWithGear) {
+      if (a.gear?.id && a.gear.name) {
+        map.set(a.gear.id, a.gear.name);
+      }
+    }
+    return map;
+  }, [allActivitiesWithGear]);
 
   // Calculate stats from activities
-  const activityStats = React.useMemo(() => calculateGearStats(activities), [activities]);
+  const activityStats = React.useMemo(() => calculateGearStats(allActivitiesWithGear), [allActivitiesWithGear]);
 
   // Fetch gear details from Strava API
   React.useEffect(() => {
@@ -131,9 +190,11 @@ export default function GearPage() {
     const list: GearStats[] = [];
     for (const [gearId, stats] of activityStats) {
       const detail = gearDetails.get(gearId);
+      // Prefer API gear name, then cached gear name, then fallback to gearId
+      const name = detail?.name || gearNameFromCache.get(gearId) || gearId;
       list.push({
         gearId,
-        name: detail?.name || gearId,
+        name,
         stravaDistance: detail?.distance || 0,
         activityDistance: stats.activityDistance,
         activityTime: stats.activityTime,
@@ -144,7 +205,7 @@ export default function GearPage() {
     // Sort by activity distance descending
     list.sort((a, b) => b.activityDistance - a.activityDistance);
     return list;
-  }, [activityStats, gearDetails]);
+  }, [activityStats, gearDetails, gearNameFromCache]);
 
   const hasData = gearStats.length > 0;
 

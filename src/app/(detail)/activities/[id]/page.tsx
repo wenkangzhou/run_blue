@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getCachedActivity, setCachedActivity } from '@/lib/cache';
+import { useActivitiesStore } from '@/store/activities';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { SplitsTable } from '@/components/SplitsTable';
@@ -135,6 +136,20 @@ export default function ActivityDetailPage() {
       
       // Cache the fresh data
       setCachedActivity(activityId, activityData, streamsData);
+      
+      // Sync gear data back to activities store so /gear page can use it
+      const store = useActivitiesStore.getState();
+      const storeActivities = store.activities;
+      const idx = storeActivities.findIndex((a) => a.id === activityId);
+      if (idx >= 0) {
+        const updated = [...storeActivities];
+        updated[idx] = {
+          ...updated[idx],
+          gear_id: activityData.gear_id,
+          gear: activityData.gear,
+        };
+        store.setActivities(updated);
+      }
     } catch (err: any) {
       console.error('Failed to refresh activity:', err);
       
