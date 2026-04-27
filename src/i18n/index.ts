@@ -63,6 +63,11 @@ const resources = {
         officialDistance: 'Official Distance',
         emptyTitle: 'No shoe data yet',
         emptyHint: 'Add shoes to your Strava activities to see statistics',
+        basedOnActivities: 'Based on {{count}} runs',
+        hasMore: 'More data available',
+        loadMore: 'Load More',
+        loadingProgress: 'Loading {{current}}/{{total}}',
+        loadFailed: 'Failed to load, please retry',
       },
       profile: {
         title: 'Runner Profile',
@@ -366,6 +371,11 @@ const resources = {
         officialDistance: '官方里程',
         emptyTitle: '暂无跑鞋数据',
         emptyHint: '在 Strava 中为活动添加跑鞋装备后即可查看统计',
+        basedOnActivities: '基于 {{count}} 条跑步记录',
+        hasMore: '还有更多数据',
+        loadMore: '加载更多',
+        loadingProgress: '加载中 {{current}}/{{total}}',
+        loadFailed: '加载失败，请重试',
       },
       profile: {
         title: '跑者档案',

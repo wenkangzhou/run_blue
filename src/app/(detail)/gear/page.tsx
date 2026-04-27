@@ -4,19 +4,22 @@ import React from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useActivitiesStore } from '@/store/activities';
+import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity } from '@/types';
-import { ChevronLeft, Footprints, Clock, Route, TrendingUp, Zap } from 'lucide-react';
+import { getActivities } from '@/lib/strava';
+import { ChevronLeft, Footprints, Clock, Route, TrendingUp, Zap, Loader2, Download } from 'lucide-react';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
 
 interface GearStats {
   gearId: string;
   name: string;
-  stravaDistance: number; // official total distance from Strava
-  activityDistance: number; // sum from our activities
+  stravaDistance: number;
+  activityDistance: number;
   activityTime: number;
   activityCount: number;
   avgPace: number;
+  retired: boolean;
 }
 
 interface StravaGear {
@@ -33,14 +36,16 @@ interface CachedActivityEntry {
   timestamp: number;
 }
 
+const CACHE_PREFIX = 'run_blue_cache_activity_';
+const MAX_AUTO_LOAD_PAGES = 5; // max 5 pages = 1000 activities
+
 /** Scan localStorage for activity caches that contain gear data. */
 function scanActivityCaches(): StravaActivity[] {
   if (typeof window === 'undefined') return [];
   const activities: StravaActivity[] = [];
-  const prefix = 'run_blue_cache_activity_';
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (!key || !key.startsWith(prefix)) continue;
+    if (!key || !key.startsWith(CACHE_PREFIX)) continue;
     try {
       const data: CachedActivityEntry = JSON.parse(localStorage.getItem(key)!);
       if (data?.activity && (data.activity.gear_id || data.activity.gear)) {
@@ -53,14 +58,12 @@ function scanActivityCaches(): StravaActivity[] {
   return activities;
 }
 
-function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance'>> {
+function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>> {
   const stats = new Map<string, { distance: number; time: number; count: number; speedSum: number; speedCount: number }>();
 
   for (const a of activities) {
-    // Use gear_id or fall back to gear.id from detailed activity data
     const gearId = a.gear_id || a.gear?.id;
     if (!gearId) continue;
-    // Only count running activities for shoe stats
     if (a.sport_type !== 'Run' && a.type !== 'Run') continue;
 
     const s = stats.get(gearId) || { distance: 0, time: 0, count: 0, speedSum: 0, speedCount: 0 };
@@ -74,7 +77,7 @@ function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<Gear
     stats.set(gearId, s);
   }
 
-  const result = new Map<string, Omit<GearStats, 'name' | 'stravaDistance'>>();
+  const result = new Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>>();
   for (const [gearId, s] of stats) {
     result.set(gearId, {
       gearId,
@@ -89,25 +92,32 @@ function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<Gear
 
 export default function GearPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const activities = useActivitiesStore((s) => s.activities);
+  const hasMore = useActivitiesStore((s) => s.hasMore);
+  const loadedPages = useActivitiesStore((s) => s.loadedPages);
+  const appendActivities = useActivitiesStore((s) => s.appendActivities);
+  const setHasMore = useActivitiesStore((s) => s.setHasMore);
+  const setLoadedPages = useActivitiesStore((s) => s.setLoadedPages);
+  const setLastFetchedAt = useActivitiesStore((s) => s.setLastFetchedAt);
+
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [loadProgress, setLoadProgress] = React.useState<{ current: number; total: number } | null>(null);
 
-  // Merge activities from store + activity caches (which may have gear data from detail pages)
+  // Merge activities from store + activity caches
   const allActivitiesWithGear = React.useMemo(() => {
     const cachedActivities = scanActivityCaches();
-    // Start with cached activities (they have detailed gear data)
     const merged = new Map<number, StravaActivity>();
     for (const a of cachedActivities) {
       merged.set(a.id, a);
     }
-    // Overlay with store activities (they have the full list)
     for (const a of activities) {
       const existing = merged.get(a.id);
-      // Prefer store activity unless cache has gear data that store lacks
       if (existing && (existing.gear_id || existing.gear) && !(a.gear_id || a.gear)) {
-        // keep cache version
+        // keep cache version which has gear data
       } else {
         merged.set(a.id, a);
       }
@@ -115,7 +125,6 @@ export default function GearPage() {
     return Array.from(merged.values());
   }, [activities]);
 
-  // Extract unique gear IDs from running activities
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
     for (const a of allActivitiesWithGear) {
@@ -127,7 +136,6 @@ export default function GearPage() {
     return Array.from(ids);
   }, [allActivitiesWithGear]);
 
-  // Also build gear name lookup from cached activities that have gear objects
   const gearNameFromCache = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const a of allActivitiesWithGear) {
@@ -138,14 +146,11 @@ export default function GearPage() {
     return map;
   }, [allActivitiesWithGear]);
 
-  // Calculate stats from activities
   const activityStats = React.useMemo(() => calculateGearStats(allActivitiesWithGear), [allActivitiesWithGear]);
 
   // Fetch gear details from Strava API
   React.useEffect(() => {
     if (gearIds.length === 0) return;
-
-    // Skip fetch if we already have all gear details cached
     const missingIds = gearIds.filter((id) => !gearDetails.has(id));
     if (missingIds.length === 0) return;
 
@@ -174,9 +179,7 @@ export default function GearPage() {
           });
         }
       } catch (err: any) {
-        if (!cancelled) {
-          setError(err.message);
-        }
+        if (!cancelled) setError(err.message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -185,29 +188,75 @@ export default function GearPage() {
     return () => { cancelled = true; };
   }, [gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Build final gear stats list
+  // Load more activities to complete gear stats
+  const handleLoadMore = React.useCallback(async () => {
+    if (!user?.accessToken || isLoadingMore) return;
+    setIsLoadingMore(true);
+    setError(null);
+
+    let currentPage = loadedPages > 0 ? loadedPages + 1 : 1;
+    const targetPage = currentPage + MAX_AUTO_LOAD_PAGES - 1;
+    let localHasMore = hasMore;
+
+    try {
+      while (localHasMore && currentPage <= targetPage) {
+        setLoadProgress({ current: currentPage - (loadedPages > 0 ? loadedPages : 0), total: MAX_AUTO_LOAD_PAGES });
+        const newActivities = await getActivities(user.accessToken, currentPage, 200);
+
+        if (newActivities.length === 0) {
+          setHasMore(false);
+          localHasMore = false;
+          break;
+        }
+
+        appendActivities(newActivities);
+        setLoadedPages(currentPage);
+        localHasMore = newActivities.length === 200;
+        setHasMore(localHasMore);
+        setLastFetchedAt(Date.now());
+        currentPage++;
+      }
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('429')) {
+        setError('rate_limited');
+      } else if (msg.includes('401')) {
+        setError('token_expired');
+      } else {
+        setError('load_failed');
+      }
+    } finally {
+      setIsLoadingMore(false);
+      setLoadProgress(null);
+    }
+  }, [user?.accessToken, isLoadingMore, loadedPages, hasMore, appendActivities, setHasMore, setLoadedPages, setLastFetchedAt]);
+
+  // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
     const list: GearStats[] = [];
     for (const [gearId, stats] of activityStats) {
       const detail = gearDetails.get(gearId);
-      // Prefer API gear name, then cached gear name, then fallback to gearId
+      if (detail?.retired) continue; // skip retired shoes
       const name = detail?.name || gearNameFromCache.get(gearId) || gearId;
       list.push({
         gearId,
         name,
         stravaDistance: detail?.distance || 0,
+        retired: detail?.retired || false,
         activityDistance: stats.activityDistance,
         activityTime: stats.activityTime,
         activityCount: stats.activityCount,
         avgPace: stats.avgPace,
       });
     }
-    // Sort by activity distance descending
     list.sort((a, b) => b.activityDistance - a.activityDistance);
     return list;
   }, [activityStats, gearDetails, gearNameFromCache]);
 
   const hasData = gearStats.length > 0;
+  const totalRunningActivities = allActivitiesWithGear.filter(
+    (a) => a.sport_type === 'Run' || a.type === 'Run'
+  ).length;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -227,23 +276,55 @@ export default function GearPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Info bar */}
+        <div className="mb-4 flex items-center justify-between bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 px-4 py-3">
+          <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+            {t('gear.basedOnActivities', '基于 {{count}} 条跑步记录', { count: totalRunningActivities })}
+            {hasMore && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                ({t('gear.hasMore', '还有更多数据')})
+              </span>
+            )}
+          </div>
+          {hasMore && !isLoadingMore && (
+            <button
+              onClick={handleLoadMore}
+              className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors"
+            >
+              <Download size={12} />
+              {t('gear.loadMore', '加载更多')}
+            </button>
+          )}
+          {isLoadingMore && loadProgress && (
+            <div className="flex items-center gap-2">
+              <Loader2 size={14} className="animate-spin text-blue-500" />
+              <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
+                {t('gear.loadingProgress', '加载中 {{current}}/{{total}}', {
+                  current: loadProgress.current,
+                  total: loadProgress.total,
+                })}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mb-4 font-mono text-xs text-red-500 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 px-4 py-2">
+            {error === 'token_expired'
+              ? t('auth.sessionExpired')
+              : error === 'rate_limited'
+              ? t('errors.rateLimitedDesc')
+              : t('gear.loadFailed', '加载失败，请重试')}
+          </div>
+        )}
+
         {loading && gearStats.length === 0 && (
           <div className="text-center py-12 font-mono text-sm text-zinc-500">
             {t('common.loading')}
           </div>
         )}
 
-        {error && !hasData && (
-          <div className="text-center py-12 font-mono text-sm text-red-500">
-            {error === 'token_expired'
-              ? t('auth.sessionExpired')
-              : error === 'rate_limited'
-              ? t('errors.rateLimitedDesc')
-              : t('errors.generic')}
-          </div>
-        )}
-
-        {!loading && !hasData && (
+        {!loading && !hasData && !isLoadingMore && (
           <div className="text-center py-16">
             <Footprints size={48} className="mx-auto mb-4 text-zinc-300 dark:text-zinc-600" />
             <p className="font-mono text-base font-bold text-zinc-600 dark:text-zinc-400">
