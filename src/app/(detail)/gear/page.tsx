@@ -11,6 +11,7 @@ import {
   getGearCache,
   mergeIntoGearCache,
   getGearCacheActivities,
+  setGearCache,
   LightGearActivity,
 } from '@/lib/gearCache';
 import {
@@ -141,7 +142,7 @@ export default function GearPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoadingAll, setIsLoadingAll] = React.useState(false);
-  const [loadProgress, setLoadProgress] = React.useState<{ current: number; total: number } | null>(null);
+  const [loadProgress, setLoadProgress] = React.useState<{ current: number } | null>(null);
 
   // Merge all data sources: gear cache > activity caches > activities store
   const allActivities = React.useMemo((): UnifiedActivity[] => {
@@ -240,55 +241,70 @@ export default function GearPage() {
     setIsLoadingAll(true);
     setError(null);
 
-    let currentPage = loadedPages > 0 ? loadedPages + 1 : 1;
+    // Determine starting page from multiple sources
+    const gearCache = getGearCache();
+    const knownPages = Math.max(gearCache?.loadedPages || 0, loadedPages);
+    let currentPage: number;
+    if (knownPages > 0) {
+      currentPage = knownPages + 1;
+    } else if (activities.length > 0) {
+      // Data restored from persist but loadedPages not set — estimate from count
+      currentPage = Math.ceil(activities.length / 200) + 1;
+    } else {
+      currentPage = 1;
+    }
+
+    console.log(`[Gear] Loading all from page ${currentPage}, knownPages=${knownPages}, storeActivities=${activities.length}`);
+
     let localHasMore = hasMore;
     let pagesLoaded = 0;
+    let totalNew = 0;
 
     try {
       while (localHasMore) {
         pagesLoaded++;
-        setLoadProgress({ current: pagesLoaded, total: pagesLoaded + 3 }); // show dynamic progress
+        setLoadProgress({ current: pagesLoaded });
+        console.log(`[Gear] Fetching page ${currentPage}...`);
         const newActivities = await getActivities(user.accessToken, currentPage, 200);
+        console.log(`[Gear] Page ${currentPage} returned ${newActivities.length} activities`);
 
         if (newActivities.length === 0) {
           localHasMore = false;
-          useActivitiesStore.getState().batchUpdate({ hasMore: false, loadedPages: currentPage });
+          useActivitiesStore.getState().batchUpdate({ hasMore: false, loadedPages: currentPage - 1 });
+          setGearCache({ loadedPages: currentPage - 1, hasMore: false, lastFetchedAt: Date.now() });
           break;
         }
 
-        // Update activities store (single persist write)
+        // Update store and gear cache
         useActivitiesStore.getState().appendActivitiesBatch(
           newActivities,
           currentPage,
           newActivities.length === 200,
           Date.now()
         );
-
-        // Also save lightweight data to gear cache (independent storage, no 250 limit)
         mergeIntoGearCache(newActivities);
+        totalNew += newActivities.length;
 
         localHasMore = newActivities.length === 200;
         currentPage++;
 
-        // Small delay to avoid hitting rate limits
         if (localHasMore) {
           await new Promise((r) => setTimeout(r, LOAD_DELAY_MS));
         }
       }
+      console.log(`[Gear] Done. Pages=${pagesLoaded}, newActivities=${totalNew}`);
+      setGearCache({ loadedPages: currentPage - 1, hasMore: localHasMore, lastFetchedAt: Date.now() });
     } catch (err: any) {
+      console.error('[Gear] Load failed:', err);
       const msg = err?.message || '';
-      if (msg.includes('429')) {
-        setError('rate_limited');
-      } else if (msg.includes('401')) {
-        setError('token_expired');
-      } else {
-        setError('load_failed');
-      }
+      if (msg.includes('429')) setError('rate_limited');
+      else if (msg.includes('401')) setError('token_expired');
+      else setError('load_failed');
     } finally {
       setIsLoadingAll(false);
       setLoadProgress(null);
     }
-  }, [user?.accessToken, isLoadingAll, loadedPages, hasMore]);
+  }, [user?.accessToken, isLoadingAll, loadedPages, hasMore, activities.length]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
@@ -336,31 +352,29 @@ export default function GearPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Info bar */}
-        <div className="mb-4 flex items-center justify-between bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 px-4 py-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2 justify-between bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 px-4 py-3">
           <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
             {t('gear.basedOnActivities', '基于 {{count}} 条跑步记录', { count: totalRunningActivities })}
             {hasMore && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400">
-                ({t('gear.hasMore', '还有更多数据')})
+              <span className="ml-2 text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                ({t('gear.hasMore', '还有更多')})
               </span>
             )}
           </div>
           {hasMore && !isLoadingAll && (
             <button
               onClick={handleLoadAll}
-              className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors"
+              className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors shrink-0"
             >
               <Download size={12} />
-              {t('gear.loadAll', '加载全部历史数据')}
+              {t('gear.loadAll', '加载全部')}
             </button>
           )}
           {isLoadingAll && loadProgress && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Loader2 size={14} className="animate-spin text-blue-500" />
-              <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
-                {t('gear.loadingProgress', '已加载 {{current}} 页', {
-                  current: loadProgress.current,
-                })}
+              <span className="font-mono text-xs text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                {t('gear.loadingProgress', '已加载 {{current}} 页', { current: loadProgress.current })}
               </span>
             </div>
           )}
