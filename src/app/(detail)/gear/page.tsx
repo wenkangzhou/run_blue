@@ -7,7 +7,22 @@ import { useActivitiesStore } from '@/store/activities';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
-import { ChevronLeft, Footprints, Clock, Route, TrendingUp, Zap, Loader2, Download } from 'lucide-react';
+import {
+  getGearCache,
+  mergeIntoGearCache,
+  getGearCacheActivities,
+  LightGearActivity,
+} from '@/lib/gearCache';
+import {
+  ChevronLeft,
+  Footprints,
+  Clock,
+  Route,
+  TrendingUp,
+  Zap,
+  Loader2,
+  Download,
+} from 'lucide-react';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
 
@@ -37,7 +52,7 @@ interface CachedActivityEntry {
 }
 
 const CACHE_PREFIX = 'run_blue_cache_activity_';
-const MAX_AUTO_LOAD_PAGES = 5; // max 5 pages = 1000 activities
+const LOAD_DELAY_MS = 300; // delay between pages to avoid rate limiting
 
 /** Scan localStorage for activity caches that contain gear data. */
 function scanActivityCaches(): StravaActivity[] {
@@ -52,13 +67,38 @@ function scanActivityCaches(): StravaActivity[] {
         activities.push(data.activity);
       }
     } catch {
-      // ignore malformed cache entries
+      // ignore
     }
   }
   return activities;
 }
 
-function calculateGearStats(activities: StravaActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>> {
+/** Unified activity interface for gear stats calculation. */
+interface UnifiedActivity {
+  id: number;
+  distance: number;
+  moving_time: number;
+  type: string;
+  sport_type: string;
+  gear_id: string | null;
+  gear?: { id: string; name: string; distance: number };
+  average_speed: number;
+}
+
+function toUnified(a: StravaActivity | LightGearActivity): UnifiedActivity {
+  return {
+    id: a.id,
+    distance: a.distance,
+    moving_time: a.moving_time,
+    type: a.type,
+    sport_type: a.sport_type,
+    gear_id: a.gear_id || a.gear?.id || null,
+    gear: a.gear,
+    average_speed: a.average_speed,
+  };
+}
+
+function calculateGearStats(activities: UnifiedActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>> {
   const stats = new Map<string, { distance: number; time: number; count: number; speedSum: number; speedCount: number }>();
 
   for (const a of activities) {
@@ -96,54 +136,63 @@ export default function GearPage() {
   const activities = useActivitiesStore((s) => s.activities);
   const hasMore = useActivitiesStore((s) => s.hasMore);
   const loadedPages = useActivitiesStore((s) => s.loadedPages);
-  const appendActivitiesBatch = useActivitiesStore((s) => s.appendActivitiesBatch);
 
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [isLoadingAll, setIsLoadingAll] = React.useState(false);
   const [loadProgress, setLoadProgress] = React.useState<{ current: number; total: number } | null>(null);
 
-  // Merge activities from store + activity caches
-  const allActivitiesWithGear = React.useMemo(() => {
-    const cachedActivities = scanActivityCaches();
-    const merged = new Map<number, StravaActivity>();
-    for (const a of cachedActivities) {
-      merged.set(a.id, a);
+  // Merge all data sources: gear cache > activity caches > activities store
+  const allActivities = React.useMemo((): UnifiedActivity[] => {
+    const merged = new Map<number, UnifiedActivity>();
+
+    // 1. Gear cache (lightweight, can hold 1000+ activities)
+    for (const a of getGearCacheActivities()) {
+      merged.set(a.id, toUnified(a));
     }
+
+    // 2. Activity caches from detail pages
+    for (const a of scanActivityCaches()) {
+      merged.set(a.id, toUnified(a));
+    }
+
+    // 3. Activities store
     for (const a of activities) {
       const existing = merged.get(a.id);
+      // Prefer existing if it has gear data that store activity lacks
       if (existing && (existing.gear_id || existing.gear) && !(a.gear_id || a.gear)) {
-        // keep cache version which has gear data
+        // keep existing
       } else {
-        merged.set(a.id, a);
+        merged.set(a.id, toUnified(a));
       }
     }
+
     return Array.from(merged.values());
   }, [activities]);
 
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
-    for (const a of allActivitiesWithGear) {
+    for (const a of allActivities) {
       const gearId = a.gear_id || a.gear?.id;
       if (gearId && (a.sport_type === 'Run' || a.type === 'Run')) {
         ids.add(gearId);
       }
     }
     return Array.from(ids);
-  }, [allActivitiesWithGear]);
+  }, [allActivities]);
 
   const gearNameFromCache = React.useMemo(() => {
     const map = new Map<string, string>();
-    for (const a of allActivitiesWithGear) {
+    for (const a of allActivities) {
       if (a.gear?.id && a.gear.name) {
         map.set(a.gear.id, a.gear.name);
       }
     }
     return map;
-  }, [allActivitiesWithGear]);
+  }, [allActivities]);
 
-  const activityStats = React.useMemo(() => calculateGearStats(allActivitiesWithGear), [allActivitiesWithGear]);
+  const activityStats = React.useMemo(() => calculateGearStats(allActivities), [allActivities]);
 
   // Fetch gear details from Strava API
   React.useEffect(() => {
@@ -185,19 +234,20 @@ export default function GearPage() {
     return () => { cancelled = true; };
   }, [gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load more activities to complete gear stats
-  const handleLoadMore = React.useCallback(async () => {
-    if (!user?.accessToken || isLoadingMore) return;
-    setIsLoadingMore(true);
+  // Load ALL remaining activities (no page limit)
+  const handleLoadAll = React.useCallback(async () => {
+    if (!user?.accessToken || isLoadingAll) return;
+    setIsLoadingAll(true);
     setError(null);
 
     let currentPage = loadedPages > 0 ? loadedPages + 1 : 1;
-    const targetPage = currentPage + MAX_AUTO_LOAD_PAGES - 1;
     let localHasMore = hasMore;
+    let pagesLoaded = 0;
 
     try {
-      while (localHasMore && currentPage <= targetPage) {
-        setLoadProgress({ current: currentPage - (loadedPages > 0 ? loadedPages : 0), total: MAX_AUTO_LOAD_PAGES });
+      while (localHasMore) {
+        pagesLoaded++;
+        setLoadProgress({ current: pagesLoaded, total: pagesLoaded + 3 }); // show dynamic progress
         const newActivities = await getActivities(user.accessToken, currentPage, 200);
 
         if (newActivities.length === 0) {
@@ -206,9 +256,24 @@ export default function GearPage() {
           break;
         }
 
-        appendActivitiesBatch(newActivities, currentPage, newActivities.length === 200, Date.now());
+        // Update activities store (single persist write)
+        useActivitiesStore.getState().appendActivitiesBatch(
+          newActivities,
+          currentPage,
+          newActivities.length === 200,
+          Date.now()
+        );
+
+        // Also save lightweight data to gear cache (independent storage, no 250 limit)
+        mergeIntoGearCache(newActivities);
+
         localHasMore = newActivities.length === 200;
         currentPage++;
+
+        // Small delay to avoid hitting rate limits
+        if (localHasMore) {
+          await new Promise((r) => setTimeout(r, LOAD_DELAY_MS));
+        }
       }
     } catch (err: any) {
       const msg = err?.message || '';
@@ -220,17 +285,17 @@ export default function GearPage() {
         setError('load_failed');
       }
     } finally {
-      setIsLoadingMore(false);
+      setIsLoadingAll(false);
       setLoadProgress(null);
     }
-  }, [user?.accessToken, isLoadingMore, loadedPages, hasMore, appendActivitiesBatch]);
+  }, [user?.accessToken, isLoadingAll, loadedPages, hasMore]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
     const list: GearStats[] = [];
     for (const [gearId, stats] of activityStats) {
       const detail = gearDetails.get(gearId);
-      if (detail?.retired) continue; // skip retired shoes
+      if (detail?.retired) continue;
       const name = detail?.name || gearNameFromCache.get(gearId) || gearId;
       list.push({
         gearId,
@@ -248,7 +313,7 @@ export default function GearPage() {
   }, [activityStats, gearDetails, gearNameFromCache]);
 
   const hasData = gearStats.length > 0;
-  const totalRunningActivities = allActivitiesWithGear.filter(
+  const totalRunningActivities = allActivities.filter(
     (a) => a.sport_type === 'Run' || a.type === 'Run'
   ).length;
 
@@ -280,22 +345,21 @@ export default function GearPage() {
               </span>
             )}
           </div>
-          {hasMore && !isLoadingMore && (
+          {hasMore && !isLoadingAll && (
             <button
-              onClick={handleLoadMore}
+              onClick={handleLoadAll}
               className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors"
             >
               <Download size={12} />
-              {t('gear.loadMore', '加载更多')}
+              {t('gear.loadAll', '加载全部历史数据')}
             </button>
           )}
-          {isLoadingMore && loadProgress && (
+          {isLoadingAll && loadProgress && (
             <div className="flex items-center gap-2">
               <Loader2 size={14} className="animate-spin text-blue-500" />
               <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
-                {t('gear.loadingProgress', '加载中 {{current}}/{{total}}', {
+                {t('gear.loadingProgress', '已加载 {{current}} 页', {
                   current: loadProgress.current,
-                  total: loadProgress.total,
                 })}
               </span>
             </div>
@@ -318,7 +382,7 @@ export default function GearPage() {
           </div>
         )}
 
-        {!loading && !hasData && !isLoadingMore && (
+        {!loading && !hasData && !isLoadingAll && (
           <div className="text-center py-16">
             <Footprints size={48} className="mx-auto mb-4 text-zinc-300 dark:text-zinc-600" />
             <p className="font-mono text-base font-bold text-zinc-600 dark:text-zinc-400">
