@@ -34,6 +34,8 @@ function toLightActivity(a: StravaActivity): StravaActivity {
     private: a.private,
     visibility: a.visibility,
     flagged: a.flagged,
+    gear_id: a.gear_id,
+    gear: a.gear ? { id: a.gear.id, name: a.gear.name, distance: a.gear.distance } : undefined,
     average_speed: a.average_speed,
     max_speed: a.max_speed,
     average_cadence: a.average_cadence,

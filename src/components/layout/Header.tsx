@@ -8,7 +8,7 @@ import { PixelButton } from '@/components/ui';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned } from 'lucide-react';
+import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned, Footprints, Activity, User } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -36,19 +36,21 @@ export function Header() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-5">
             {isAuthenticated && (
               <>
                 <Link
                   href="/activities"
-                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors inline-flex items-center gap-1"
                 >
+                  <Activity size={14} />
                   {t('nav.activities')}
                 </Link>
                 <Link
                   href="/plans"
-                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="font-mono text-sm font-bold uppercase hover:text-blue-600 dark:hover:text-blue-400 transition-colors inline-flex items-center gap-1"
                 >
+                  <Dumbbell size={14} />
                   {t('trainingPlan.title', '训练计划')}
                 </Link>
                 <Link
@@ -64,6 +66,13 @@ export function Header() {
                 >
                   <MapPinned size={14} />
                   {t('nav.routes', '路线')}
+                </Link>
+                <Link
+                  href="/gear"
+                  className="font-mono text-sm font-bold uppercase hover:text-orange-600 dark:hover:text-orange-400 transition-colors inline-flex items-center gap-1"
+                >
+                  <Footprints size={14} />
+                  {t('nav.gear', '跑鞋')}
                 </Link>
                 <Link
                   href="/activities?wrapped=1"
@@ -95,7 +104,7 @@ export function Header() {
                   onClick={() => setIsProfileOpen(true)}
                   title={t('profile.title')}
                 >
-                  <Settings size={18} />
+                  <User size={18} />
                 </PixelButton>
                 {user?.image && (
                   <img
@@ -137,49 +146,60 @@ export function Header() {
                 <>
                   <Link
                     href="/activities"
-                    className="font-mono text-sm font-bold uppercase py-2"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
+                    <Activity size={16} />
                     {t('nav.activities')}
                   </Link>
                   <Link
                     href="/plans"
-                    className="font-mono text-sm font-bold uppercase py-2"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
+                    <Dumbbell size={16} />
                     {t('trainingPlan.title', '训练计划')}
                   </Link>
                   <Link
                     href="/stats"
-                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-1"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <BarChart3 size={14} />
+                    <BarChart3 size={16} />
                     {t('nav.stats', '统计')}
                   </Link>
                   <Link
                     href="/routes"
-                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-1"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <MapPinned size={14} />
+                    <MapPinned size={16} />
                     {t('nav.routes', '路线')}
                   </Link>
                   <Link
-                    href="/activities?wrapped=1"
-                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-1"
+                    href="/gear"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <Trophy size={14} />
+                    <Footprints size={16} />
+                    {t('nav.gear', '跑鞋')}
+                  </Link>
+                  <Link
+                    href="/activities?wrapped=1"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Trophy size={16} />
                     {t('wrapped.title', '年度回顾')}
                   </Link>
                   <button
-                    className="font-mono text-sm font-bold uppercase py-2 text-left"
+                    className="font-mono text-sm font-bold uppercase py-2 text-left inline-flex items-center gap-2"
                     onClick={() => {
                       setIsMenuOpen(false);
                       setIsProfileOpen(true);
                     }}
                   >
+                    <User size={16} />
                     {t('profile.title')}
                   </button>
                 </>
