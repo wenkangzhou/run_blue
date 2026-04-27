@@ -192,14 +192,22 @@ export const useActivitiesStore = create<ActivitiesState>()(
     {
       name: 'activities-storage',
       storage: safeLocalStorage,
-      partialize: (state) => ({
-        // Persist at most 250 activities to stay well under localStorage quota.
-        activities: state.activities.slice(0, 250).map(toLightActivity),
-        totalLoaded: Math.min(state.totalLoaded, 250),
-        lastFetchedAt: state.lastFetchedAt,
-        loadedPages: state.loadedPages,
-        latestActivityId: state.latestActivityId,
-      }),
+      partialize: (state) => {
+        const activities = state.activities.slice(0, 250).map(toLightActivity);
+        // Sync loadedPages with the truncated activity count so it stays accurate
+        // after persist reload (prevents gear page from jumping to a wrong page).
+        const syncedLoadedPages = Math.min(
+          state.loadedPages,
+          Math.max(1, Math.ceil(activities.length / 200))
+        );
+        return {
+          activities,
+          totalLoaded: Math.min(state.totalLoaded, 250),
+          lastFetchedAt: state.lastFetchedAt,
+          loadedPages: syncedLoadedPages,
+          latestActivityId: state.latestActivityId,
+        };
+      },
     }
   )
 );

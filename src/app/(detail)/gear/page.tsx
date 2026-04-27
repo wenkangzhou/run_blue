@@ -241,20 +241,21 @@ export default function GearPage() {
     setIsLoadingAll(true);
     setError(null);
 
-    // Determine starting page from multiple sources
+    // Determine starting page.
+    // Gear cache holds the most accurate loadedPages because it is not truncated.
     const gearCache = getGearCache();
-    const knownPages = Math.max(gearCache?.loadedPages || 0, loadedPages);
     let currentPage: number;
-    if (knownPages > 0) {
-      currentPage = knownPages + 1;
+    if (gearCache && gearCache.loadedPages > 0) {
+      currentPage = gearCache.loadedPages + 1;
+    } else if (loadedPages > 0) {
+      currentPage = loadedPages + 1;
     } else if (activities.length > 0) {
-      // Data restored from persist but loadedPages not set — estimate from count
       currentPage = Math.ceil(activities.length / 200) + 1;
     } else {
       currentPage = 1;
     }
 
-    console.log(`[Gear] Loading all from page ${currentPage}, knownPages=${knownPages}, storeActivities=${activities.length}`);
+    console.log(`[Gear] Loading all from page ${currentPage}, gearCachePages=${gearCache?.loadedPages ?? 0}, storeLoadedPages=${loadedPages}, storeActivities=${activities.length}`);
 
     let localHasMore = hasMore;
     let pagesLoaded = 0;

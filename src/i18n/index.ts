@@ -67,7 +67,7 @@ const resources = {
         hasMore: 'more',
         loadMore: 'Load More',
         loadAll: 'Load All History',
-        loadingProgress: 'Loading {{current}}/{{total}}',
+        loadingProgress: 'Loaded {{current}} pages',
         loadFailed: 'Failed to load, please retry',
       },
       profile: {
@@ -376,7 +376,7 @@ const resources = {
         hasMore: '还有更多',
         loadMore: '加载更多',
         loadAll: '加载全部历史数据',
-        loadingProgress: '加载中 {{current}}/{{total}}',
+        loadingProgress: '已加载 {{current}} 页',
         loadFailed: '加载失败，请重试',
       },
       profile: {
