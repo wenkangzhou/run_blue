@@ -12,6 +12,7 @@ import {
   mergeIntoGearCache,
   getGearCacheActivities,
   setGearCache,
+  clearGearCache,
   LightGearActivity,
 } from '@/lib/gearCache';
 import {
@@ -143,6 +144,7 @@ export default function GearPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [isLoadingAll, setIsLoadingAll] = React.useState(false);
   const [loadProgress, setLoadProgress] = React.useState<{ current: number } | null>(null);
+  const [resetCounter, setResetCounter] = React.useState(0); // force re-render after cache clear
 
   // Merge all data sources: gear cache > activity caches > activities store
   const allActivities = React.useMemo((): UnifiedActivity[] => {
@@ -170,7 +172,8 @@ export default function GearPage() {
     }
 
     return Array.from(merged.values());
-  }, [activities]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activities, resetCounter]);
 
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -242,7 +245,6 @@ export default function GearPage() {
     setError(null);
 
     // Determine starting page.
-    // Gear cache holds the most accurate loadedPages because it is not truncated.
     const gearCache = getGearCache();
     let currentPage: number;
     if (gearCache && gearCache.loadedPages > 0) {
@@ -252,6 +254,14 @@ export default function GearPage() {
     } else if (activities.length > 0) {
       currentPage = Math.ceil(activities.length / 200) + 1;
     } else {
+      currentPage = 1;
+    }
+
+    // Sanity check: if loadedPages looks way off compared to actual activity count,
+    // start from page 1 to avoid skipping data due to stale cache.
+    const estimatedPages = Math.max(1, Math.ceil(activities.length / 200));
+    if (currentPage > estimatedPages + 2) {
+      console.warn(`[Gear] loadedPages (${currentPage - 1}) seems off for ${activities.length} activities. Starting from page 1.`);
       currentPage = 1;
     }
 
@@ -363,13 +373,26 @@ export default function GearPage() {
             )}
           </div>
           {hasMore && !isLoadingAll && (
-            <button
-              onClick={handleLoadAll}
-              className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors shrink-0"
-            >
-              <Download size={12} />
-              {t('gear.loadAll', '加载全部')}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleLoadAll}
+                className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors shrink-0"
+              >
+                <Download size={12} />
+                {t('gear.loadAll', '加载全部')}
+              </button>
+              <button
+                onClick={() => {
+                  clearGearCache();
+                  useActivitiesStore.getState().batchUpdate({ loadedPages: 0, hasMore: true });
+                  setResetCounter((c) => c + 1);
+                }}
+                className="font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline shrink-0"
+                title={t('gear.resetCache', '清除缓存后重新加载')}
+              >
+                {t('gear.resetCache', '重置')}
+              </button>
+            </div>
           )}
           {isLoadingAll && loadProgress && (
             <div className="flex items-center gap-2 shrink-0">

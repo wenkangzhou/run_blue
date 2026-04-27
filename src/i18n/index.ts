@@ -69,6 +69,7 @@ const resources = {
         loadAll: 'Load All History',
         loadingProgress: 'Loaded {{current}} pages',
         loadFailed: 'Failed to load, please retry',
+        resetCache: 'Reset',
       },
       profile: {
         title: 'Runner Profile',
@@ -378,6 +379,7 @@ const resources = {
         loadAll: '加载全部历史数据',
         loadingProgress: '已加载 {{current}} 页',
         loadFailed: '加载失败，请重试',
+        resetCache: '重置',
       },
       profile: {
         title: '跑者档案',
