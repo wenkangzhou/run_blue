@@ -19,8 +19,6 @@ function toLightActivity(a: StravaActivity): StravaActivity {
     sport_type: a.sport_type,
     start_date: a.start_date,
     start_date_local: a.start_date_local,
-    timezone: a.timezone,
-    utc_offset: a.utc_offset,
     start_latlng: a.start_latlng,
     end_latlng: a.end_latlng,
     map: {
@@ -28,12 +26,6 @@ function toLightActivity(a: StravaActivity): StravaActivity {
       polyline: null,
       summary_polyline: a.map?.summary_polyline ?? null,
     },
-    trainer: a.trainer,
-    commute: a.commute,
-    manual: a.manual,
-    private: a.private,
-    visibility: a.visibility,
-    flagged: a.flagged,
     gear_id: a.gear_id,
     gear: a.gear ? { id: a.gear.id, name: a.gear.name, distance: a.gear.distance } : undefined,
     average_speed: a.average_speed,
@@ -43,13 +35,7 @@ function toLightActivity(a: StravaActivity): StravaActivity {
     has_heartrate: a.has_heartrate,
     average_heartrate: a.average_heartrate,
     max_heartrate: a.max_heartrate,
-    heartrate_opt_out: a.heartrate_opt_out,
-    display_hide_heartrate_option: a.display_hide_heartrate_option,
-    elev_high: a.elev_high,
-    elev_low: a.elev_low,
     calories: a.calories,
-    workout_type: a.workout_type,
-    pr_count: a.pr_count,
   } as StravaActivity;
 }
 
@@ -69,6 +55,27 @@ const safeLocalStorage = {
         e instanceof DOMException &&
         (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
       ) {
+        // Attempt to halve activities and retry
+        const activities = value?.state?.activities;
+        if (Array.isArray(activities) && activities.length > 50) {
+          const halved = Math.floor(activities.length / 2);
+          const reduced = {
+            ...value,
+            state: {
+              ...value.state,
+              activities: activities.slice(0, halved),
+            },
+          };
+          try {
+            localStorage.setItem(name, JSON.stringify(reduced));
+            console.warn(
+              `[Persist] Quota exceeded for "${name}". Reduced activities from ${activities.length} to ${halved}.`
+            );
+            return;
+          } catch {
+            // Still failing after halving — fall through to error
+          }
+        }
         console.error(
           `[Persist] localStorage quota exceeded for "${name}". ` +
             `Try clearing site data or reducing cached activities.`
@@ -97,6 +104,12 @@ interface ActivitiesState {
   setActivities: (activities: StravaActivity[]) => void;
   appendActivities: (activities: StravaActivity[]) => void;
   prependActivities: (activities: StravaActivity[]) => void;
+  appendActivitiesBatch: (
+    activities: StravaActivity[],
+    loadedPages: number,
+    hasMore: boolean,
+    lastFetchedAt: number
+  ) => void;
   selectActivity: (activity: StravaActivity | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -105,6 +118,7 @@ interface ActivitiesState {
   setLastFetchedAt: (timestamp: number) => void;
   setLoadedPages: (pages: number) => void;
   setLatestActivityId: (id: number | null) => void;
+  batchUpdate: (patch: Partial<ActivitiesState>) => void;
   clearActivities: () => void;
 }
 
@@ -125,7 +139,6 @@ export const useActivitiesStore = create<ActivitiesState>()(
       setActivities: (activities) => set({ activities }),
       appendActivities: (activities) =>
         set((state) => {
-          // 去重：基于 activity id
           const existingIds = new Set(state.activities.map(a => a.id));
           const newActivities = activities.filter(a => !existingIds.has(a.id));
           return {
@@ -135,12 +148,24 @@ export const useActivitiesStore = create<ActivitiesState>()(
         }),
       prependActivities: (activities) =>
         set((state) => {
-          // 去重：基于 activity id
           const existingIds = new Set(state.activities.map(a => a.id));
           const newActivities = activities.filter(a => !existingIds.has(a.id));
           return {
             activities: [...newActivities, ...state.activities],
             totalLoaded: state.totalLoaded + newActivities.length,
+          };
+        }),
+      /** Batch append + meta update in a single persist write (saves quota). */
+      appendActivitiesBatch: (activities, loadedPages, hasMore, lastFetchedAt) =>
+        set((state) => {
+          const existingIds = new Set(state.activities.map(a => a.id));
+          const newActivities = activities.filter(a => !existingIds.has(a.id));
+          return {
+            activities: [...state.activities, ...newActivities],
+            totalLoaded: state.totalLoaded + newActivities.length,
+            loadedPages,
+            hasMore,
+            lastFetchedAt,
           };
         }),
       selectActivity: (activity) => set({ selectedActivity: activity }),
@@ -151,6 +176,8 @@ export const useActivitiesStore = create<ActivitiesState>()(
       setLastFetchedAt: (timestamp) => set({ lastFetchedAt: timestamp }),
       setLoadedPages: (pages) => set({ loadedPages: pages }),
       setLatestActivityId: (id) => set({ latestActivityId: id }),
+      /** Batch update multiple fields in a single persist write (saves quota). */
+      batchUpdate: (patch) => set((state) => ({ ...state, ...patch })),
       clearActivities: () =>
         set({
           activities: [],
@@ -166,9 +193,9 @@ export const useActivitiesStore = create<ActivitiesState>()(
       name: 'activities-storage',
       storage: safeLocalStorage,
       partialize: (state) => ({
-        // Persist at most 400 activities to stay well under localStorage quota.
-        activities: state.activities.slice(0, 400).map(toLightActivity),
-        totalLoaded: Math.min(state.totalLoaded, 400),
+        // Persist at most 250 activities to stay well under localStorage quota.
+        activities: state.activities.slice(0, 250).map(toLightActivity),
+        totalLoaded: Math.min(state.totalLoaded, 250),
         lastFetchedAt: state.lastFetchedAt,
         loadedPages: state.loadedPages,
         latestActivityId: state.latestActivityId,

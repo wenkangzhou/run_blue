@@ -96,10 +96,7 @@ export default function GearPage() {
   const activities = useActivitiesStore((s) => s.activities);
   const hasMore = useActivitiesStore((s) => s.hasMore);
   const loadedPages = useActivitiesStore((s) => s.loadedPages);
-  const appendActivities = useActivitiesStore((s) => s.appendActivities);
-  const setHasMore = useActivitiesStore((s) => s.setHasMore);
-  const setLoadedPages = useActivitiesStore((s) => s.setLoadedPages);
-  const setLastFetchedAt = useActivitiesStore((s) => s.setLastFetchedAt);
+  const appendActivitiesBatch = useActivitiesStore((s) => s.appendActivitiesBatch);
 
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
@@ -204,16 +201,13 @@ export default function GearPage() {
         const newActivities = await getActivities(user.accessToken, currentPage, 200);
 
         if (newActivities.length === 0) {
-          setHasMore(false);
           localHasMore = false;
+          useActivitiesStore.getState().batchUpdate({ hasMore: false, loadedPages: currentPage });
           break;
         }
 
-        appendActivities(newActivities);
-        setLoadedPages(currentPage);
+        appendActivitiesBatch(newActivities, currentPage, newActivities.length === 200, Date.now());
         localHasMore = newActivities.length === 200;
-        setHasMore(localHasMore);
-        setLastFetchedAt(Date.now());
         currentPage++;
       }
     } catch (err: any) {
@@ -229,7 +223,7 @@ export default function GearPage() {
       setIsLoadingMore(false);
       setLoadProgress(null);
     }
-  }, [user?.accessToken, isLoadingMore, loadedPages, hasMore, appendActivities, setHasMore, setLoadedPages, setLastFetchedAt]);
+  }, [user?.accessToken, isLoadingMore, loadedPages, hasMore, appendActivitiesBatch]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
