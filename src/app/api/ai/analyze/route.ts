@@ -18,10 +18,11 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { activity, streams, userProfilePBs, locale } = body as {
+    const { activity, streams, userProfilePBs, recentActivities, locale } = body as {
       activity: StravaActivity;
       streams: Record<string, any> | null;
       userProfilePBs?: Record<string, number> | null;
+      recentActivities?: StravaActivity[];
       locale?: string;
     };
 
@@ -43,18 +44,18 @@ export async function POST(request: NextRequest) {
     // Extract PBs from current activity's best_efforts if available
     const activityPBs = extractPBsFromActivity(currentActivity);
     
-    // Fetch user's official PBs from Strava stats as fallback
-    const officialPBs = await fetchAthleteStats(accessToken);
+    // Merge priority: user profile PBs > activity PBs
+    const mergedPBs = { ...activityPBs, ...userProfilePBs };
     
-    // Merge priority: user profile PBs > activity PBs > official Strava PBs
-    const mergedPBs = { ...officialPBs, ...activityPBs, ...userProfilePBs };
-    
-    // Fetch user's activities for training profile analysis
-    const recentActivities = await fetchRecentActivities(accessToken, 200);
+    // Use frontend-provided activities to avoid extra Strava API calls
+    // Fallback to fetching from API if not provided (shouldn't happen in normal flow)
+    const historyActivities = recentActivities && recentActivities.length > 0
+      ? recentActivities
+      : await fetchRecentActivities(accessToken, 200);
 
     // Build training profile from history (using merged PBs)
     const trainingProfile = analyzeTrainingHistory(
-      recentActivities,
+      historyActivities,
       currentActivity,
       mergedPBs
     );
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
         physiologyMetrics: trainingProfile.physiologyMetrics,
       },
       classification,
-      officialPBs,
+      officialPBs: mergedPBs,
     });
   } catch (error: any) {
     console.error('AI analyze error:', error);

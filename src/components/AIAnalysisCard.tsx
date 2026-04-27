@@ -20,6 +20,7 @@ import {
   Medal,
 } from 'lucide-react';
 import { getUserProfile, getMergedPBsForAnalysis } from '@/lib/userProfile';
+import { useActivitiesStore } from '@/store/activities';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -44,6 +45,7 @@ const zoneColors: Record<string, string> = {
 
 export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const { t, i18n } = useTranslation();
+  const { activities } = useActivitiesStore();
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [trainingStats, setTrainingStats] = useState<any>(null);
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
@@ -83,7 +85,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       const response = await fetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activity, streams, userProfilePBs, locale: i18n.language }),
+        body: JSON.stringify({ activity, streams, userProfilePBs, recentActivities: activities, locale: i18n.language }),
       });
       
       if (!response.ok) {
