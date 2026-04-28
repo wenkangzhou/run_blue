@@ -297,8 +297,8 @@ export function buildProfessionalPrompt(
       : `\n  "suggestions": ["赛后恢复建议1", "避免立即进行强度训练", "下次比赛准备建议"],`;
   } else {
     prompt += en
-      ? `\n{\n  "summary": "Overall evaluation (120 words max, professional coach tone). Include: (1) what type of workout this was, (2) one sentence performance assessment, (3) one specific highlight or area to watch.",`
-      : `\n{\n  "summary": "总体评价（120字以内，专业教练口吻）。必须包含：(1)本次训练类型判定，(2)一句话表现点评，(3)一个具体亮点或注意点。不要简单复述数据。",`;
+      ? `\n{\n  "summary": "Overall evaluation (80-200 words, professional coach tone). Must include: (1) what type of workout this was and why, (2) a sentence of performance assessment with specific data reference, (3) one concrete highlight or area to watch, (4) brief context from weekly load trend. Do NOT just list numbers—explain what they mean.",`
+      : `\n{\n  "summary": "总体评价（80-200字，专业教练口吻）。必须包含：(1)本次训练类型判定及原因，(2)结合具体数据的一句话表现点评，(3)一个具体亮点或注意点，(4)结合周跑量趋势的简要上下文。不要简单罗列数字——要解释数字背后的意义。",`;
     prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
     prompt += en ? `\n  "recoveryHours": number,` : `\n  "recoveryHours": 数字,`;
     prompt += en
@@ -343,6 +343,9 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- In "suggestions", do NOT mechanically recommend "increase weekly volume to X km". Instead, focus on: (1) if weekly volume spiked, warn about injury risk and recommend rest; (2) if this was a hard session, recommend recovery; (3) give 1-2 specific, actionable technique or pacing tips relevant to THIS workout.`
     : `\n- "suggestions" 中不要机械建议"把周跑量提升到XXkm"。应聚焦：(1)如果本周跑量环比大增，提醒受伤风险并建议休息；(2)如果本次是高强度训练，建议恢复；(3)给出1-2条与本次训练直接相关的技术或配速建议。`;
+  prompt += en
+    ? `\n- Each field must be substantive (at least 30 words for summary, at least 20 words for trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion). Empty or one-sentence responses are NOT acceptable.`
+    : `\n- 每个字段必须有实质内容（summary 至少30字，trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion 至少20字）。空值或一句话敷衍 unacceptable。`;
   if (estimatedPBs['5k'] > 0) {
     const calculated5k = estimatedPBs['5k'];
     const calculated10k = estimatedPBs['10k'];
@@ -395,7 +398,8 @@ export async function analyzeActivity(
           content: prompt,
         },
       ],
-      temperature: 0.6,
+      temperature: 0.8,
+      max_tokens: 4096,
       thinking: {
         type: 'disabled'
       }
