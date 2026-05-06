@@ -8,7 +8,7 @@ import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
 import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
-import { Loader2, RefreshCw, ChevronUp } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronUp, Search, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
@@ -47,6 +47,23 @@ export default function ActivitiesPage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isPeriodShareOpen, setIsPeriodShareOpen] = useState(false);
   const [isWrappedShareOpen, setIsWrappedShareOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Read filter params from URL
+  const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
+  const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
+  const [minDistance, setMinDistance] = useState(searchParams.get('minDistance') || '');
+  const [maxDistance, setMaxDistance] = useState(searchParams.get('maxDistance') || '');
+
+  // Sync URL when filters change
+  const updateFilterParams = useCallback((patch: Record<string, string>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    });
+    router.replace(`/activities?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
 
   // Open Wrapped modal from menu entry (/activities?wrapped=1)
   useEffect(() => {
@@ -59,14 +76,34 @@ export default function ActivitiesPage() {
   // 直接记录下一页要加载的页码
   const nextPageRef = useRef(1);
 
-  // Filter running activities with valid route data
+  // Filter running activities with valid route data + user filters
   const runningActivities = React.useMemo(() => {
     return activities.filter((a: StravaActivity) => {
       if (a.type !== 'Run') return false;
       const hasRoute = a.map?.summary_polyline && a.map.summary_polyline.length > 10;
-      return hasRoute;
+      if (!hasRoute) return false;
+
+      // Date filter
+      const activityDate = new Date(a.start_date);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (activityDate < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (activityDate > end) return false;
+      }
+
+      // Distance filter (input in km, activity.distance in meters)
+      const distKm = a.distance / 1000;
+      if (minDistance && distKm < parseFloat(minDistance)) return false;
+      if (maxDistance && distKm > parseFloat(maxDistance)) return false;
+
+      return true;
     });
-  }, [activities]);
+  }, [activities, startDate, endDate, minDistance, maxDistance]);
 
   // Load activities
   const loadActivities = useCallback(async (type: 'initial' | 'refresh' | 'more') => {
@@ -335,11 +372,91 @@ export default function ActivitiesPage() {
           )}
         </div>
 
-        <button onClick={handleRefresh} disabled={refreshing || isLoading} className="shrink-0 inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setShowFilters((s) => !s)}
+            className={`inline-flex items-center gap-1 p-2 font-mono text-xs transition-colors ${
+              showFilters || startDate || endDate || minDistance || maxDistance
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+            }`}
+            title={t('filter.title', '筛选')}
+          >
+            <Search size={16} />
+            {(startDate || endDate || minDistance || maxDistance) && (
+              <span className="w-2 h-2 bg-blue-500 rounded-full" />
+            )}
+          </button>
+          <button onClick={handleRefresh} disabled={refreshing || isLoading} className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
+          </button>
+        </div>
       </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="mb-4 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.startDate', '开始日期')}</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); updateFilterParams({ startDate: e.target.value }); }}
+                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.endDate', '结束日期')}</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); updateFilterParams({ endDate: e.target.value }); }}
+                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.minDistance', '最小距离 (km)')}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={minDistance}
+                onChange={(e) => { setMinDistance(e.target.value); updateFilterParams({ minDistance: e.target.value }); }}
+                placeholder="0"
+                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.maxDistance', '最大距离 (km)')}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={maxDistance}
+                onChange={(e) => { setMaxDistance(e.target.value); updateFilterParams({ maxDistance: e.target.value }); }}
+                placeholder="∞"
+                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+              />
+            </div>
+          </div>
+          {(startDate || endDate || minDistance || maxDistance) && (
+            <button
+              onClick={() => {
+                setStartDate(''); setEndDate(''); setMinDistance(''); setMaxDistance('');
+                updateFilterParams({ startDate: '', endDate: '', minDistance: '', maxDistance: '' });
+              }}
+              className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-red-500 transition-colors"
+            >
+              <X size={12} />
+              {t('filter.clear', '清除筛选')}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activities.length > 0 && (

@@ -71,6 +71,14 @@ const resources = {
         loadFailed: 'Failed to load, please retry',
         resetCache: 'Reset',
       },
+      filter: {
+        title: 'Filter',
+        startDate: 'Start Date',
+        endDate: 'End Date',
+        minDistance: 'Min Distance (km)',
+        maxDistance: 'Max Distance (km)',
+        clear: 'Clear Filters',
+      },
       profile: {
         title: 'Runner Profile',
         description: 'Manually input your personal best times for more accurate pace zone calculations and AI analysis.',
@@ -380,6 +388,14 @@ const resources = {
         loadingProgress: '已加载 {{current}} 页',
         loadFailed: '加载失败，请重试',
         resetCache: '重置',
+      },
+      filter: {
+        title: '筛选',
+        startDate: '开始日期',
+        endDate: '结束日期',
+        minDistance: '最小距离 (km)',
+        maxDistance: '最大距离 (km)',
+        clear: '清除筛选',
       },
       profile: {
         title: '跑者档案',
