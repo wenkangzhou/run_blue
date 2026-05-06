@@ -8,11 +8,13 @@ import { PixelButton } from '@/components/ui';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
-import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned, Footprints, Activity, User } from 'lucide-react';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
   const { isAuthenticated, user, logout, needsReauth, login } = useAuth();
+  const isOnline = useOnlineStatus();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
@@ -87,6 +89,12 @@ export function Header() {
 
           {/* Actions */}
           <div className="hidden md:flex items-center gap-3">
+            {!isOnline && (
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-400" title={t('offline.status', '离线模式')}>
+                <WifiOff size={12} />
+                <span className="hidden lg:inline">{t('offline.status', '离线')}</span>
+              </span>
+            )}
             <LanguageToggle />
             <ThemeToggle />
             {needsReauth ? (
@@ -137,6 +145,14 @@ export function Header() {
             </button>
           </div>
         </div>
+
+        {/* Offline indicator bar */}
+        {!isOnline && (
+          <div className="md:hidden flex items-center justify-center gap-1 py-1 bg-zinc-100 dark:bg-zinc-800 border-t border-zinc-200 dark:border-zinc-700">
+            <WifiOff size={10} className="text-zinc-400" />
+            <span className="font-mono text-[10px] text-zinc-400">{t('offline.status', '离线模式 — 仅显示已缓存数据')}</span>
+          </div>
+        )}
 
         {/* Mobile Menu */}
         {isMenuOpen && (

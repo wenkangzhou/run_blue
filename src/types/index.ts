@@ -70,6 +70,31 @@ export interface StravaActivity {
     elapsed_time: number;
     distance: number;
   }>;
+  segment_efforts?: Array<{
+    id: number;
+    name: string;
+    elapsed_time: number;
+    moving_time: number;
+    distance: number;
+    pr_rank: number | null;
+    kom_rank: number | null;
+    achievements?: Array<{
+      type_id: number;
+      type: string;
+      rank: number;
+    }>;
+    segment: {
+      id: number;
+      name: string;
+      distance: number;
+      average_grade: number;
+    };
+  }>;
+  achievements?: Array<{
+    type_id: string;
+    type: string;
+    rank: number | null;
+  }>;
 }
 
 export interface ActivitySplit {

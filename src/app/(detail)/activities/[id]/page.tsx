@@ -440,6 +440,116 @@ export default function ActivityDetailPage() {
             <ActivityStats activity={activity} />
           </div>
 
+          {/* Best Efforts */}
+          {activity.best_efforts && activity.best_efforts.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-baseline justify-between mb-3">
+                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
+                  {t('activity.bestEfforts', '本次最佳成绩')}
+                </h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {sortBestEfforts(activity.best_efforts).map((effort) => (
+                  <div
+                    key={effort.name}
+                    className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
+                  >
+                    <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      {effort.name}
+                    </span>
+                    <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
+                      {formatDuration(effort.elapsed_time)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Segment Efforts */}
+          {activity.segment_efforts && activity.segment_efforts.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-baseline justify-between mb-3">
+                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
+                  {t('activity.segmentEfforts', '路段成绩')}
+                  <span className="ml-1 font-normal text-zinc-400">({activity.segment_efforts.length})</span>
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {activity.segment_efforts.map((effort) => (
+                  <div
+                    key={effort.id}
+                    className="flex items-center justify-between px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300 truncate">
+                          {effort.segment.name}
+                        </span>
+                        {effort.pr_rank === 1 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
+                            PR
+                          </span>
+                        )}
+                        {effort.kom_rank && effort.kom_rank <= 3 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-300 dark:border-red-700">
+                            #{effort.kom_rank}
+                          </span>
+                        )}
+                        {effort.achievements && effort.achievements.map((a, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-300 dark:border-zinc-600"
+                          >
+                            {a.type} #{a.rank}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="font-mono text-[10px] text-zinc-400">
+                          {(effort.segment.distance / 1000).toFixed(2)} km
+                        </span>
+                        <span className="font-mono text-[10px] text-zinc-400">
+                          {effort.segment.average_grade > 0 ? '+' : ''}{effort.segment.average_grade.toFixed(1)}%
+                        </span>
+                        <span className="font-mono text-[10px] text-blue-500 dark:text-blue-400">
+                          {formatPace(effort.segment.distance, effort.elapsed_time, 'min/km')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        {formatDuration(effort.elapsed_time)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Activity Achievements */}
+          {activity.achievements && activity.achievements.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-baseline justify-between mb-3">
+                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
+                  {t('activity.achievements', '成就')}
+                </h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activity.achievements.map((achievement, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-2 py-1 font-mono text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                  >
+                    {achievement.type}
+                    {achievement.rank && <span className="ml-1">#{achievement.rank}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Charts */}
           {streams && (
             <div className="space-y-5 mb-4">
@@ -661,4 +771,45 @@ function formatPaceValue(pace: number): string {
   const min = Math.floor(pace);
   const sec = Math.round((pace - min) * 60);
   return `${min}'${sec.toString().padStart(2, '0')}"`;
+}
+
+interface StravaBestEffort {
+  name: string;
+  elapsed_time: number;
+}
+
+/**
+ * Parse effort name to distance in km for sorting.
+ * Supports: 400m, 1/2 mile, 1k, 1 mile, 2 mile, 5k, 10k, 15k, 10 mile, 20k, half, 30k, marathon
+ */
+function parseEffortDistance(name: string): number {
+  const lower = name.toLowerCase();
+  if (lower.includes('400m')) return 0.4;
+  if (lower.includes('1/2 mile') || lower.includes('half mile')) return 0.804;
+  if (lower.includes('1k') || lower.includes('1 kilometer')) return 1;
+  if (lower.includes('1 mile')) return 1.609;
+  if (lower.includes('2 mile')) return 3.219;
+  if (lower.includes('5k') || lower.includes('5 kilometer')) return 5;
+  if (lower.includes('10k') || lower.includes('10 kilometer')) return 10;
+  if (lower.includes('15k') || lower.includes('15 kilometer')) return 15;
+  if (lower.includes('10 mile')) return 16.093;
+  if (lower.includes('20k') || lower.includes('20 kilometer')) return 20;
+  if (lower.includes('half') || lower.includes('21k') || lower.includes('21.1k')) return 21.1;
+  if (lower.includes('30k') || lower.includes('30 kilometer')) return 30;
+  if (lower.includes('marathon') || lower.includes('42k') || lower.includes('42.2k')) return 42.2;
+  // Fallback: try to extract number + unit
+  const matchKm = lower.match(/(\d+(?:\.\d+)?)\s*k/);
+  if (matchKm) return parseFloat(matchKm[1]);
+  const matchM = lower.match(/(\d+(?:\.\d+)?)\s*m/);
+  if (matchM) return parseFloat(matchM[1]) / 1000;
+  const matchMi = lower.match(/(\d+(?:\.\d+)?)\s*mile/);
+  if (matchMi) return parseFloat(matchMi[1]) * 1.609;
+  return 999; // Unknown distances go to the end
+}
+
+/**
+ * Sort best efforts by distance (shortest first).
+ */
+function sortBestEfforts(efforts: StravaBestEffort[]): StravaBestEffort[] {
+  return [...efforts].sort((a, b) => parseEffortDistance(a.name) - parseEffortDistance(b.name));
 }

@@ -42,3 +42,7 @@ next-env.d.ts
 
 # OS
 Thumbs.db
+
+# Serwist PWA
+public/sw.js
+public/swe-worker*
