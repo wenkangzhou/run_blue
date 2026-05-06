@@ -908,12 +908,17 @@ function compareSimilarActivities(
   const currentDistance = currentActivity.distance;
   const currentPace = currentActivity.moving_time / currentDistance * 1000 / 60;
   
-  // Find similar runs (within ±20% distance), excluding races when comparing to easy runs
+  // For long runs (>=15km), use a tighter ±12% match to avoid mixing
+  // different distances (e.g., 21k half-marathon race vs 27k LSD).
+  // For shorter runs, keep the looser ±20% match.
+  const distanceThreshold = currentDistance >= 15000 ? 0.12 : 0.2;
+  
+  // Find similar runs (within distance threshold), excluding races when comparing to easy runs
   const currentIsRace = classifyActivity(currentActivity).isRace;
   
   const similarRuns = runs.filter(r => {
     if (r.id === currentActivity.id) return false;
-    if (Math.abs(r.distance - currentDistance) / currentDistance >= 0.2) return false;
+    if (Math.abs(r.distance - currentDistance) / currentDistance >= distanceThreshold) return false;
     if (r.distance <= 1000) return false;
     
     // If current is race, compare to other races
@@ -926,7 +931,7 @@ function compareSimilarActivities(
     // Fallback: include all similar distances regardless of type
     const allSimilar = runs.filter(r => 
       r.id !== currentActivity.id &&
-      Math.abs(r.distance - currentDistance) / currentDistance < 0.2 &&
+      Math.abs(r.distance - currentDistance) / currentDistance < distanceThreshold &&
       r.distance > 1000
     );
     if (allSimilar.length === 0) return null;
@@ -934,7 +939,7 @@ function compareSimilarActivities(
   
   const useRuns = similarRuns.length > 0 ? similarRuns : runs.filter(r => 
     r.id !== currentActivity.id &&
-    Math.abs(r.distance - currentDistance) / currentDistance < 0.2 &&
+    Math.abs(r.distance - currentDistance) / currentDistance < distanceThreshold &&
     r.distance > 1000
   );
   
