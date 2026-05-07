@@ -379,31 +379,33 @@ export default function ActivityDetailPage() {
       ) : activity && (
         <div className="container mx-auto px-4 py-4 max-w-2xl relative">
           {/* Header */}
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
-              <p className="font-mono text-xs text-zinc-500">
-                {formatDateTime(activity.start_date_local)}
-              </p>
-              {activity.description && activity.description.trim().length > 0 && (
-                <p className="font-mono text-xs text-zinc-400 mt-1 break-words">
-                  {activity.description.trim()}
+          <div className="mb-4">
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="min-w-0">
+                <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
+                <p className="font-mono text-xs text-zinc-500">
+                  {formatDateTime(activity.start_date_local)}
                 </p>
-              )}
+              </div>
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <SaveRouteButton activity={activity} />
+                {activity.map?.polyline && (
+                  <button
+                    onClick={() => setIsShareOpen(true)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title={t('sharePoster.title', '分享海报')}
+                  >
+                    <Share2 size={14} />
+                    <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex-shrink-0 flex items-center gap-2">
-              <SaveRouteButton activity={activity} />
-              {activity.map?.polyline && (
-                <button
-                  onClick={() => setIsShareOpen(true)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  title={t('sharePoster.title', '分享海报')}
-                >
-                  <Share2 size={14} />
-                  <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
-                </button>
-              )}
-            </div>
+            {activity.description && activity.description.trim().length > 0 && (
+              <p className="font-mono text-xs text-zinc-400 mt-1 break-words">
+                {activity.description.trim()}
+              </p>
+            )}
           </div>
 
           {/* Map - notify when ready */}
