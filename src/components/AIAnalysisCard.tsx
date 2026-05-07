@@ -80,12 +80,15 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
     const profile = getUserProfile();
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
+    const physique = profile
+      ? { height: profile.height, weight: profile.weight }
+      : undefined;
 
     try {
       const response = await fetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activity, streams, userProfilePBs, recentActivities: activities, locale: i18n.language }),
+        body: JSON.stringify({ activity, streams, userProfilePBs, recentActivities: activities, locale: i18n.language, physique }),
       });
       
       if (!response.ok) {

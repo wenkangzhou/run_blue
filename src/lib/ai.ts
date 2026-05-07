@@ -115,12 +115,18 @@ function buildAccurateComparison(
 /**
  * Build professional coaching prompt using training profile
  */
+export interface UserPhysique {
+  height?: number | null; // cm
+  weight?: number | null; // kg
+}
+
 export function buildProfessionalPrompt(
   activity: StravaActivity,
   streams: Record<string, any> | null,
   trainingProfile: TrainingProfile,
   classification: ActivityClassification,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  physique?: UserPhysique
 ): string {
   const en = locale.startsWith('en');
   const distanceKm = (activity.distance / 1000).toFixed(2);
@@ -161,6 +167,30 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Raw Seconds: ${activity.moving_time}s (for precise calculation)`
     : `\n- 原始秒数: ${activity.moving_time}秒（用于精确计算）`;
+
+  // Athlete physique info
+  if (physique?.height || physique?.weight) {
+    prompt += en ? `\n\n## Athlete Profile` : `\n\n## 运动员资料`;
+    if (physique.height) {
+      prompt += en
+        ? `\n- Height: ${physique.height} cm`
+        : `\n- 身高: ${physique.height} cm`;
+    }
+    if (physique.weight) {
+      prompt += en
+        ? `\n- Weight: ${physique.weight} kg`
+        : `\n- 体重: ${physique.weight} kg`;
+    }
+    if (physique.height && physique.weight) {
+      const bmi = (physique.weight / ((physique.height / 100) ** 2)).toFixed(1);
+      prompt += en
+        ? `\n- BMI: ${bmi}`
+        : `\n- BMI: ${bmi}`;
+      prompt += en
+        ? `\n- When analyzing, consider the athlete's body composition: a lower BMI may indicate better running economy for distance events, while a higher BMI suggests more muscle mass which can benefit power-based efforts. Tailor injury prevention and nutrition advice accordingly.`
+        : `\n- 分析时请结合运动员身体构成：较低BMI通常意味着更好的长跑经济性，较高BMI可能代表更多肌肉量有利于力量型训练。据此调整受伤预防和营养建议。`;
+    }
+  }
 
   if (activity.average_heartrate) {
     prompt += en
@@ -384,7 +414,8 @@ export async function analyzeActivity(
   activity: StravaActivity,
   streams: Record<string, any> | null,
   trainingProfile: TrainingProfile,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  physique?: UserPhysique
 ): Promise<AIAnalysis> {
   const apiKey = process.env.KIMI_API_KEY;
 
@@ -394,7 +425,7 @@ export async function analyzeActivity(
 
   const en = locale.startsWith('en');
   const classification = classifyActivity(activity);
-  const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale);
+  const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique);
 
   // Retry once on JSON parse failure (common on cold-start / network hiccup)
   const maxAttempts = 2;

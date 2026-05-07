@@ -13,7 +13,6 @@ import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
-import { WrappedShareModal } from '@/components/WrappedShareModal';
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -46,7 +45,6 @@ export default function ActivitiesPage() {
   const [rateLimited, setRateLimited] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isPeriodShareOpen, setIsPeriodShareOpen] = useState(false);
-  const [isWrappedShareOpen, setIsWrappedShareOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // Read filter params from URL
@@ -63,14 +61,6 @@ export default function ActivitiesPage() {
       else params.delete(key);
     });
     router.replace(`/activities?${params.toString()}`, { scroll: false });
-  }, [searchParams, router]);
-
-  // Open Wrapped modal from menu entry (/activities?wrapped=1)
-  useEffect(() => {
-    if (searchParams.get('wrapped') === '1') {
-      setIsWrappedShareOpen(true);
-      router.replace('/activities', { scroll: false });
-    }
   }, [searchParams, router]);
 
   // 直接记录下一页要加载的页码
@@ -522,11 +512,6 @@ export default function ActivitiesPage() {
         activities={activities}
       />
 
-      <WrappedShareModal
-        isOpen={isWrappedShareOpen}
-        onClose={() => setIsWrappedShareOpen(false)}
-        activities={activities}
-      />
     </div>
   );
 }

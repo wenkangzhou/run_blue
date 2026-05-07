@@ -76,13 +76,6 @@ export function Header() {
                   <Footprints size={14} />
                   {t('nav.gear', '跑鞋')}
                 </Link>
-                <Link
-                  href="/activities?wrapped=1"
-                  className="font-mono text-sm font-bold uppercase hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center gap-1"
-                >
-                  <Trophy size={14} />
-                  {t('wrapped.title', '年度回顾')}
-                </Link>
               </>
             )}
           </nav>
@@ -199,14 +192,6 @@ export function Header() {
                   >
                     <Footprints size={16} />
                     {t('nav.gear', '跑鞋')}
-                  </Link>
-                  <Link
-                    href="/activities?wrapped=1"
-                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Trophy size={16} />
-                    {t('wrapped.title', '年度回顾')}
                   </Link>
                   <button
                     className="font-mono text-sm font-bold uppercase py-2 text-left inline-flex items-center gap-2"

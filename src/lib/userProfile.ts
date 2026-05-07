@@ -7,6 +7,8 @@ export interface UserProfilePBs {
 
 export interface UserProfile {
   pbs: UserProfilePBs;
+  height: number | null; // cm
+  weight: number | null; // kg
   updatedAt: string;
 }
 
@@ -17,7 +19,11 @@ export function getUserProfile(): UserProfile | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as UserProfile;
+    const parsed = JSON.parse(raw) as UserProfile;
+    // Backward compatibility: old profiles may not have height/weight
+    if (parsed.height === undefined) parsed.height = null;
+    if (parsed.weight === undefined) parsed.weight = null;
+    return parsed;
   } catch {
     return null;
   }

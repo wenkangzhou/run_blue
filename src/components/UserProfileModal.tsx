@@ -10,7 +10,7 @@ import {
   formatSecondsToTime,
   type UserProfilePBs,
 } from '@/lib/userProfile';
-import { X, Trophy, Clock, AlertCircle } from 'lucide-react';
+import { X, Trophy, Clock, AlertCircle, Ruler, Weight } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -32,6 +32,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     '21k': '',
     '42k': '',
   });
+  const [height, setHeight] = useState('');
+  const [weight, setWeight] = useState('');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [showSaved, setShowSaved] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
@@ -46,9 +48,13 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         '21k': formatSecondsToTime(profile.pbs['21k']),
         '42k': formatSecondsToTime(profile.pbs['42k']),
       });
+      setHeight(profile.height ? String(profile.height) : '');
+      setWeight(profile.weight ? String(profile.weight) : '');
       setHasProfile(true);
     } else {
       setValues({ '5k': '', '10k': '', '21k': '', '42k': '' });
+      setHeight('');
+      setWeight('');
       setHasProfile(false);
     }
     setErrors({});
@@ -89,8 +95,11 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    saveUserProfile({ pbs });
-    setHasProfile(hasAny);
+    const h = height.trim() ? parseFloat(height.trim()) : null;
+    const w = weight.trim() ? parseFloat(weight.trim()) : null;
+
+    saveUserProfile({ pbs, height: h, weight: w });
+    setHasProfile(hasAny || !!h || !!w);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
   };
@@ -180,6 +189,42 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 )}
               </div>
             ))}
+
+            {/* Height & Weight */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+              <div>
+                <label className="block font-mono text-xs font-bold uppercase mb-1.5">
+                  {t('profile.height', '身高')}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="170"
+                    value={height}
+                    onChange={e => setHeight(e.target.value)}
+                    className="w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-zinc-400 pointer-events-none">cm</span>
+                </div>
+              </div>
+              <div>
+                <label className="block font-mono text-xs font-bold uppercase mb-1.5">
+                  {t('profile.weight', '体重')}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="65"
+                    value={weight}
+                    onChange={e => setWeight(e.target.value)}
+                    className="w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-zinc-400 pointer-events-none">kg</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3">

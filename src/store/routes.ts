@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, StorageValue } from 'zustand/middleware';
 import { StravaActivity } from '@/types';
-import { getRouteKey, getDefaultRouteName } from '@/lib/routeClustering';
+import { getRouteKey, getDefaultRouteName, areActivitiesSameRoute } from '@/lib/routeClustering';
 
 /** Safe localStorage wrapper that catches QuotaExceededError. */
 const safeLocalStorage = {
@@ -79,16 +79,9 @@ export const useRoutesStore = create<RoutesState>()(
         }
 
         // Find all activities on this route for initial population
-        const routeKey = getRouteKey(activity);
         const matchingActivities = allActivities.filter((a) => {
           if (a.id === activity.id) return true;
-          const ak = getRouteKey(a);
-          if (ak !== routeKey) return false;
-          if (activity.distance > 0) {
-            const diff = Math.abs(a.distance - activity.distance) / activity.distance;
-            if (diff > 0.15) return false;
-          }
-          return true;
+          return areActivitiesSameRoute(activity, a);
         });
 
         const activityIds = matchingActivities
@@ -181,17 +174,10 @@ export const useRoutesStore = create<RoutesState>()(
             const routeKey = getRouteKey(referenceActivity);
             if (!routeKey) return route;
 
-            // Re-match all activities with same key and similar distance
+            // Re-match all activities using flexible geographic matching
             const matchingActivities = allActivities.filter((a) => {
-              const ak = getRouteKey(a);
-              if (ak !== routeKey) return false;
-              if (referenceActivity.distance > 0) {
-                const diff =
-                  Math.abs(a.distance - referenceActivity.distance) /
-                  referenceActivity.distance;
-                if (diff > 0.15) return false;
-              }
-              return true;
+              if (a.id === referenceActivity.id) return true;
+              return areActivitiesSameRoute(referenceActivity, a);
             });
 
             const activityIds = matchingActivities
