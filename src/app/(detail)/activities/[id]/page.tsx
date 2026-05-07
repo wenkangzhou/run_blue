@@ -385,6 +385,11 @@ export default function ActivityDetailPage() {
               <p className="font-mono text-xs text-zinc-500">
                 {formatDateTime(activity.start_date_local)}
               </p>
+              {activity.description && activity.description.trim().length > 0 && (
+                <p className="font-mono text-xs text-zinc-400 mt-1 break-words">
+                  {activity.description.trim()}
+                </p>
+              )}
             </div>
             <div className="flex-shrink-0 flex items-center gap-2">
               <SaveRouteButton activity={activity} />

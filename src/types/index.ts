@@ -51,6 +51,7 @@ export interface StravaActivity {
   elev_high?: number;
   elev_low?: number;
   calories?: number;
+  description?: string;
   upload_id: number;
   upload_id_str: string;
   external_id: string | null;
