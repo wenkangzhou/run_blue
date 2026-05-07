@@ -313,6 +313,45 @@ const resources = {
         zoneUnknown: 'Unknown',
         fallbackWarning: 'AI service is temporarily unavailable. Below is a basic system-generated analysis. Click the refresh button to retry.',
       },
+      landing: {
+        tagline: 'Pixel-level tracking for every step',
+        subTagline: 'Deep-dive analysis for every workout, powered by Strava authorization',
+        syncStatus: 'Real-time sync with Strava',
+        features: {
+          routeVisualization: {
+            title: 'Route Collection',
+            description: 'Turn every run into art on your wall. Each route is a brushstroke above the city.',
+            tag: 'Visualization',
+          },
+          dataDashboard: {
+            title: 'Data Dashboard',
+            description: 'Distance, pace, frequency — all at a glance. Track your running journey by week, month, and year.',
+            tag: 'Analytics',
+          },
+          stravaSync: {
+            title: 'Strava Direct',
+            description: 'One-click authorization, no extra registration needed. Data auto-syncs and is cached locally for blazing fast loads.',
+            tag: 'Real-time Sync',
+          },
+          aiAnalysis: {
+            title: 'AI Coaching',
+            description: 'Get AI-powered training insights with pace zones, load context, personalized suggestions, and recovery advice.',
+            tag: 'Smart Coach',
+          },
+          routeCollection: {
+            title: 'Route Collection',
+            description: 'Save your favorite routes and compare historical performances. Track improvement over the same course.',
+            tag: 'Compare',
+          },
+          offlineReady: {
+            title: 'Offline Ready',
+            description: 'Full PWA support with offline access to cached activities. Your data stays with you, even without a network.',
+            tag: 'PWA',
+          },
+        },
+        footer: 'Made with ◼ for runners',
+        poweredBy: 'Powered by Strava API',
+      },
       features: {
         routeVisualization: {
           title: 'Route Visualization',
@@ -657,6 +696,45 @@ const resources = {
         zoneR: 'R-重复',
         zoneUnknown: '未知',
         fallbackWarning: 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。',
+      },
+      landing: {
+        tagline: '像素级记录你的每一步',
+        subTagline: '通过 Strava 授权，深度分析你的每一次训练',
+        syncStatus: '与 Strava 实时同步',
+        features: {
+          routeVisualization: {
+            title: '地图收集',
+            description: '把跑过的路，变成墙上的画。每一次跑步，都是城市上空的一笔涂鸦。',
+            tag: '路线可视化',
+          },
+          dataDashboard: {
+            title: '数据看板',
+            description: '距离、配速、次数，一目了然。按周、月、年追踪你的跑步历程。',
+            tag: '周期统计',
+          },
+          stravaSync: {
+            title: 'Strava 直连',
+            description: '一键授权，无需额外注册。数据自动同步，本地缓存，加载飞快。',
+            tag: '实时同步',
+          },
+          aiAnalysis: {
+            title: 'AI 训练分析',
+            description: 'AI 驱动的训练洞察：配速区间、负荷评估、个性化建议与恢复指导。',
+            tag: '智能教练',
+          },
+          routeCollection: {
+            title: '路线收藏',
+            description: '收藏常跑路线，对比历史表现。在同一赛道上见证自己的进步。',
+            tag: '历史对比',
+          },
+          offlineReady: {
+            title: '离线可用',
+            description: '完整的 PWA 支持，离线也能浏览已缓存的活动。无网络时数据依然在手边。',
+            tag: 'PWA',
+          },
+        },
+        footer: 'Made with ◼ for runners',
+        poweredBy: 'Powered by Strava API',
       },
       features: {
         routeVisualization: {

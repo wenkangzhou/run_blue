@@ -2,16 +2,28 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
+import { useSettingsStore } from '@/store/settings';
+import i18n from '@/i18n';
 import { StravaConnect } from '@/components/StravaConnect';
-import { Map, TrendingUp, Zap, AlertCircle, X, Route } from 'lucide-react';
+import { Map, TrendingUp, Zap, AlertCircle, X, Route, Sparkles, Bookmark, WifiOff, Globe } from 'lucide-react';
 
 export default function HomePage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { language, setLanguage } = useSettingsStore();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'info' } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Sync html lang attribute with current language
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language;
+    }
+  }, [language]);
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -31,11 +43,11 @@ export default function HomePage() {
             return;
           }
           if (session.error === 'token_expired') {
-            setToast({ message: '登录已过期，请重新登录', type: 'warning' });
+            setToast({ message: t('auth.sessionExpired'), type: 'warning' });
           } else if (session.error === 'rate_limited') {
-            setToast({ message: 'Strava API 限流中，请稍后再试（约15分钟）', type: 'warning' });
+            setToast({ message: t('errors.rateLimitedDesc'), type: 'warning' });
           } else if (session.error === 'strava_error' && session.status === 429) {
-            setToast({ message: 'Strava API 限流中，请稍后再试（约15分钟）', type: 'warning' });
+            setToast({ message: t('errors.rateLimitedDesc'), type: 'warning' });
           }
         }
         if (retryCount < 3) {
@@ -53,11 +65,17 @@ export default function HomePage() {
     checkAuth();
     const timeout = setTimeout(() => setIsLoading(false), 5000);
     return () => clearTimeout(timeout);
-  }, [retryCount]);
+  }, [retryCount, t]);
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) router.push('/activities');
   }, [isAuthenticated, isLoading, router]);
+
+  const toggleLanguage = () => {
+    const newLang = language === 'zh' ? 'en' : 'zh';
+    setLanguage(newLang);
+    i18n.changeLanguage(newLang);
+  };
 
   if (isLoading && !toast) {
     return (
@@ -66,6 +84,51 @@ export default function HomePage() {
       </div>
     );
   }
+
+  const features = [
+    {
+      icon: <Map />,
+      titleKey: 'landing.features.routeVisualization.title',
+      descKey: 'landing.features.routeVisualization.description',
+      tagKey: 'landing.features.routeVisualization.tag',
+      color: 'blue' as const,
+    },
+    {
+      icon: <TrendingUp />,
+      titleKey: 'landing.features.dataDashboard.title',
+      descKey: 'landing.features.dataDashboard.description',
+      tagKey: 'landing.features.dataDashboard.tag',
+      color: 'green' as const,
+    },
+    {
+      icon: <Zap />,
+      titleKey: 'landing.features.stravaSync.title',
+      descKey: 'landing.features.stravaSync.description',
+      tagKey: 'landing.features.stravaSync.tag',
+      color: 'orange' as const,
+    },
+    {
+      icon: <Sparkles />,
+      titleKey: 'landing.features.aiAnalysis.title',
+      descKey: 'landing.features.aiAnalysis.description',
+      tagKey: 'landing.features.aiAnalysis.tag',
+      color: 'purple' as const,
+    },
+    {
+      icon: <Bookmark />,
+      titleKey: 'landing.features.routeCollection.title',
+      descKey: 'landing.features.routeCollection.description',
+      tagKey: 'landing.features.routeCollection.tag',
+      color: 'rose' as const,
+    },
+    {
+      icon: <WifiOff />,
+      titleKey: 'landing.features.offlineReady.title',
+      descKey: 'landing.features.offlineReady.description',
+      tagKey: 'landing.features.offlineReady.tag',
+      color: 'cyan' as const,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden">
@@ -78,23 +141,39 @@ export default function HomePage() {
         }}
       />
       
-      {/* Floating Pixel Elements - More animations */}
+      {/* Floating Pixel Elements */}
       <PixelElement className="top-16 left-[10%] w-3 h-3 bg-blue-500" delay={0} />
       <PixelElement className="top-24 left-[20%] w-2 h-2 bg-blue-400" delay={200} />
       <PixelElement className="top-12 left-[35%] w-4 h-4 bg-orange-500" delay={400} />
       <PixelElement className="top-28 right-[30%] w-3 h-3 bg-green-500" delay={600} />
       <PixelElement className="top-20 right-[15%] w-2 h-2 bg-orange-400" delay={800} />
       <PixelElement className="top-32 left-[5%] w-2 h-2 bg-green-400" delay={1000} />
+      <PixelElement className="top-48 right-[10%] w-2 h-2 bg-purple-400" delay={300} />
+      <PixelElement className="bottom-32 left-[15%] w-3 h-3 bg-cyan-400" delay={700} />
       
       {/* Moving Pixel Particles */}
       <MovingPixel className="top-40 left-[15%] w-2 h-2 bg-blue-300" duration={8} delay={0} direction="right" />
       <MovingPixel className="top-60 right-[20%] w-3 h-3 bg-orange-300" duration={10} delay={2} direction="left" />
       <MovingPixel className="top-80 left-[25%] w-2 h-2 bg-green-300" duration={12} delay={4} direction="right" />
+      <MovingPixel className="bottom-48 right-[15%] w-2 h-2 bg-purple-300" duration={14} delay={1} direction="left" />
       
       {/* Rotating Squares */}
       <RotatingSquare className="top-36 right-[10%] w-6 h-6 border-blue-400" duration={20} />
       <RotatingSquare className="top-72 left-[8%] w-4 h-4 border-orange-400" duration={15} />
       <RotatingSquare className="bottom-40 right-[25%] w-5 h-5 border-green-400" duration={25} />
+      <RotatingSquare className="bottom-20 left-[30%] w-4 h-4 border-purple-400" duration={18} />
+
+      {/* Language Toggle — top right */}
+      <div className="fixed top-4 right-4 z-50">
+        <button
+          onClick={toggleLanguage}
+          className="flex items-center gap-1.5 px-3 py-2 border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors font-mono text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.15)]"
+          aria-label={t('language.title')}
+        >
+          <Globe size={16} />
+          <span>{language === 'zh' ? 'EN' : '中'}</span>
+        </button>
+      </div>
 
       {/* Toast */}
       {toast && (
@@ -116,11 +195,10 @@ export default function HomePage() {
       )}
 
       <div className="container mx-auto px-4 py-8 md:py-12 relative z-10">
-        {/* Hero Section with Pixel Art Logo */}
+        {/* Hero Section */}
         <div className="text-center mb-10 md:mb-12">
           {/* Animated Logo Mark */}
           <div className="inline-flex items-center justify-center mb-6 relative">
-            {/* Surrounding pixels */}
             <div className="absolute -top-4 -left-4 w-2 h-2 bg-blue-400 animate-bounce" style={{ animationDelay: '0.1s' }} />
             <div className="absolute -top-2 -right-6 w-2 h-2 bg-orange-400 animate-bounce" style={{ animationDelay: '0.3s' }} />
             <div className="absolute -bottom-4 -left-6 w-2 h-2 bg-green-400 animate-bounce" style={{ animationDelay: '0.5s' }} />
@@ -130,29 +208,30 @@ export default function HomePage() {
               <div className="w-20 h-20 md:w-24 md:h-24 bg-blue-600 border-4 border-blue-800 dark:border-blue-400 flex items-center justify-center shadow-[6px_6px_0px_0px_rgba(0,0,0,0.2)] transition-transform group-hover:scale-105">
                 <Route size={40} className="text-white" />
               </div>
-              {/* Corner decorations */}
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 border-2 border-orange-700" />
               <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-green-500" />
             </div>
           </div>
           
-          {/* Main Title with Pixel Shadow */}
+          {/* Main Title */}
           <div className="relative inline-block mb-4">
             <h1 className="font-pixel text-6xl md:text-8xl font-bold relative z-10 bg-gradient-to-b from-blue-500 to-blue-700 bg-clip-text text-transparent">
-              跑蓝
+              {t('common.appName')}
             </h1>
-            {/* Pixel shadow layers */}
-            <div className="absolute top-1 left-1 text-blue-800/20 dark:text-blue-400/20 font-pixel text-6xl md:text-8xl font-bold -z-10">跑蓝</div>
-            <div className="absolute top-2 left-2 text-blue-800/10 dark:text-blue-400/10 font-pixel text-6xl md:text-8xl font-bold -z-20">跑蓝</div>
+            <div className="absolute top-1 left-1 text-blue-800/20 dark:text-blue-400/20 font-pixel text-6xl md:text-8xl font-bold -z-10">{t('common.appName')}</div>
+            <div className="absolute top-2 left-2 text-blue-800/10 dark:text-blue-400/10 font-pixel text-6xl md:text-8xl font-bold -z-20">{t('common.appName')}</div>
           </div>
           
           {/* Tagline */}
-          <p className="font-mono text-lg md:text-xl text-zinc-600 dark:text-zinc-400 mb-3">
-            像素级记录你的每一步
+          <p className="font-mono text-lg md:text-xl text-zinc-600 dark:text-zinc-400 mb-2">
+            {t('landing.tagline')}
+          </p>
+          <p className="font-mono text-sm text-zinc-500 dark:text-zinc-500 mb-3">
+            {t('landing.subTagline')}
           </p>
           <div className="flex items-center justify-center gap-2">
             <span className="w-2 h-2 bg-green-500 animate-pulse" />
-            <span className="font-mono text-sm text-zinc-500">与 Strava 实时同步</span>
+            <span className="font-mono text-sm text-zinc-500">{t('landing.syncStatus')}</span>
             <span className="w-2 h-2 bg-orange-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
           </div>
         </div>
@@ -162,30 +241,19 @@ export default function HomePage() {
           <StravaConnect />
         </div>
 
-        {/* Features - Horizontal Layout */}
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FeatureCard
-              icon={<Map />}
-              title="地图收集"
-              description="把跑过的路，变成墙上的画。每一次跑步，都是城市上空的一笔涂鸦。"
-              color="blue"
-              stats="路线可视化"
-            />
-            <FeatureCard
-              icon={<TrendingUp />}
-              title="数据看板"
-              description="距离、配速、次数，一目了然。按周、月、年追踪你的跑步历程。"
-              color="green"
-              stats="周期统计"
-            />
-            <FeatureCard
-              icon={<Zap />}
-              title="Strava 直连"
-              description="一键授权，无需注册。数据自动同步，缓存本地，加载飞快。"
-              color="orange"
-              stats="实时同步"
-            />
+        {/* Features Grid */}
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {features.map((f, i) => (
+              <FeatureCard
+                key={i}
+                icon={f.icon}
+                title={t(f.titleKey)}
+                description={t(f.descKey)}
+                color={f.color}
+                stats={t(f.tagKey)}
+              />
+            ))}
           </div>
         </div>
 
@@ -201,7 +269,7 @@ export default function HomePage() {
             ))}
           </div>
           <p className="font-mono text-xs text-zinc-400">
-            Made with ◼ for runners
+            {t('landing.footer')}
           </p>
         </div>
       </div>
@@ -267,25 +335,39 @@ function FeatureCard({
   icon: React.ReactNode;
   title: string;
   description: string;
-  color: 'blue' | 'green' | 'orange';
+  color: 'blue' | 'green' | 'orange' | 'purple' | 'rose' | 'cyan';
   stats: string;
 }) {
-  const colorClasses = {
+  const colorClasses: Record<string, string> = {
     blue: 'bg-blue-100 dark:bg-blue-900/30 border-blue-600 text-blue-600 dark:text-blue-400',
     green: 'bg-green-100 dark:bg-green-900/30 border-green-600 text-green-600 dark:text-green-400',
     orange: 'bg-orange-100 dark:bg-orange-900/30 border-orange-600 text-orange-600 dark:text-orange-400',
+    purple: 'bg-purple-100 dark:bg-purple-900/30 border-purple-600 text-purple-600 dark:text-purple-400',
+    rose: 'bg-rose-100 dark:bg-rose-900/30 border-rose-600 text-rose-600 dark:text-rose-400',
+    cyan: 'bg-cyan-100 dark:bg-cyan-900/30 border-cyan-600 text-cyan-600 dark:text-cyan-400',
   };
 
-  const bgClasses = {
+  const bgClasses: Record<string, string> = {
     blue: 'bg-blue-50/50 dark:bg-blue-900/10',
     green: 'bg-green-50/50 dark:bg-green-900/10',
     orange: 'bg-orange-50/50 dark:bg-orange-900/10',
+    purple: 'bg-purple-50/50 dark:bg-purple-900/10',
+    rose: 'bg-rose-50/50 dark:bg-rose-900/10',
+    cyan: 'bg-cyan-50/50 dark:bg-cyan-900/10',
+  };
+
+  const dotColor: Record<string, string> = {
+    blue: 'bg-blue-300',
+    green: 'bg-green-300',
+    orange: 'bg-orange-300',
+    purple: 'bg-purple-300',
+    rose: 'bg-rose-300',
+    cyan: 'bg-cyan-300',
   };
 
   return (
     <div className="group relative">
       <div className={`border-4 border-zinc-800 dark:border-zinc-200 p-5 ${bgClasses[color]} h-full transition-all duration-200 hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]`}>
-        {/* Header with icon and tag */}
         <div className="flex items-start justify-between mb-3">
           <div className={`w-12 h-12 border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${colorClasses[color]}`}>
             {icon}
@@ -295,20 +377,17 @@ function FeatureCard({
           </span>
         </div>
         
-        {/* Title */}
         <h3 className="font-mono font-bold text-lg mb-2">{title}</h3>
         
-        {/* Description */}
         <p className="font-mono text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
           {description}
         </p>
         
-        {/* Bottom decoration */}
         <div className="mt-4 flex gap-1">
           {[...Array(4)].map((_, i) => (
             <div 
               key={i} 
-              className={`w-1.5 h-1.5 ${color === 'blue' ? 'bg-blue-300' : color === 'green' ? 'bg-green-300' : 'bg-orange-300'}`}
+              className={`w-1.5 h-1.5 ${dotColor[color]}`}
               style={{ opacity: 0.3 + i * 0.2 }}
             />
           ))}
