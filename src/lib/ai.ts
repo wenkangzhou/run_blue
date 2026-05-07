@@ -47,6 +47,9 @@ export interface AIAnalysis {
   similarActivitiesInsight: string;
   nextWorkoutSuggestion: string;
   warnings: string[];
+  
+  /** True when the analysis was generated locally as a fallback (AI API unavailable). */
+  isFallback?: boolean;
 }
 
 export interface UserProfile {
@@ -427,8 +430,8 @@ export async function analyzeActivity(
   const classification = classifyActivity(activity);
   const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique);
 
-  // Retry once on JSON parse failure (common on cold-start / network hiccup)
-  const maxAttempts = 2;
+  // Retry on JSON parse failure (common on cold-start / network hiccup)
+  const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
@@ -475,7 +478,7 @@ export async function analyzeActivity(
     } catch (e) {
       console.error(`[AI] Attempt ${attempt} failed:`, e);
       if (attempt < maxAttempts) {
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1500));
       } else {
         // All attempts exhausted — fallback
         return generateFallbackAnalysis(activity, trainingProfile, classification, locale);
@@ -768,6 +771,7 @@ function generateFallbackAnalysis(
             '关注肌肉酸痛情况，必要时安排按摩',
           ],
       generatedAt: Date.now(),
+      isFallback: true,
       paceZoneAnalysis: {
         zone,
         description: zoneDesc,
@@ -803,6 +807,7 @@ function generateFallbackAnalysis(
     comparisonToAverage: comparisonText,
     suggestions,
     generatedAt: Date.now(),
+    isFallback: true,
     paceZoneAnalysis: {
       zone,
       description: zoneDesc,

@@ -311,6 +311,7 @@ const resources = {
         zoneI: 'I-Interval',
         zoneR: 'R-Repetition',
         zoneUnknown: 'Unknown',
+        fallbackWarning: 'AI service is temporarily unavailable. Below is a basic system-generated analysis. Click the refresh button to retry.',
       },
       features: {
         routeVisualization: {
@@ -655,6 +656,7 @@ const resources = {
         zoneI: 'I-间歇',
         zoneR: 'R-重复',
         zoneUnknown: '未知',
+        fallbackWarning: 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。',
       },
       features: {
         routeVisualization: {

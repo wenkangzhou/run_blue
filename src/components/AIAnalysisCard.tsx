@@ -212,6 +212,14 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
           </div>
         ) : analysis ? (
           <div className="space-y-4">
+            {analysis.isFallback && (
+              <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <span className="font-mono text-[10px] text-amber-700 dark:text-amber-300 flex-1">
+                  {t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
+                </span>
+              </div>
+            )}
             {/* Summary */}
             <div className={`p-3 border-l-4 ${
               isRace ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-500' : 'bg-zinc-50 dark:bg-zinc-800 border-purple-500'

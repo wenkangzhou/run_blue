@@ -220,7 +220,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatsCard
             title={t('stats.totalDistance')}
-            value={formatDistance(summary.totalDistance, 'km')}
+            value={`${Math.round(summary.totalDistance / 1000)} km`}
             icon={Trophy}
             variant="primary"
           />
