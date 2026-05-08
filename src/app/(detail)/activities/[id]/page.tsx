@@ -559,25 +559,30 @@ export default function ActivityDetailPage() {
 
           {/* Charts */}
           {streams && (
-            <div className="space-y-5 mb-4">
+            <div className="space-y-3 mb-4">
               {streams.heartrate && (
-                <ChartSection 
+                <ChartSection
                   title={t('activity.heartRate')}
-                  subtitle={(() => {
+                  avgValue={(() => {
                     const data = streams.heartrate.data as number[];
                     const valid = data.filter(v => v > 50);
                     if (valid.length === 0) return '';
-                    const min = Math.min(...valid);
-                    const max = Math.max(...valid);
-                    return `${Math.round(min)} bpm ~ ${Math.round(max)} bpm`;
+                    return `${Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)}`;
                   })()}
+                  avgUnit="bpm"
+                  rangeValue={(() => {
+                    const data = streams.heartrate.data as number[];
+                    const valid = data.filter(v => v > 50);
+                    if (valid.length === 0) return '';
+                    return `${Math.round(Math.min(...valid))}–${Math.round(Math.max(...valid))}`;
+                  })()}
+                  color="#ef4444"
                 >
-                  <SimpleLineChart 
+                  <SimpleLineChart
                     data={streams.heartrate.data as number[]}
                     color="#ef4444"
-                    height={220}
-                    yUnit="bpm"
-                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
+                    height={130}
+                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                     domain={(() => {
                       const data = streams.heartrate.data as number[];
                       const valid = data.filter(v => v > 50);
@@ -589,24 +594,31 @@ export default function ActivityDetailPage() {
                   />
                 </ChartSection>
               )}
-              
+
               {streams.velocity_smooth && (
-                <ChartSection 
+                <ChartSection
                   title={t('activity.pace')}
-                  subtitle={(() => {
+                  avgValue={(() => {
+                    const paces = processPaceData(streams.velocity_smooth.data as number[]);
+                    const valid = paces.filter(p => p > 0);
+                    if (valid.length === 0) return '';
+                    const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+                    return formatPaceValue(avg);
+                  })()}
+                  avgUnit=""
+                  rangeValue={(() => {
                     const paces = processPaceData(streams.velocity_smooth.data as number[]);
                     if (paces.length === 0) return '';
-                    const validPaces = paces.filter(p => p > 0);
-                    const minPace = Math.min(...validPaces);
-                    const maxPace = Math.max(...validPaces);
-                    return `${formatPaceValue(minPace)} ~ ${formatPaceValue(maxPace)}`;
+                    const valid = paces.filter(p => p > 0);
+                    return `${formatPaceValue(Math.min(...valid))}–${formatPaceValue(Math.max(...valid))}`;
                   })()}
+                  color="#3b82f6"
                 >
-                  <SimpleLineChart 
+                  <SimpleLineChart
                     data={processPaceData(streams.velocity_smooth.data as number[])}
                     color="#3b82f6"
-                    height={220}
-                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
+                    height={130}
+                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                     formatYLabel={(v) => formatPaceValue(v)}
                     domain={(() => {
                       const paces = processPaceData(streams.velocity_smooth.data as number[]).filter(p => p > 0);
@@ -617,19 +629,20 @@ export default function ActivityDetailPage() {
                   />
                 </ChartSection>
               )}
-              
+
               {streams.altitude && (
-                <ChartSection 
+                <ChartSection
                   title={t('activity.elevation')}
-                  subtitle={`${Math.round(activity.elev_low || 0)}m ~ ${Math.round(activity.elev_high || 0)}m`}
+                  avgValue={`+${Math.round(activity.total_elevation_gain)}`}
+                  avgUnit="m"
+                  rangeValue={`${Math.round(activity.elev_low || 0)}–${Math.round(activity.elev_high || 0)}m`}
+                  color="#22c55e"
                 >
-                  <SimpleLineChart 
+                  <SimpleLineChart
                     data={streams.altitude.data as number[]}
                     color="#22c55e"
-                    height={220}
-                    yUnit="m"
-                    fill
-                    xLabels={['0km', `${(activity.distance / 1000).toFixed(1)}km`]}
+                    height={130}
+                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                     domain={(() => {
                       const data = streams.altitude.data as number[];
                       if (data.length === 0) return undefined;
@@ -732,16 +745,47 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ChartSection({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+function ChartSection({
+  title,
+  avgValue,
+  avgUnit,
+  rangeValue,
+  color,
+  children,
+}: {
+  title: string;
+  avgValue: string;
+  avgUnit: string;
+  rangeValue: string;
+  color: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">{title}</h3>
-        {subtitle && <span className="font-mono text-[10px] text-zinc-400">{subtitle}</span>}
+    <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 last:border-b-0">
+      <div className="flex items-end justify-between mb-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase text-zinc-500">{title}</span>
+          {avgValue && (
+            <span className="font-mono text-sm font-bold" style={{ color }}>
+              {avgValue}{avgUnit && <span className="text-[10px] font-normal ml-0.5">{avgUnit}</span>}
+            </span>
+          )}
+        </div>
+        {rangeValue && (
+          <span className="font-mono text-[10px] text-zinc-400">{rangeValue}</span>
+        )}
       </div>
       {children}
     </div>
   );
+}
+
+function formatDurationShort(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  if (h > 0) return `${h}:${min.toString().padStart(2, '0')}`;
+  return `${min}:00`;
 }
 
 // Process pace data with percentile-based clamping

@@ -7,23 +7,29 @@ interface SimpleLineChartProps {
   color: string;
   height?: number;
   fill?: boolean;
+  gradientFill?: boolean;
+  showYAxis?: boolean;
   xLabels?: string[];
   yUnit?: string;
   formatYLabel?: (value: number) => string;
   domain?: [number, number];
-  smooth?: number; // moving average window size
+  smooth?: number;
+  showAvgLine?: boolean;
 }
 
 export function SimpleLineChart({
   data,
   color,
-  height = 220,
+  height = 130,
   fill = false,
+  gradientFill = true,
+  showYAxis = false,
   xLabels,
   yUnit = '',
   formatYLabel,
   domain,
-  smooth
+  smooth,
+  showAvgLine = true,
 }: SimpleLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(320);
@@ -66,25 +72,31 @@ export function SimpleLineChart({
 
   const dataMin = Math.min(...sampledData);
   const dataMax = Math.max(...sampledData);
+  const dataAvg = sampledData.reduce((a, b) => a + b, 0) / sampledData.length;
 
   const min = domain ? domain[0] : dataMin;
   const max = domain ? domain[1] : dataMax;
   const range = max - min || 1;
 
-  const labelWidth = Math.min(52, Math.max(40, Math.round(containerWidth * 0.12)));
-  const xLabelHeight = 20;
-  const topPad = 22;
-  const bottomPad = 14;
+  const labelWidth = showYAxis
+    ? Math.min(48, Math.max(36, Math.round(containerWidth * 0.1)))
+    : 0;
+  const xLabelHeight = 16;
+  const topPad = 4;
+  const bottomPad = showYAxis ? 14 : 18;
   const chartWidth = containerWidth;
   const chartHeight = height - xLabelHeight - topPad - bottomPad;
 
-  // Build segments: split path when values are outside domain
+  // Gradient id (unique per instance to avoid collisions)
+  const gradId = React.useId().replace(/:/g, '');
+
+  // Build segments
   type Point = { x: number; y: number };
   const segments: Point[][] = [];
   let currentSeg: Point[] = [];
 
   sampledData.forEach((value, index) => {
-    const x = labelWidth + (index / (sampledData.length - 1)) * (chartWidth - labelWidth - 10);
+    const x = labelWidth + (index / (sampledData.length - 1)) * (chartWidth - labelWidth - (showYAxis ? 10 : 4));
     if (value < min || value > max) {
       if (currentSeg.length) {
         segments.push(currentSeg);
@@ -119,7 +131,8 @@ export function SimpleLineChart({
     })
     .join(' ');
 
-  const fillPath = fill
+  const shouldFill = fill || gradientFill;
+  const fillPath = shouldFill
     ? segments
         .map((seg) => {
           if (seg.length === 0) return '';
@@ -127,13 +140,15 @@ export function SimpleLineChart({
           return `${path} L ${seg[seg.length - 1].x},${topPad + chartHeight} L ${seg[0].x},${topPad + chartHeight} Z`;
         })
         .join(' ')
-    : linePath;
+    : '';
 
-  const yTicks = [min, (min + max) / 2, max];
+  const avgY = topPad + ((max - dataAvg) / range) * chartHeight;
+
+  const yTicks = showYAxis ? [min, (min + max) / 2, max] : [];
 
   const textStyle: React.CSSProperties = {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 400,
   };
 
@@ -145,8 +160,16 @@ export function SimpleLineChart({
         viewBox={`0 0 ${chartWidth} ${height}`}
         className="block overflow-visible"
       >
-        {/* 网格线和Y轴标签 */}
-        {yTicks.map((tick, i) => {
+        <defs>
+          <linearGradient id={`grad-${gradId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+            <stop offset="60%" stopColor={color} stopOpacity={0.08} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines & Y-axis labels (only when showYAxis) */}
+        {showYAxis && yTicks.map((tick, i) => {
           const y = topPad + ((max - tick) / range) * chartHeight;
           return (
             <g key={i}>
@@ -160,9 +183,9 @@ export function SimpleLineChart({
                 strokeDasharray="4,2"
               />
               <text
-                x={labelWidth - 8}
+                x={labelWidth - 6}
                 y={y}
-                fill="#71717a"
+                fill="#a1a1aa"
                 textAnchor="end"
                 dominantBaseline="middle"
                 style={textStyle}
@@ -173,35 +196,51 @@ export function SimpleLineChart({
           );
         })}
 
-        {/* 图表线 */}
-        {fill && (
-          <path d={fillPath} fill={color} fillOpacity={0.15} />
+        {/* Avg line (subtle dashed) */}
+        {showAvgLine && (
+          <line
+            x1={labelWidth}
+            y1={avgY}
+            x2={chartWidth - (showYAxis ? 10 : 4)}
+            y2={avgY}
+            stroke={color}
+            strokeWidth={1}
+            strokeDasharray="3,3"
+            opacity={0.25}
+          />
         )}
+
+        {/* Gradient fill */}
+        {shouldFill && fillPath && (
+          <path d={fillPath} fill={`url(#grad-${gradId})`} />
+        )}
+
+        {/* Line */}
         <path
           d={linePath}
           fill="none"
           stroke={color}
-          strokeWidth={smooth ? 2 : 1.5}
+          strokeWidth={1}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
-        {/* X轴标签 */}
+        {/* X-axis labels */}
         {xLabels && xLabels.length >= 2 && (
           <>
             <text
               x={labelWidth}
-              y={height - 4}
-              fill="#71717a"
+              y={height - 2}
+              fill="#a1a1aa"
               textAnchor="start"
               style={textStyle}
             >
               {xLabels[0]}
             </text>
             <text
-              x={chartWidth - 6}
-              y={height - 4}
-              fill="#71717a"
+              x={chartWidth - (showYAxis ? 10 : 4)}
+              y={height - 2}
+              fill="#a1a1aa"
               textAnchor="end"
               style={textStyle}
             >
