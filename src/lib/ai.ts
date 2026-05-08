@@ -28,6 +28,113 @@ function formatPaceSec(secPerKm: number): string {
   return `${m}'${s.toString().padStart(2, '0')}"`;
 }
 
+// ── Weather parsing ──────────────────────────────────────────────
+
+interface ParsedWeather {
+  temperature?: number;
+  feelsLike?: number;
+  humidity?: number;
+  windSpeed?: number;
+  source: 'description' | 'device' | 'both';
+}
+
+/**
+ * Extract weather info from activity.description (commonly injected by
+ * COROS / Garmin / etc.) and/or the device-reported average_temp.
+ */
+function parseWeatherFromDescription(
+  description?: string,
+  averageTemp?: number
+): ParsedWeather | null {
+  const result: ParsedWeather = { source: 'description' };
+
+  // 1. Device-reported average temperature
+  if (averageTemp !== undefined && averageTemp !== null) {
+    result.temperature = Math.round(averageTemp);
+    result.source = 'device';
+  }
+
+  if (!description) {
+    return result.temperature !== undefined ? result : null;
+  }
+
+  // 2. Temperature from description emoji/text
+  const tempPatterns = [
+    /🌡️?\s*([\d.]+)\s*[°℃]?\s*C/i,
+    /气温[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
+    /Temp(?:erature)?[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
+  ];
+  for (const p of tempPatterns) {
+    const m = description.match(p);
+    if (m) {
+      result.temperature = parseFloat(m[1]);
+      result.source = result.source === 'device' ? 'both' : 'description';
+      break;
+    }
+  }
+
+  // 3. Feels-like / apparent temperature
+  const feelsPatterns = [
+    /Feels like\s+([\d.]+)\s*[°℃]?\s*C?/i,
+    /体感[温度]*[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
+  ];
+  for (const p of feelsPatterns) {
+    const m = description.match(p);
+    if (m) {
+      result.feelsLike = parseFloat(m[1]);
+      break;
+    }
+  }
+
+  // 4. Humidity
+  const humPatterns = [
+    /💧?\s*([\d]+)\s*%/,
+    /湿度[:\s]*([\d]+)\s*%?/i,
+    /Humidity[:\s]*([\d]+)\s*%?/i,
+  ];
+  for (const p of humPatterns) {
+    const m = description.match(p);
+    if (m) {
+      result.humidity = parseInt(m[1], 10);
+      break;
+    }
+  }
+
+  // 5. Wind speed
+  const windPatterns = [
+    /💨?\s*([\d.]+)\s*km\/h/i,
+    /风速[:\s]*([\d.]+)\s*km\/h/i,
+    /Wind[:\s]*([\d.]+)\s*km\/h/i,
+  ];
+  for (const p of windPatterns) {
+    const m = description.match(p);
+    if (m) {
+      result.windSpeed = parseFloat(m[1]);
+      break;
+    }
+  }
+
+  const hasAny =
+    result.temperature !== undefined ||
+    result.feelsLike !== undefined ||
+    result.humidity !== undefined ||
+    result.windSpeed !== undefined;
+
+  return hasAny ? result : null;
+}
+
+function getDistanceLabel(distanceMeters: number, en: boolean): string {
+  const km = distanceMeters / 1000;
+  if (en) {
+    if (km < 3) return `short (~${Math.round(km)}km)`;
+    if (km < 7) return `mid (~${Math.round(km)}km)`;
+    return `long (~${Math.round(km)}km)`;
+  }
+  if (km < 3) return `短距离(~${Math.round(km)}km)`;
+  if (km < 7) return `中距离(~${Math.round(km)}km)`;
+  return `长距离(~${Math.round(km)}km)`;
+}
+
 // V2 AI Analysis - Professional coach-level insights
 export interface AIAnalysis {
   summary: string;
@@ -87,9 +194,10 @@ function buildAccurateComparison(
     ? (en ? `Same as historical average, faster than ${similarStats.yourPaceRank}% of similar workouts` : `与历史平均持平，超过 ${similarStats.yourPaceRank}% 的同类训练`)
     : (en ? `${diffAbs}s/km ${diffText} than historical average, faster than ${similarStats.yourPaceRank}% of similar workouts` : `比历史平均${diffText} ${diffAbs} 秒/km，超过 ${similarStats.yourPaceRank}% 的同类训练`);
 
+  const distanceLabel = getDistanceLabel(activity.distance, en);
   let insight = en
-    ? `Faster than ${similarStats.yourPaceRank}% in ${similarStats.count} similar workouts. `
-    : `在 ${similarStats.count} 次同类训练中超过 ${similarStats.yourPaceRank}%。`;
+    ? `Faster than ${similarStats.yourPaceRank}% among ${similarStats.count} comparable ${distanceLabel} workouts. `
+    : `在 ${similarStats.count} 次同类${distanceLabel}训练中超过 ${similarStats.yourPaceRank}%。`;
   if (diffSec === 0) {
     insight += en ? 'This pace is basically the same as the historical average' : '本次配速与历史平均基本持平';
   } else {
@@ -247,25 +355,47 @@ export function buildProfessionalPrompt(
       : `\n- 近4周平均: ${(avg4WeekDistance / 1000).toFixed(1)}km`;
   }
 
+  // Weather conditions
+  const weatherInfo = parseWeatherFromDescription(activity.description, activity.average_temp);
+  if (weatherInfo) {
+    prompt += en ? `\n\n## Weather Conditions` : `\n\n## 天气条件`;
+    if (weatherInfo.temperature !== undefined) {
+      prompt += en ? `\n- Temperature: ${weatherInfo.temperature}°C` : `\n- 气温: ${weatherInfo.temperature}°C`;
+    }
+    if (weatherInfo.feelsLike !== undefined) {
+      prompt += en ? `\n- Feels like: ${weatherInfo.feelsLike}°C` : `\n- 体感温度: ${weatherInfo.feelsLike}°C`;
+    }
+    if (weatherInfo.humidity !== undefined) {
+      prompt += en ? `\n- Humidity: ${weatherInfo.humidity}%` : `\n- 湿度: ${weatherInfo.humidity}%`;
+    }
+    if (weatherInfo.windSpeed !== undefined) {
+      prompt += en ? `\n- Wind: ${weatherInfo.windSpeed} km/h` : `\n- 风速: ${weatherInfo.windSpeed} km/h`;
+    }
+    prompt += en
+      ? `\n\nWhen analyzing, consider thermal stress: elevated temperature and humidity increase heart rate and RPE at the same pace. In hot/humid conditions (temp > 26°C or humidity > 70%), do NOT judge performance solely by raw pace or heart rate. Account for heat stress when comparing to cooler-weather runs.`
+      : `\n\n分析时请考虑热应激因素：高温高湿环境下，同样配速的心率和主观疲劳感会显著上升。当气温超过26°C或湿度超过70%时，不要仅凭原始配速或心率判定表现好坏，应将热应激因素纳入历史对比的考量。`;
+  }
+
   // Similar activities comparison
+  const distanceLabel = getDistanceLabel(activity.distance, en);
   if (similarStats) {
     prompt += en
-      ? `\n\nSimilar Workouts Comparison (${similarStats.count} similar distances):`
-      : `\n\n同类型训练对比（${similarStats.count}次类似距离）:`;
+      ? `\n\nComparable Workouts Comparison (${similarStats.count} ${distanceLabel} workouts):`
+      : `\n\n同类训练对比（${similarStats.count}次${distanceLabel}）:`;
     prompt += en
       ? `\n- Historical avg pace: ${formatPace(similarStats.avgPace * 60)}/km`
       : `\n- 历史平均配速: ${formatPace(similarStats.avgPace * 60)}/km`;
     prompt += en
-      ? `\n- Historical best pace: ${formatPace(similarStats.bestPace * 60)}/km`
-      : `\n- 历史最佳配速: ${formatPace(similarStats.bestPace * 60)}/km`;
+      ? `\n- Fastest comparable pace: ${formatPace(similarStats.bestPace * 60)}/km`
+      : `\n- 同类训练最快配速: ${formatPace(similarStats.bestPace * 60)}/km`;
     prompt += en
-      ? `\n- This workout: faster than ${similarStats.yourPaceRank}% of similar workouts`
-      : `\n- 本次表现: 超过${similarStats.yourPaceRank}%的同类型训练`;
+      ? `\n- This workout: faster than ${similarStats.yourPaceRank}% of comparable ${distanceLabel} workouts`
+      : `\n- 本次表现: 超过${similarStats.yourPaceRank}%的同类${distanceLabel}训练`;
     prompt += en
-      ? `\n- Recent 5 similar avg pace: ${formatPace(similarStats.recentAvgPace * 60)}/km`
+      ? `\n- Recent 5 comparable avg pace: ${formatPace(similarStats.recentAvgPace * 60)}/km`
       : `\n- 最近5次同类平均配速: ${formatPace(similarStats.recentAvgPace * 60)}/km`;
     prompt += en
-      ? `\n- Next 5 older similar avg pace: ${formatPace(similarStats.olderAvgPace * 60)}/km`
+      ? `\n- Next 5 older comparable avg pace: ${formatPace(similarStats.olderAvgPace * 60)}/km`
       : `\n- 再早5次同类平均配速: ${formatPace(similarStats.olderAvgPace * 60)}/km`;
   }
 
@@ -304,10 +434,10 @@ export function buildProfessionalPrompt(
       : `\n3. 负荷评估: 基于以下两点判断：(a)本次训练强度及占本周跑量比例，(b)本周 vs 上周跑量环比变化。如果本周跑量环比上周增长>15%，必须标记为"跑量增加过快，注意受伤风险"。如果单次高强度训练（T/I/R区）占本周跑量>15%，标记为"单次负荷较大"。不要在周跑量实际处于上升期时机械地说"跑量偏低"。`;
     if (similarStats) {
       prompt += en
-        ? `\n4. Historical comparison: this pace ${paceStr}/km vs historical avg ${formatPace(similarStats.avgPace * 60)}/km and best ${formatPace(similarStats.bestPace * 60)}/km. Faster than ${similarStats.yourPaceRank}% of similar workouts.`
-        : `\n4. 历史对比: 本次配速${paceStr}/km，历史平均${formatPace(similarStats.avgPace * 60)}/km，最佳${formatPace(similarStats.bestPace * 60)}/km。超过${similarStats.yourPaceRank}%的同类训练。`;
+        ? `\n4. Comparable workout comparison (${similarStats.count} ${distanceLabel}): this pace ${paceStr}/km vs historical avg ${formatPace(similarStats.avgPace * 60)}/km and fastest comparable ${formatPace(similarStats.bestPace * 60)}/km. You outpaced ${similarStats.yourPaceRank}% of them.`
+        : `\n4. 同类训练对比（${similarStats.count}次${distanceLabel}）：本次配速${paceStr}/km，历史平均${formatPace(similarStats.avgPace * 60)}/km，同类最快${formatPace(similarStats.bestPace * 60)}/km。超过${similarStats.yourPaceRank}%的同类训练。`;
     } else {
-      prompt += en ? `\n4. Historical comparison: no comparable historical data yet.` : `\n4. 历史对比: 暂无可比历史数据。`;
+      prompt += en ? `\n4. Comparable workout comparison: no comparable historical data yet.` : `\n4. 同类训练对比: 暂无可比历史数据。`;
     }
     prompt += en
       ? `\n5. Next workout suggestion: CRITICAL RULE — If this workout intensity is "hard"/"extreme" OR pace zone is T/I/R, the next session MUST be an easy recovery run (E zone, 5-8km, 30-60s/km slower than marathon pace), with the goal of active recovery. NO intensity workouts (tempo, interval, or repetition) should be suggested after a hard session. Only if this was an easy/moderate aerobic run, you may suggest a specific quality session from the three-components perspective.`
