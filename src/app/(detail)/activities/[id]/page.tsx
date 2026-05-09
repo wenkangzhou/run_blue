@@ -410,7 +410,7 @@ export default function ActivityDetailPage() {
 
           {/* Map - notify when ready */}
           {activity.map?.polyline && (
-            <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+            <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative">
               <ActivityMap 
                 polyline={activity.map.polyline}
                 startLatlng={activity.start_latlng}
@@ -419,6 +419,18 @@ export default function ActivityDetailPage() {
                 isDark={isDark}
                 onReady={() => setMapReady(true)}
               />
+              {/* Workout type tag */}
+              {activity.workout_type !== undefined && activity.workout_type !== null && (
+                <div className="absolute top-2 right-2 z-[400]">
+                  <span className="inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                    {activity.workout_type === 1 ? '比赛' :
+                     activity.workout_type === 2 ? '长跑' :
+                     activity.workout_type === 3 ? '锻炼' :
+                     activity.workout_type === 0 ? '带娃' :
+                     `类型${activity.workout_type}`}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -577,6 +589,8 @@ export default function ActivityDetailPage() {
                     return `${Math.round(Math.min(...valid))}–${Math.round(Math.max(...valid))}`;
                   })()}
                   color="#ef4444"
+                  timeData={streams.time?.data as number[]}
+                  distanceData={streams.distance?.data as number[]}
                 >
                   <SimpleLineChart
                     data={streams.heartrate.data as number[]}
@@ -613,6 +627,8 @@ export default function ActivityDetailPage() {
                     return `${formatPaceValue(Math.min(...valid))}–${formatPaceValue(Math.max(...valid))}`;
                   })()}
                   color="#3b82f6"
+                  timeData={streams.time?.data as number[]}
+                  distanceData={streams.distance?.data as number[]}
                 >
                   <SimpleLineChart
                     data={processPaceData(streams.velocity_smooth.data as number[])}
@@ -637,6 +653,8 @@ export default function ActivityDetailPage() {
                   avgUnit="m"
                   rangeValue={`${Math.round(activity.elev_low || 0)}–${Math.round(activity.elev_high || 0)}m`}
                   color="#22c55e"
+                  timeData={streams.time?.data as number[]}
+                  distanceData={streams.distance?.data as number[]}
                 >
                   <SimpleLineChart
                     data={streams.altitude.data as number[]}
@@ -752,6 +770,9 @@ function ChartSection({
   rangeValue,
   color,
   children,
+  timeData,
+  distanceData,
+  onPointSelect,
 }: {
   title: string;
   avgValue: string;
@@ -759,7 +780,16 @@ function ChartSection({
   rangeValue: string;
   color: string;
   children: React.ReactNode;
+  timeData?: number[];
+  distanceData?: number[];
+  onPointSelect?: (index: number) => void;
 }) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const handlePointClick = (idx: number) => {
+    setSelectedIdx(idx);
+    if (onPointSelect) onPointSelect(idx);
+  };
+
   return (
     <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 last:border-b-0">
       <div className="flex items-end justify-between mb-1">
@@ -775,7 +805,20 @@ function ChartSection({
           <span className="font-mono text-[10px] text-zinc-400">{rangeValue}</span>
         )}
       </div>
-      {children}
+      {React.cloneElement(children as React.ReactElement<any>, {
+        onPointClick: handlePointClick,
+        interactive: true,
+      })}
+      {selectedIdx !== null && (timeData || distanceData) && (
+        <div className="mt-1 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
+          {timeData && (
+            <span>{formatDurationShort(timeData[Math.min(selectedIdx, timeData.length - 1)])}</span>
+          )}
+          {distanceData && (
+            <span>{(distanceData[Math.min(selectedIdx, distanceData.length - 1)] / 1000).toFixed(2)} km</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

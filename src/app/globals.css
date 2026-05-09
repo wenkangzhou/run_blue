@@ -117,6 +117,44 @@ body {
   z-index: 1 !important;
 }
 
+/* Heatmap segment label */
+.heatmap-segment-label {
+  outline: none !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+/* Heatmap cluster marker: remove focus outline / border artifacts */
+/* Also pointer-events:none so clicks pass through to the underlying circleMarker hit-area */
+.heatmap-cluster-marker,
+.heatmap-cluster-marker:focus,
+.heatmap-cluster-marker:active {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  pointer-events: none !important;
+}
+
+/* Restore Leaflet internal pane stacking so markers sit above polylines/tooltips */
+.leaflet-marker-pane {
+  z-index: 600 !important;
+}
+.leaflet-marker-icon {
+  z-index: auto !important;
+  pointer-events: auto !important;
+}
+/* Cluster label markers must NOT intercept clicks — let them pass to circleMarker hit-areas below */
+.leaflet-marker-icon.heatmap-cluster-marker {
+  pointer-events: none !important;
+}
+.leaflet-overlay-pane {
+  z-index: 400 !important;
+}
+.leaflet-tooltip-pane {
+  z-index: 500 !important;
+}
+
 /* Map container isolation */
 .map-container {
   isolation: isolate;

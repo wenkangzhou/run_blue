@@ -54,16 +54,21 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    const cachedKey = `ai_analysis_v2_${activity.id}`;
+    const cachedKey = `ai_analysis_v3_${activity.id}`;
     const cached = localStorage.getItem(cachedKey);
 
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Date.now() - parsed.analysis?.generatedAt < 7 * 24 * 60 * 60 * 1000) {
+        // Cache valid for 30 days; quota-exceeded fallback caches for 1 hour only
+        const maxAge = parsed.isQuotaExceeded ? 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+        if (Date.now() - parsed.analysis?.generatedAt < maxAge) {
           setAnalysis(parsed.analysis);
           setTrainingStats(parsed.trainingStats);
           setClassification(parsed.classification);
+          if (parsed.isQuotaExceeded) {
+            setError('AI 分析配额已用完，请稍后再试。已显示系统生成的基础分析。');
+          }
           return;
         }
       } catch {
@@ -101,7 +106,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       setTrainingStats(data.trainingProfile);
       setClassification(data.classification);
       
-      localStorage.setItem(`ai_analysis_v2_${activity.id}`, JSON.stringify({
+      localStorage.setItem(`ai_analysis_v3_${activity.id}`, JSON.stringify({
         analysis: data.analysis,
         trainingStats: data.trainingProfile,
         classification: data.classification,
@@ -112,6 +117,8 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       setLoading(false);
     }
   };
+
+  const isQuotaError = error?.includes('配额') || error?.includes('quota');
 
   const intensity = analysis?.intensity ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) } : null;
   const isRace = classification?.isRace;
@@ -205,10 +212,12 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
           </div>
         ) : error ? (
           <div className="text-center py-4 px-2">
-            <p className="font-mono text-xs text-red-500 mb-2 break-all max-w-full">{error}</p>
-            <button onClick={fetchAnalysis} className="font-mono text-xs text-blue-600 hover:underline">
-              {t('common.retry')}
-            </button>
+            <p className={`font-mono text-xs mb-2 break-all max-w-full ${isQuotaError ? 'text-amber-600' : 'text-red-500'}`}>{error}</p>
+            {!isQuotaError && (
+              <button onClick={fetchAnalysis} className="font-mono text-xs text-blue-600 hover:underline">
+                {t('common.retry')}
+              </button>
+            )}
           </div>
         ) : analysis ? (
           <div className="space-y-4">

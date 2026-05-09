@@ -275,6 +275,27 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Elevation: ${Math.round(activity.total_elevation_gain)} m`
     : `\n- 爬升: ${Math.round(activity.total_elevation_gain)} m`;
+  // Trail run detection: significant elevation gain relative to distance
+  const elevationRatio = activity.total_elevation_gain / activity.distance;
+  const isTrailRun = activity.sport_type === 'TrailRun' || activity.type === 'TrailRun' || elevationRatio > 0.05;
+  const equivalentDistance = isTrailRun
+    ? activity.distance + activity.total_elevation_gain * 10 // 100m climb ≈ 1km equivalent
+    : activity.distance;
+  const equivalentPaceSecKm = activity.moving_time / equivalentDistance * 1000;
+  const equivalentPaceStr = formatPace(equivalentPaceSecKm);
+
+  if (isTrailRun) {
+    prompt += en
+      ? `\n- ⚠️ Trail/ mountain run detected. Elevation gain: ${Math.round(activity.total_elevation_gain)}m (ratio ${(elevationRatio * 1000).toFixed(0)}m/km)`
+      : `\n- ⚠️ 检测到越野跑/山地跑。爬升: ${Math.round(activity.total_elevation_gain)}米（每公里爬升${(elevationRatio * 1000).toFixed(0)}米）`;
+    prompt += en
+      ? `\n- Equivalent distance (flat-ground equivalent): ${(equivalentDistance / 1000).toFixed(2)} km (actual ${distanceKm}km + climb equivalent)`
+      : `\n- 等效平路距离: ${(equivalentDistance / 1000).toFixed(2)} km（实际${distanceKm}km + 爬升等效）`;
+    prompt += en
+      ? `\n- Equivalent pace (flat-ground equivalent): ${equivalentPaceStr}/km — USE THIS for performance evaluation, NOT raw pace`
+      : `\n- 等效平路配速: ${equivalentPaceStr}/km — 评估表现时必须使用等效配速，禁止直接用原始配速`;
+  }
+
   prompt += en
     ? `\n- Raw Seconds: ${activity.moving_time}s (for precise calculation)`
     : `\n- 原始秒数: ${activity.moving_time}秒（用于精确计算）`;
@@ -420,6 +441,23 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n5. Next workout: easy recovery runs or rest after the race, NOT intensity workouts.`
       : `\n5. 下次训练建议：比赛后应该安排轻松恢复跑，不是强度训练`;
+    if (isTrailRun) {
+      prompt += en
+        ? `\n\n⚠️ TRAIL RACE SPECIAL RULES:`
+        : `\n\n⚠️ 越野跑/山地赛特别规则:`;
+      prompt += en
+        ? `\n- This is a trail race with significant elevation gain. You MUST use the EQUIVALENT PACE (${equivalentPaceStr}/km) for performance evaluation, NOT the raw pace (${paceStr}/km). Comparing raw trail pace to flat-road pace is MEANINGLESS and will produce absurd conclusions.`
+        : `\n- 这是一场有明显爬升的越野赛/山地赛。评估表现时必须使用等效平路配速（${equivalentPaceStr}/km），严禁使用原始配速（${paceStr}/km）直接对比平路成绩。用原始越野配速对比平路配速会得出荒谬结论。`;
+      prompt += en
+        ? `\n- When comparing to historical data, use the equivalent pace. If there are no comparable trail races in history, explicitly state this and avoid making false "slower than average" claims.`
+        : `\n- 与历史数据对比时必须使用等效配速。如果历史中没有可比的越野赛记录，请明确说明，不要错误地下"比平均慢"的结论。`;
+      prompt += en
+        ? `\n- Climbing ability IS a core performance metric in trail running. Acknowledge the athlete's climbing strength. Do NOT label a strong trail performance as "poor" just because the raw pace looks slow on paper.`
+        : `\n- 爬升能力是越野跑的核心竞技指标之一。应认可运动员的爬坡能力。绝不能仅因为原始配速数字看起来慢就把优秀的越野表现判定为"表现差"。`;
+      prompt += en
+        ? `\n- Heart rate in trail races is naturally lower at the same effort level due to running economy differences on varied terrain. Do NOT interpret a lower HR vs flat-road races as "not trying hard enough".`
+        : `\n- 越野跑在同样努力程度下心率天然比平路低（多变地形导致跑步经济性不同）。不要把比平路赛低的心率解读为"没有拼尽全力"。`;
+    }
   } else {
     // Normal training analysis - focused on THIS specific workout
     prompt += en ? `\n\nWorkout-specific analysis:` : `\n\n本次训练针对性分析:`;

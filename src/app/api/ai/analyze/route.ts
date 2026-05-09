@@ -81,6 +81,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('AI analyze error:', error);
+    const msg = error.message || '';
+    const isQuota = msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exceeded');
+    if (isQuota) {
+      return NextResponse.json(
+        { error: 'AI 分析配额已用完，请稍后再试', code: 'QUOTA_EXCEEDED' },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       { error: error.message || 'Analysis failed' },
       { status: 500 }

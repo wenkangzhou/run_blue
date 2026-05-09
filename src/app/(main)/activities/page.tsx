@@ -52,6 +52,9 @@ export default function ActivitiesPage() {
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [minDistance, setMinDistance] = useState(searchParams.get('minDistance') || '');
   const [maxDistance, setMaxDistance] = useState(searchParams.get('maxDistance') || '');
+  const [raceFilter, setRaceFilter] = useState(searchParams.get('race') === '1');
+  const [withKidFilter, setWithKidFilter] = useState(searchParams.get('withKid') === '1');
+  const [longRunFilter, setLongRunFilter] = useState(searchParams.get('longRun') === '1');
 
   // Sync URL when filters change
   const updateFilterParams = useCallback((patch: Record<string, string>) => {
@@ -91,9 +94,14 @@ export default function ActivitiesPage() {
       if (minDistance && distKm < parseFloat(minDistance)) return false;
       if (maxDistance && distKm > parseFloat(maxDistance)) return false;
 
+      // Workout type / tag filters
+      if (raceFilter && a.workout_type !== 1) return false;
+      if (longRunFilter && a.workout_type !== 2 && a.distance < 15000) return false;
+      if (withKidFilter && a.workout_type !== 0) return false;
+
       return true;
     });
-  }, [activities, startDate, endDate, minDistance, maxDistance]);
+  }, [activities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
 
   // Load activities
   const loadActivities = useCallback(async (type: 'initial' | 'refresh' | 'more') => {
@@ -363,14 +371,14 @@ export default function ActivitiesPage() {
           <button
             onClick={() => setShowFilters((s) => !s)}
             className={`inline-flex items-center gap-1 p-2 font-mono text-xs transition-colors ${
-              showFilters || startDate || endDate || minDistance || maxDistance
+              showFilters || startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
             }`}
             title={t('filter.title', '筛选')}
           >
             <Search size={16} />
-            {(startDate || endDate || minDistance || maxDistance) && (
+            {(startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter) && (
               <span className="w-2 h-2 bg-blue-500 rounded-full" />
             )}
           </button>
@@ -383,8 +391,8 @@ export default function ActivitiesPage() {
 
       {/* Filter Panel */}
       {showFilters && (
-        <div className="mb-4 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-3 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="mb-4 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-3 space-y-3 max-w-full overflow-x-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.startDate', '开始日期')}</label>
               <input
@@ -403,8 +411,6 @@ export default function ActivitiesPage() {
                 className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
               />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.minDistance', '最小距离 (km)')}</label>
               <input
@@ -430,11 +436,45 @@ export default function ActivitiesPage() {
               />
             </div>
           </div>
-          {(startDate || endDate || minDistance || maxDistance) && (
+          <div className="flex flex-wrap gap-2">
+            {/* Workout type tags */}
+            <button
+              onClick={() => setRaceFilter(v => !v)}
+              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+                raceFilter
+                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
+                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+              }`}
+            >
+              比赛
+            </button>
+            <button
+              onClick={() => setWithKidFilter(v => !v)}
+              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+                withKidFilter
+                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
+                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+              }`}
+            >
+              带娃
+            </button>
+            <button
+              onClick={() => setLongRunFilter(v => !v)}
+              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+                longRunFilter
+                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
+                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+              }`}
+            >
+              长跑
+            </button>
+          </div>
+          {(startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter) && (
             <button
               onClick={() => {
                 setStartDate(''); setEndDate(''); setMinDistance(''); setMaxDistance('');
-                updateFilterParams({ startDate: '', endDate: '', minDistance: '', maxDistance: '' });
+                setRaceFilter(false); setWithKidFilter(false); setLongRunFilter(false);
+                updateFilterParams({ startDate: '', endDate: '', minDistance: '', maxDistance: '', race: '', withKid: '', longRun: '' });
               }}
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-red-500 transition-colors"
             >

@@ -15,6 +15,8 @@ interface SimpleLineChartProps {
   domain?: [number, number];
   smooth?: number;
   showAvgLine?: boolean;
+  interactive?: boolean;
+  onPointClick?: (index: number, value: number) => void;
 }
 
 export function SimpleLineChart({
@@ -30,9 +32,12 @@ export function SimpleLineChart({
   domain,
   smooth,
   showAvgLine = true,
+  interactive = true,
+  onPointClick,
 }: SimpleLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(320);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -146,19 +151,48 @@ export function SimpleLineChart({
 
   const yTicks = showYAxis ? [min, (min + max) / 2, max] : [];
 
+  // Click handler: find nearest data point by x position
+  const handleChartClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!interactive || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const plotLeft = labelWidth;
+    const plotRight = chartWidth - (showYAxis ? 10 : 4);
+    const plotWidth = plotRight - plotLeft;
+    if (plotWidth <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clickX - plotLeft) / plotWidth));
+    const idx = Math.round(ratio * (sampledData.length - 1));
+    const clampedIdx = Math.max(0, Math.min(sampledData.length - 1, idx));
+    setSelectedIndex(clampedIdx);
+    if (onPointClick) {
+      onPointClick(clampedIdx, sampledData[clampedIdx]);
+    }
+  };
+
   const textStyle: React.CSSProperties = {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
     fontSize: 9,
     fontWeight: 400,
   };
 
+  // Selected point position
+  const selectedPoint = selectedIndex !== null ? (() => {
+    const value = sampledData[selectedIndex];
+    if (value < min || value > max) return null;
+    const x = labelWidth + (selectedIndex / (sampledData.length - 1)) * (chartWidth - labelWidth - (showYAxis ? 10 : 4));
+    const y = topPad + ((max - value) / range) * chartHeight;
+    return { x, y, value };
+  })() : null;
+
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="w-full select-none">
       <svg
         width={chartWidth}
         height={height}
         viewBox={`0 0 ${chartWidth} ${height}`}
         className="block overflow-visible"
+        onClick={handleChartClick}
+        style={{ cursor: interactive ? 'crosshair' : 'default' }}
       >
         <defs>
           <linearGradient id={`grad-${gradId}`} x1="0" y1="0" x2="0" y2="1">
@@ -224,6 +258,42 @@ export function SimpleLineChart({
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+
+        {/* Selected point indicator (Apple Fitness style) */}
+        {interactive && selectedPoint && (
+          <g>
+            {/* Vertical line */}
+            <line
+              x1={selectedPoint.x}
+              y1={topPad}
+              x2={selectedPoint.x}
+              y2={topPad + chartHeight}
+              stroke={color}
+              strokeWidth={1}
+              opacity={0.4}
+              strokeDasharray="2,2"
+            />
+            {/* Point dot */}
+            <circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              r={4}
+              fill={color}
+              stroke="#fff"
+              strokeWidth={2}
+            />
+            {/* Value label */}
+            <text
+              x={selectedPoint.x}
+              y={selectedPoint.y - 10}
+              fill={color}
+              textAnchor="middle"
+              style={{ ...textStyle, fontSize: 10, fontWeight: 700 }}
+            >
+              {formatYLabel ? formatYLabel(selectedPoint.value) : `${Math.round(selectedPoint.value)}${yUnit}`}
+            </text>
+          </g>
+        )}
 
         {/* X-axis labels */}
         {xLabels && xLabels.length >= 2 && (

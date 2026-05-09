@@ -9,7 +9,7 @@ import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
+import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -61,6 +61,13 @@ export function Header() {
                 >
                   <BarChart3 size={14} />
                   {t('nav.stats', '统计')}
+                </Link>
+                <Link
+                  href="/heatmap"
+                  className="font-mono text-sm font-bold uppercase hover:text-red-600 dark:hover:text-red-400 transition-colors inline-flex items-center gap-1"
+                >
+                  <Map size={14} />
+                  {t('nav.heatmap', '跑步地图')}
                 </Link>
                 <Link
                   href="/routes"
@@ -176,6 +183,14 @@ export function Header() {
                   >
                     <BarChart3 size={16} />
                     {t('nav.stats', '统计')}
+                  </Link>
+                  <Link
+                    href="/heatmap"
+                    className="font-mono text-sm font-bold uppercase py-2 inline-flex items-center gap-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Map size={16} />
+                    {t('nav.heatmap', '跑步地图')}
                   </Link>
                   <Link
                     href="/routes"

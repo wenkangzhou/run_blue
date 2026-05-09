@@ -224,8 +224,8 @@ const RIEGEL_EXPONENT = 1.06;
  * Check if activity is a race based on workout_type or name
  */
 export function classifyActivity(activity: StravaActivity): ActivityClassification {
-  // Check workout_type - "Race" indicates a competition
-  const isWorkoutRace = activity.workout_type === 'Race';
+  // Check workout_type - 1 = Race in Strava API
+  const isWorkoutRace = activity.workout_type === 1;
   
   // Check name for race indicators
   const raceKeywords = ['比赛', '马拉松', '半马', '全马', 'marathon', 'half marathon', 'race', '10k', '5k'];
@@ -634,7 +634,7 @@ function projectTime(time1: number, dist1: number, dist2: number): number {
 
 /**
  * Find best race time for a specific distance range
- * Prioritizes actual races (workout_type = "Race")
+ * Prioritizes actual races (workout_type = 1)
  */
 function findBestRaceTime(
   runs: StravaActivity[],
@@ -646,7 +646,7 @@ function findBestRaceTime(
     r => r.distance >= minDistance && 
          r.distance <= maxDistance && 
          r.moving_time > 0 &&
-         (r.workout_type === 'Race' || classifyActivity(r).isRace)
+         (r.workout_type === 1 || classifyActivity(r).isRace)
   );
   
   if (races.length > 0) {

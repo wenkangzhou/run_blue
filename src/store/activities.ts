@@ -36,6 +36,7 @@ function toLightActivity(a: StravaActivity): StravaActivity {
     average_heartrate: a.average_heartrate,
     max_heartrate: a.max_heartrate,
     calories: a.calories,
+    workout_type: a.workout_type,
   } as StravaActivity;
 }
 
