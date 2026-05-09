@@ -5,7 +5,9 @@ import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { getActivities } from '@/lib/strava';
+import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
 
 interface FilterState {
   years: number[];
@@ -110,23 +112,23 @@ export function HeatmapClient() {
     }));
   }, []);
 
+  const { user } = useAuth();
+
   const loadMore = useCallback(async () => {
-    if (loadingMore) return;
+    if (loadingMore || !user?.accessToken) return;
     setLoadingMore(true);
     try {
       const nextPage = loadedPages + 1;
-      const res = await fetch(`/api/activities?page=${nextPage}&per_page=200`);
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
-      if (data.activities?.length > 0) {
-        appendActivitiesBatch(data.activities, nextPage, data.hasMore ?? false, Date.now());
+      const newActivities = await getActivities(user.accessToken, nextPage, 200);
+      if (newActivities.length > 0) {
+        appendActivitiesBatch(newActivities, nextPage, newActivities.length === 200, Date.now());
       }
     } catch (err) {
       console.error('Load more failed:', err);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadedPages, loadingMore, appendActivitiesBatch]);
+  }, [loadedPages, loadingMore, appendActivitiesBatch, user?.accessToken]);
 
   const loadSegments = useCallback(async () => {
     if (loadingSegments) return;
@@ -192,10 +194,19 @@ export function HeatmapClient() {
           </div>
         )}
 
+        {/* Back Button */}
+        <button
+          onClick={() => window.location.href = '/activities'}
+          className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          {language === 'zh' ? '返回' : 'Back'}
+        </button>
+
         {/* Filter Toggle */}
         <button
           onClick={() => setFilterOpen(!filterOpen)}
-          className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
+          className="absolute top-3 left-20 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
         >
           <Filter size={14} />
           {t('common.filter')}
@@ -209,7 +220,7 @@ export function HeatmapClient() {
             }
             setShowSegments(!showSegments);
           }}
-          className={`absolute top-3 left-20 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border font-mono text-xs font-bold shadow-sm transition-colors ${
+          className={`absolute top-3 left-36 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border font-mono text-xs font-bold shadow-sm transition-colors ${
             showSegments
               ? 'border-orange-400 text-orange-600 dark:text-orange-400'
               : 'border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-900'
