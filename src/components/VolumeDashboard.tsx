@@ -14,6 +14,7 @@ import {
   formatPaceFromSeconds,
 } from '@/lib/stats';
 import { VolumeBarChart } from './charts/VolumeBarChart';
+import { ActivityCalendarHeatmap } from './ActivityCalendarHeatmap';
 import { StatsCard } from './StatsCard';
 import { PixelCard } from './ui';
 import {
@@ -57,6 +58,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const [showMetricDropdown, setShowMetricDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const metricButtonRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
 
   // Close metric dropdown on outside click
   useEffect(() => {
@@ -72,6 +74,19 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
+  }, [showMetricDropdown]);
+
+  // Position dropdown using fixed positioning to avoid overflow clipping
+  useEffect(() => {
+    if (showMetricDropdown && metricButtonRef.current) {
+      const rect = metricButtonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + window.scrollY + 4,
+        right: window.innerWidth - rect.right - window.scrollX,
+      });
+    } else {
+      setDropdownPos(null);
+    }
   }, [showMetricDropdown]);
 
   const chartData = useMemo(
@@ -179,10 +194,11 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
               {showMetricDropdown ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
 
-            {showMetricDropdown && (
+            {showMetricDropdown && dropdownPos && (
               <div
                 ref={dropdownRef}
-                className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] z-50 min-w-[120px]"
+                className="fixed z-[100] bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] min-w-[120px]"
+                style={{ top: dropdownPos.top, right: dropdownPos.right }}
               >
                 {METRICS.map((m) => (
                   <button
@@ -206,6 +222,11 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
           </div>
         </div>
       </div>
+
+      {/* Calendar Heatmap */}
+      <PixelCard className="p-4">
+        <ActivityCalendarHeatmap activities={activities} year={selectedYear} metric={metric} />
+      </PixelCard>
 
       {/* Chart */}
       <PixelCard className="p-4">

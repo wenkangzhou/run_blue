@@ -91,7 +91,7 @@ export default function StatsPage() {
       }
 
       // Case 3: Store has data and cache is fresh — continue loading remaining pages only
-      if (storeHasMore && loadedPages > 0) {
+      if (loadedPages > 0) {
         setLocalLoading(true);
         setLoading(true);
         try {
@@ -119,7 +119,7 @@ export default function StatsPage() {
         }
 
         appendActivities(data);
-        hasMoreData = data.length === 200;
+        hasMoreData = data.length >= 195;
         page++;
       }
 

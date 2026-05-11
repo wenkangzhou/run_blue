@@ -121,7 +121,7 @@ export function HeatmapClient() {
       const nextPage = loadedPages + 1;
       const newActivities = await getActivities(user.accessToken, nextPage, 200);
       if (newActivities.length > 0) {
-        appendActivitiesBatch(newActivities, nextPage, newActivities.length === 200, Date.now());
+        appendActivitiesBatch(newActivities, nextPage, newActivities.length >= 195, Date.now());
       }
     } catch (err) {
       console.error('Load more failed:', err);

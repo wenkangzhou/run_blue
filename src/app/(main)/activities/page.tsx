@@ -149,7 +149,7 @@ export default function ActivitiesPage() {
         nextPageRef.current = 2;
         setLoadedPages(1);
         setLatestActivityId(newActivities[0]?.id || null);
-        setHasMore(newActivities.length === 200);
+        setHasMore(newActivities.length >= 195);
       } else if (type === 'more') {
         if (newActivities.length === 0) {
           setHasMore(false);
@@ -157,7 +157,7 @@ export default function ActivitiesPage() {
           appendActivities(newActivities);
           nextPageRef.current = currentPage + 1;
           setLoadedPages(currentPage);
-          setHasMore(newActivities.length === 200);
+          setHasMore(newActivities.length >= 195);
         }
       } else {
         // initial
@@ -165,7 +165,7 @@ export default function ActivitiesPage() {
         nextPageRef.current = 2;
         setLoadedPages(1);
         setLatestActivityId(newActivities[0]?.id || null);
-        setHasMore(newActivities.length === 200);
+        setHasMore(newActivities.length >= 195);
       }
       
       setLastFetchedAt(Date.now());

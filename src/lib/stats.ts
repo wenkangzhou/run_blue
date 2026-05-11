@@ -355,3 +355,46 @@ export function formatPaceFromSeconds(secondsPerKm: number): string {
   const sec = Math.floor(secondsPerKm % 60);
   return `${min}'${sec.toString().padStart(2, '0')}"`;
 }
+
+export interface DailyAggregate {
+  date: string; // YYYY-MM-DD
+  value: number;
+  activities: StravaActivity[];
+}
+
+export function getDailyAggregates(
+  activities: StravaActivity[],
+  year: number,
+  metric: MetricType
+): DailyAggregate[] {
+  const runs = activities.filter((a) => a.type === 'Run');
+  const map = new Map<string, { value: number; activities: StravaActivity[] }>();
+
+  runs.forEach((a) => {
+    const date = getActivityDate(a);
+    if (date.getFullYear() !== year) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const entry = map.get(key) || { value: 0, activities: [] };
+    entry.value += getMetricValue(a, metric);
+    entry.activities.push(a);
+    map.set(key, entry);
+  });
+
+  // Generate all days in the year
+  const result: DailyAggregate[] = [];
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInYear = isLeap ? 366 : 365;
+  for (let d = 0; d < daysInYear; d++) {
+    const date = new Date(year, 0, 1 + d);
+    const key = `${year}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const entry = map.get(key);
+    result.push({
+      date: key,
+      value: entry?.value || 0,
+      activities: entry?.activities || [],
+    });
+  }
+  return result;
+}
+
+
