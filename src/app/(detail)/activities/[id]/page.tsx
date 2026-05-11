@@ -267,13 +267,13 @@ export default function ActivityDetailPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <Link 
-              href="/activities" 
+            <button 
+              onClick={() => router.back()}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
-            </Link>
+            </button>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
@@ -289,13 +289,13 @@ export default function ActivityDetailPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <Link 
-              href="/activities" 
+            <button 
+              onClick={() => router.back()}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
-            </Link>
+            </button>
           </div>
         </div>
         <div className="container mx-auto px-4 py-12 max-w-2xl">
