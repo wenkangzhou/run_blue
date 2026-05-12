@@ -9,13 +9,14 @@ interface ActivityCalendarHeatmapProps {
   activities: StravaActivity[];
   year: number;
   metric: MetricType;
+  colorClasses?: string[];
 }
 
 const WEEKS_TO_SHOW = 53;
 const DAY_LABELS_ZH = ['一', '二', '三', '四', '五', '六', '日'];
 const DAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const COLOR_CLASSES = [
+const DEFAULT_COLOR_CLASSES = [
   'bg-zinc-100 dark:bg-zinc-800',                           // 0
   'bg-blue-200 dark:bg-blue-900/40',                        // 1
   'bg-blue-400 dark:bg-blue-700',                           // 2
@@ -23,7 +24,8 @@ const COLOR_CLASSES = [
   'bg-blue-800 dark:bg-blue-400',                           // 4
 ];
 
-export function ActivityCalendarHeatmap({ activities, year, metric }: ActivityCalendarHeatmapProps) {
+export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses }: ActivityCalendarHeatmapProps) {
+  const COLOR_CLASSES = colorClasses || DEFAULT_COLOR_CLASSES;
   const { i18n } = useTranslation();
   const locale = i18n.language;
   const isZh = locale.startsWith('zh');

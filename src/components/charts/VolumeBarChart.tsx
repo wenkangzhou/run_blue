@@ -17,9 +17,15 @@ import { ChartDataPoint, MetricType, formatMetricValue, getMetricUnit } from '@/
 interface VolumeBarChartProps {
   data: ChartDataPoint[];
   metric: MetricType;
+  colors?: {
+    bar: string;
+    barStroke: string;
+    currentBar: string;
+    currentBarStroke: string;
+  };
 }
 
-export function VolumeBarChart({ data, metric }: VolumeBarChartProps) {
+export function VolumeBarChart({ data, metric, colors }: VolumeBarChartProps) {
   const { t } = useTranslation();
 
   if (!data || data.length === 0) {
@@ -99,9 +105,9 @@ export function VolumeBarChart({ data, metric }: VolumeBarChartProps) {
               {data.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={entry.isCurrent ? '#f97316' : '#3b82f6'}
+                  fill={entry.isCurrent ? (colors?.currentBar || '#f97316') : (colors?.bar || '#3b82f6')}
                   className="cursor-pointer transition-opacity hover:opacity-80"
-                  stroke={entry.isCurrent ? '#ea580c' : '#2563eb'}
+                  stroke={entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
                   strokeWidth={1}
                 />
               ))}
