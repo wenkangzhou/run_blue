@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useLocalActivities } from '@/hooks/useLocalActivities';
-import { TerminalHeader } from '@/components/me/TerminalHeader';
+
 import { HeroSection } from '@/components/me/HeroSection';
 import { MeMap } from '@/components/me/MeMap';
 import { MeStats } from '@/components/me/MeStats';
@@ -11,6 +11,7 @@ import { CrtOverlay } from '@/components/me/CrtOverlay';
 import { FadeInSection } from '@/components/me/FadeInSection';
 import { TerminalLoader } from '@/components/me/TerminalLoader';
 import { ParticleBackground } from '@/components/me/ParticleBackground';
+
 
 export default function MePage() {
   const { activities, isLoading, error } = useLocalActivities();
@@ -51,7 +52,6 @@ export default function MePage() {
     <main className="dark min-h-screen bg-black text-zinc-100 font-mono selection:bg-green-400/30">
       <ParticleBackground />
       <CrtOverlay />
-      <TerminalHeader stats={stats} />
       <FadeInSection>
         <HeroSection activities={activities} stats={stats} />
       </FadeInSection>
