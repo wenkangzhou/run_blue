@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '@/store/settings';
 import i18n from '@/i18n';
@@ -269,7 +270,11 @@ export default function HomePage() {
             ))}
           </div>
           <p className="font-mono text-xs text-zinc-400">
-            {t('landing.footer')}
+            Made by{' '}
+            <Link href="/me" className="underline underline-offset-2 hover:text-zinc-200 transition-colors">
+              Jim
+            </Link>{' '}
+            for runners
           </p>
         </div>
       </div>

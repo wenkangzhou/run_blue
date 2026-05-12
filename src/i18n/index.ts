@@ -350,7 +350,7 @@ const resources = {
             tag: 'PWA',
           },
         },
-        footer: 'Made with ◼ for runners',
+        footer: 'Made by Jim for runners',
         poweredBy: 'Powered by Strava API',
       },
       features: {
@@ -735,7 +735,7 @@ const resources = {
             tag: 'PWA',
           },
         },
-        footer: 'Made with ◼ for runners',
+        footer: 'Made by Jim for runners',
         poweredBy: 'Powered by Strava API',
       },
       features: {
