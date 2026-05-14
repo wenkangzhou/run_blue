@@ -997,7 +997,8 @@ export function formatTime(seconds: number): string {
 
 export function formatPace(secondsPerKm: number): string {
   if (!secondsPerKm || secondsPerKm === 0) return '--\'--"';
-  const mins = Math.floor(secondsPerKm / 60);
-  const secs = Math.round(secondsPerKm % 60);
+  const total = Math.round(secondsPerKm);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
   return `${mins}'${secs.toString().padStart(2, '0')}"`;
 }

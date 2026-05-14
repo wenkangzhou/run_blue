@@ -23,8 +23,9 @@ function formatDuration(seconds: number): string {
 }
 
 function formatPaceSec(secPerKm: number): string {
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
+  const total = Math.round(secPerKm);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}'${s.toString().padStart(2, '0')}"`;
 }
 
