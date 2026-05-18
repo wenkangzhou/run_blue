@@ -238,7 +238,9 @@ export function buildProfessionalPrompt(
   trainingProfile: TrainingProfile,
   classification: ActivityClassification,
   locale: string = 'zh',
-  physique?: UserPhysique
+  physique?: UserPhysique,
+  lthr?: number | null,
+  streamAnalysis?: string,
 ): string {
   const en = locale.startsWith('en');
   const distanceKm = (activity.distance / 1000).toFixed(2);
@@ -334,6 +336,39 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- Max HR: ${Math.round(activity.max_heartrate)} bpm`
       : `\n- 最大心率: ${Math.round(activity.max_heartrate)} bpm`;
+  }
+
+  // LTHR-based heart rate zones (Joe Friel / TrainingPeaks method)
+  if (lthr && lthr > 0) {
+    prompt += en
+      ? `\n\n## Heart Rate Zones (LTHR-based, Joe Friel method)`
+      : `\n\n## 心率区间（基于 LTHR，Joe Friel 法）`;
+    prompt += en
+      ? `\n- LTHR (lactate threshold heart rate): ${lthr} bpm`
+      : `\n- 乳酸阈值心率(LTHR): ${lthr} bpm`;
+    prompt += en
+      ? `\n- Z1 Recovery: < ${Math.round(lthr * 0.85)} bpm`
+      : `\n- Z1 恢复: < ${Math.round(lthr * 0.85)} bpm`;
+    prompt += en
+      ? `\n- Z2 Aerobic Base: ${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} bpm`
+      : `\n- Z2 有氧基础: ${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} bpm`;
+    prompt += en
+      ? `\n- Z3 Marathon Pace: ${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} bpm`
+      : `\n- Z3 马拉松配速: ${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} bpm`;
+    prompt += en
+      ? `\n- Z4 Threshold: ${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} bpm`
+      : `\n- Z4 阈值: ${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} bpm`;
+    prompt += en
+      ? `\n- Z5 VO2max: ≥ ${lthr} bpm`
+      : `\n- Z5 VO2max: ≥ ${lthr} bpm`;
+    prompt += en
+      ? `\n- CRITICAL: When evaluating heart rate changes, you MUST compare against these LTHR zones, NOT absolute numbers or generic max-heart-rate formulas.`
+      : `\n- 关键：评估心率变化时必须对照以上 LTHR 区间，禁止用绝对数字或通用最大心率公式。`;
+  }
+
+  // Stream-based segment analysis (HR + pace per km)
+  if (streamAnalysis) {
+    prompt += streamAnalysis;
   }
 
   // Simple pace zone guide based on absolute pace (not requiring accurate PB estimates)
@@ -488,14 +523,17 @@ export function buildProfessionalPrompt(
         ? `\n\n⚠️ LONG RUN SPECIAL GUIDANCE (this workout is ${distanceKm}km, a long run):`
         : `\n\n⚠️ 长距离训练特别指引（本次${distanceKm}km，属于长距离训练）:`;
       prompt += en
-        ? `\n- Long run pace is NATURALLY slower than short easy runs. DO NOT judge it as "poor performance" just because the pace is slower than shorter workouts. The key metrics for long runs are: (a) overall pace stability, (b) heart rate drift control, (c) energy distribution strategy.`
-        : `\n- 长距离配速天然比短距离慢跑慢。绝对不能因为配速比短距离训练慢就判定为"表现差"。长距离的核心评估指标是：(a)整体配速稳定性，(b)心率漂移控制，(c)能量分配策略。`;
+        ? `\n- Long run pace is NATURALLY slower than short easy runs. DO NOT judge it as "poor performance" just because the pace is slower than shorter workouts. The key metrics for long runs are: (a) overall pace stability, (b) heart rate drift assessment (see rules below), (c) energy distribution strategy.`
+        : `\n- 长距离配速天然比短距离慢跑慢。绝对不能因为配速比短距离训练慢就判定为"表现差"。长距离的核心评估指标是：(a)整体配速稳定性，(b)心率漂移评估（见下方规则），(c)能量分配策略。`;
       prompt += en
         ? `\n- If pace is stable within E zone throughout: PRAISE the aerobic endurance base. If the second half is slightly faster than the first (negative split or marathon-pace segments): PRAISE the progression run strategy. Only criticize if there is a significant collapse (>20s/km slowdown) in the final 1/3 without intentional cause.`
         : `\n- 如果全程E区配速稳定：表扬有氧耐力基础扎实。如果后半程比前半程略快（负分割或穿插马配）：表扬progression run执行策略。只有当最后1/3出现非主动的明显掉速（>20秒/km）时才批评。`;
       prompt += en
         ? `\n- When writing "similarActivitiesInsight", NEVER label a long run as "historical worst" solely based on pace. Consider the execution quality (pace consistency, HR drift) instead of raw speed. If similarStats count is low (<5), explicitly note that the sample size is small and avoid strong conclusions.`
         : `\n- 写"similarActivitiesInsight"时，绝对不能仅因配速就把长距离标记为"历史最差"。应关注执行质量（配速稳定性、心率漂移）而非绝对速度。如果similarStats样本数较少（<5次），请明确说明样本不足，避免下强烈结论。`;
+      prompt += en
+        ? `\n- Heart Rate Drift Rules (CRITICAL): When assessing "cardiac drift" during long runs, you MUST consider BOTH heart rate AND pace changes together. If a segment's heart rate rises but its pace is also significantly faster (>15% above average), this is a NORMAL acceleration segment (fartlek, marathon-pace insert, or progression run) — NOT drift. Only label it as "cardiac drift" when heart rate rises WITHOUT a corresponding pace increase. If the per-km breakdown shows pace surges, explicitly acknowledge them and do NOT mislabel them as drift.`
+        : `\n- 心率漂移判定规则（关键）：评估长距离训练中的"心率漂移"时，必须同时考虑心率和配速变化。如果某段心率上升但配速也明显加快（比平均配速快15%以上），这是正常的加速段（法特莱克、穿插马配或渐进跑）—— NOT 漂移。只有当心率上升而配速没有对应加快时，才判定为"心率漂移"。如果每公里分段数据显示有配速加速段，请明确承认并禁止将其误标为漂移。`;
       prompt += en
         ? `\n- In "suggestions", focus on: fueling/hydration for future long runs, pacing strategy refinements, and recovery needs. Do NOT suggest "increase speed" for a long run.`
         : `\n- "suggestions"中应聚焦：未来长距离的补给策略、配速策略优化、恢复需求。严禁对长距离训练建议"提升速度"。`;
@@ -587,7 +625,9 @@ export async function analyzeActivity(
   streams: Record<string, any> | null,
   trainingProfile: TrainingProfile,
   locale: string = 'zh',
-  physique?: UserPhysique
+  physique?: UserPhysique,
+  lthr?: number | null,
+  streamAnalysis?: string,
 ): Promise<AIAnalysis> {
   const apiKey = process.env.KIMI_API_KEY;
 
@@ -597,7 +637,7 @@ export async function analyzeActivity(
 
   const en = locale.startsWith('en');
   const classification = classifyActivity(activity);
-  const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique);
+  const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique, lthr, streamAnalysis);
 
   // Retry on JSON parse failure (common on cold-start / network hiccup)
   const maxAttempts = 3;

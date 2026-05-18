@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeActivity } from '@/lib/ai';
 import { analyzeTrainingHistory, classifyActivity } from '@/lib/trainingAnalysis';
+import { analyzeActivityStreams, formatStreamAnalysisForPrompt } from '@/lib/streamAnalysis';
 import { StravaActivity } from '@/types';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
@@ -18,13 +19,14 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { activity, streams, userProfilePBs, recentActivities, locale, physique } = body as {
+    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = body as {
       activity: StravaActivity;
       streams: Record<string, any> | null;
       userProfilePBs?: Record<string, number> | null;
       recentActivities?: StravaActivity[];
       locale?: string;
       physique?: { height?: number | null; weight?: number | null };
+      lthr?: number | null;
     };
 
     if (!activity) {
@@ -64,8 +66,17 @@ export async function POST(request: NextRequest) {
     // Classify the current activity
     const classification = classifyActivity(currentActivity);
     
+    // Stream analysis: segment HR + pace by km
+    const avgPaceSecPerKm = activity.moving_time / activity.distance * 1000;
+    const streamAnalysisRaw = lthr
+      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm)
+      : null;
+    const streamAnalysisText = streamAnalysisRaw
+      ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr!, locale)
+      : undefined;
+
     // Call AI analysis with training profile
-    const analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique);
+    const analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
 
     return NextResponse.json({ 
       analysis,

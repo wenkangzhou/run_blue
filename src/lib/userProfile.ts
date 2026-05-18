@@ -9,6 +9,7 @@ export interface UserProfile {
   pbs: UserProfilePBs;
   height: number | null; // cm
   weight: number | null; // kg
+  lthr: number | null; // lactate threshold heart rate (bpm)
   updatedAt: string;
 }
 
@@ -20,9 +21,10 @@ export function getUserProfile(): UserProfile | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as UserProfile;
-    // Backward compatibility: old profiles may not have height/weight
+    // Backward compatibility: old profiles may not have new fields
     if (parsed.height === undefined) parsed.height = null;
     if (parsed.weight === undefined) parsed.weight = null;
+    if (parsed.lthr === undefined) parsed.lthr = null;
     return parsed;
   } catch {
     return null;
