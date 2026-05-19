@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     // Stream analysis: segment HR + pace by km
     const avgPaceSecPerKm = activity.moving_time / activity.distance * 1000;
     const streamAnalysisRaw = lthr
-      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm)
+      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, classification.isRace)
       : null;
     const streamAnalysisText = streamAnalysisRaw
       ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr!, locale)
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       analysis,
+      streamAnalysis: streamAnalysisRaw,
       trainingProfile: {
         totalRunsAnalyzed: trainingProfile.totalRunsAnalyzed,
         estimatedPBs: trainingProfile.estimatedPBs,

@@ -230,7 +230,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
               </div>
               <div>
                 <label className="block font-mono text-xs font-bold uppercase mb-1.5">
-                  LTHR
+                  {t('profile.lthr')}
                 </label>
                 <div className="relative">
                   <input

@@ -90,6 +90,7 @@ const resources = {
         timeFormat: 'Format: mm:ss or hh:mm:ss',
         height: 'Height',
         weight: 'Weight',
+        lthr: 'LTHR (Lactate Threshold HR)',
         saveSuccess: 'Profile saved',
         usingAutoPB: 'Using auto-estimated PBs. Set your real PBs for better accuracy.',
       },
@@ -312,6 +313,8 @@ const resources = {
         zoneI: 'I-Interval',
         zoneR: 'R-Repetition',
         zoneUnknown: 'Unknown',
+        hrZoneDistribution: 'HR Zone Distribution (LTHR)',
+        pacePattern: 'Pace Pattern',
         fallbackWarning: 'AI service is temporarily unavailable. Below is a basic system-generated analysis. Click the refresh button to retry.',
       },
       landing: {
@@ -460,6 +463,7 @@ const resources = {
         timeFormat: '格式：分:秒 或 时:分:秒',
         height: '身高',
         weight: '体重',
+        lthr: '乳酸阈值心率 (LTHR)',
         saveSuccess: '档案已保存',
         usingAutoPB: '当前使用自动估算 PB。设置真实成绩可获得更准确的分析。',
       },
@@ -697,6 +701,8 @@ const resources = {
         zoneI: 'I-间歇',
         zoneR: 'R-重复',
         zoneUnknown: '未知',
+        hrZoneDistribution: '心率区间分布 (LTHR)',
+        pacePattern: '配速模式',
         fallbackWarning: 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。',
       },
       landing: {
