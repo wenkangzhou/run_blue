@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
+import { getSavedTileLayer, TILE_LAYERS } from '@/lib/mapTileLayers';
 
 interface RouteCardMapProps {
   polyline: string | null;
@@ -41,14 +42,15 @@ export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
           doubleClickZoom: false,
         });
 
-        const tileUrl = isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
-
-        L.tileLayer(tileUrl, {
-          subdomains: 'abcd',
-          maxZoom: 19,
-        }).addTo(map);
+        const savedLayer = getSavedTileLayer();
+        const config = TILE_LAYERS[savedLayer];
+        if (config.url) {
+          const options: Record<string, any> = {};
+          if (config.subdomains) {
+            options.subdomains = config.subdomains;
+          }
+          L.tileLayer(config.url, options).addTo(map);
+        }
 
         const lineColor = isDark ? '#fbbf24' : '#2563eb';
         const latLngs = points.map(p => [p[0], p[1]]);
