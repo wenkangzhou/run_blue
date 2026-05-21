@@ -7,11 +7,13 @@ import { decodePolyline } from '@/lib/strava';
 interface RouteOnlyMapProps {
   polyline: string | null;
   height?: string;
+  lazy?: boolean; // 仅当进入视口才初始化（用于活动列表等卡片多的场景）
 }
 
-export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
+export function RouteOnlyMap({ polyline, height = '100%', lazy = false }: RouteOnlyMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = React.useState(false);
+  const [isVisible, setIsVisible] = React.useState(!lazy);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
@@ -19,23 +21,37 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
     setIsClient(true);
   }, []);
 
+  // IntersectionObserver: only init map when scrolled into viewport
   React.useEffect(() => {
-    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
+    if (!lazy || !mapRef.current) return;
+    const el = mapRef.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' } // preload before entering viewport
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [lazy]);
+
+  React.useEffect(() => {
+    if (!isClient || !isVisible || !mapRef.current || !polyline || polyline.length < 10) return;
 
     let map: any;
     let polylineLayer: any;
-    let tileLayer: any;
 
     const initMap = async () => {
       try {
-        // Dynamically import leaflet only on client
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
 
         const points = decodePolyline(polyline);
         if (points.length < 2 || !mapRef.current) return;
 
-        // Create map
         map = L.map(mapRef.current as HTMLElement, {
           zoomControl: false,
           attributionControl: false,
@@ -44,18 +60,17 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
           doubleClickZoom: false,
         });
 
-        // Add real map tiles — clean, no labels
+        // Real map tiles — clean, no labels
         const tileUrl = isDark
           ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
           : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
 
-        tileLayer = L.tileLayer(tileUrl, {
+        L.tileLayer(tileUrl, {
           subdomains: 'abcd',
           maxZoom: 19,
         }).addTo(map);
 
-        // Add polyline with appropriate color for theme
-        const lineColor = isDark ? '#fbbf24' : '#2563eb'; // amber-400 for dark, blue-600 for light
+        const lineColor = isDark ? '#fbbf24' : '#2563eb'; // amber-400 / blue-600
         const latLngs = points.map(p => [p[0], p[1]]);
         polylineLayer = L.polyline(latLngs as any, {
           color: lineColor,
@@ -63,7 +78,6 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
           opacity: 0.9,
         }).addTo(map);
 
-        // Fit bounds
         map.fitBounds(polylineLayer.getBounds(), { padding: [12, 12], maxZoom: 17 });
       } catch (e) {
         console.error('Error initializing map:', e);
@@ -77,13 +91,10 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
         map.remove();
       }
     };
-  }, [isClient, polyline, isDark]);
+  }, [isClient, isVisible, polyline, isDark]);
 
-  // Check if we have valid polyline
   const hasValidPolyline = polyline && polyline.length >= 10;
-
-  // Match card background exactly during SSR / loading
-  const bgColor = isDark ? '#18181b' : '#f4f4f5'; // zinc-900 or zinc-100
+  const bgColor = isDark ? '#18181b' : '#f4f4f5';
 
   if (!hasValidPolyline) {
     return (

@@ -10,7 +10,6 @@ import { useRoutesStore } from '@/store/routes';
 import { RouteOnlyMap } from '@/components/map/RouteOnlyMap';
 import { RouteComparisonTable } from '@/components/RouteComparisonTable';
 import { RouteTrendChart } from '@/components/RouteTrendChart';
-import { ActivityCard } from '@/components/ActivityCard';
 import { PixelCard, PixelButton } from '@/components/ui';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getBestPaceActivity } from '@/lib/routeClustering';
@@ -232,16 +231,6 @@ export default function RouteDetailPage() {
           <h2 className="font-pixel text-sm font-bold mb-3">{t('routes.comparison', '历史对比')}</h2>
           <RouteComparisonTable activities={routeActivities} />
         </PixelCard>
-
-        {/* Activity Cards */}
-        <div>
-          <h2 className="font-pixel text-sm font-bold mb-3">{t('routes.activities', '关联活动')}</h2>
-          <div className="space-y-3">
-            {routeActivities.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} compact />
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
