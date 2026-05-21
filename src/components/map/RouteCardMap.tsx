@@ -4,12 +4,12 @@ import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
 
-interface RouteOnlyMapProps {
+interface RouteCardMapProps {
   polyline: string | null;
   height?: string;
 }
 
-export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
+export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = React.useState(false);
   const { resolvedTheme } = useTheme();
@@ -27,14 +27,12 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
 
     const initMap = async () => {
       try {
-        // Dynamically import leaflet only on client
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
 
         const points = decodePolyline(polyline);
         if (points.length < 2 || !mapRef.current) return;
 
-        // Create map
         map = L.map(mapRef.current as HTMLElement, {
           zoomControl: false,
           attributionControl: false,
@@ -43,22 +41,24 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
           doubleClickZoom: false,
         });
 
-        // Add transparent tile layer
-        L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', {
-          opacity: 0,
+        const tileUrl = isDark
+          ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
+
+        L.tileLayer(tileUrl, {
+          subdomains: 'abcd',
+          maxZoom: 19,
         }).addTo(map);
 
-        // Add polyline with appropriate color for theme
-        const lineColor = isDark ? '#a1a1aa' : '#1a1a1a'; // zinc-400 for dark, dark for light
+        const lineColor = isDark ? '#fbbf24' : '#2563eb';
         const latLngs = points.map(p => [p[0], p[1]]);
         polylineLayer = L.polyline(latLngs as any, {
           color: lineColor,
-          weight: 2.5,
-          opacity: isDark ? 1 : 0.9,
+          weight: 3,
+          opacity: 0.9,
         }).addTo(map);
 
-        // Fit bounds
-        map.fitBounds(polylineLayer.getBounds(), { padding: [8, 8], maxZoom: 17 });
+        map.fitBounds(polylineLayer.getBounds(), { padding: [12, 12], maxZoom: 17 });
       } catch (e) {
         console.error('Error initializing map:', e);
       }
@@ -73,15 +73,12 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
     };
   }, [isClient, polyline, isDark]);
 
-  // Check if we have valid polyline
   const hasValidPolyline = polyline && polyline.length >= 10;
-  
-  // Match card background exactly (default to light during SSR)
-  const bgColor = isDark ? '#27272a' : '#f4f4f5'; // zinc-800 or zinc-100
+  const bgColor = isDark ? '#18181b' : '#f4f4f5';
 
   if (!hasValidPolyline) {
     return (
-      <div 
+      <div
         style={{ height, backgroundColor: bgColor }}
         className="w-full h-full flex items-center justify-center"
       >
@@ -91,7 +88,7 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
   }
 
   return (
-    <div 
+    <div
       ref={mapRef}
       style={{ height, backgroundColor: bgColor }}
       className="w-full h-full"

@@ -26,7 +26,6 @@ export function ActivityGridCard({ activity }: ActivityGridCardProps) {
           <RouteOnlyMap 
             polyline={activity.map?.summary_polyline || null} 
             height="100%"
-            lazy
           />
         </div>
 

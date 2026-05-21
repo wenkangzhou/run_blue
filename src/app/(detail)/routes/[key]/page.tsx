@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
-import { RouteOnlyMap } from '@/components/map/RouteOnlyMap';
+import { MiniMap } from '@/components/map/MiniMap';
 import { RouteComparisonTable } from '@/components/RouteComparisonTable';
 import { RouteTrendChart } from '@/components/RouteTrendChart';
 import { PixelCard, PixelButton } from '@/components/ui';
@@ -182,7 +182,7 @@ export default function RouteDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <PixelCard className="lg:col-span-2 h-64 overflow-hidden p-0">
             {polyline ? (
-              <RouteOnlyMap polyline={polyline} height="100%" />
+              <MiniMap polyline={polyline} height="100%" />
             ) : (
               <div className="flex items-center justify-center h-full text-zinc-400 font-mono text-sm">
                 {t('errors.noData')}

@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { SavedRoute } from '@/store/routes';
 import { StravaActivity } from '@/types';
 import { PixelCard } from './ui';
-import { RouteOnlyMap } from './map/RouteOnlyMap';
+import { RouteCardMap } from './map/RouteCardMap';
 import { MapPin, TrendingUp, Clock, Calendar } from 'lucide-react';
 import { formatDistance, formatPace, formatDuration } from '@/lib/strava';
 import { getBestPaceActivity } from '@/lib/routeClustering';
@@ -44,7 +44,7 @@ export function RouteCard({ route, activities }: RouteCardProps) {
         {/* Map Preview */}
         <div className="h-36 bg-zinc-100 dark:bg-zinc-800">
           {polyline ? (
-            <RouteOnlyMap polyline={polyline} height="100%" />
+            <RouteCardMap polyline={polyline} height="100%" />
           ) : (
             <div className="flex items-center justify-center h-full">
               <MapPin size={32} className="text-zinc-300 dark:text-zinc-700" />
