@@ -195,7 +195,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
             ))}
 
             {/* Height & Weight & LTHR */}
-            <div className="grid grid-cols-3 gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
               <div>
                 <label className="block font-mono text-xs font-bold uppercase mb-1.5">
                   {t('profile.height', '身高')}

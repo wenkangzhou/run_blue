@@ -80,7 +80,9 @@ export function formatSecondsToTime(totalSeconds: number | null | undefined): st
   const secs = totalSeconds % 60;
 
   if (hrs > 0) {
-    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return secs === 0
+      ? `${hrs}:${mins.toString().padStart(2, '0')}`
+      : `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
