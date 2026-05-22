@@ -23,9 +23,9 @@
 
 全部基于你的真实数据，不是模板套话。支持中英文双语输出。
 
-![AI 训练分析（日常训练）](/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89.png)
+![AI 训练分析（日常训练）](./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89.png)
 
-![AI 训练分析（比赛场景）](/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89_%E6%AF%94%E8%B5%9B.png)
+![AI 训练分析（比赛场景）](./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89_%E6%AF%94%E8%B5%9B.png)
 
 ---
 
@@ -40,7 +40,7 @@
 - GitHub 风格活动日历热力图
 - 年度归档折叠列表
 
-![个人档案馆](/screenshot/%E4%B8%AA%E4%BA%BA%E6%A1%A3%E6%A1%88%E9%A6%86.png)
+![个人档案馆](./public/screenshot/%E4%B8%AA%E4%BA%BA%E6%A1%A3%E6%A1%88%E9%A6%86.png)
 
 ---
 
@@ -53,7 +53,7 @@
 - 按周分组的活动网格卡片，路线图预览 + 距离 + 时间
 - 深色/浅色主题自动适配
 
-![数据总览（活动列表页）](/screenshot/%E6%95%B0%E6%8D%AE%E6%80%BB%E8%A7%88%EF%BC%88%E6%B4%BB%E5%8A%A8%E5%88%97%E8%A1%A8%E9%A1%B5%EF%BC%89.png)
+![数据总览（活动列表页）](./public/screenshot/%E6%95%B0%E6%8D%AE%E6%80%BB%E8%A7%88%EF%BC%88%E6%B4%BB%E5%8A%A8%E5%88%97%E8%A1%A8%E9%A1%B5%EF%BC%89.png)
 
 ---
 
@@ -66,7 +66,7 @@
 - 柱状图趋势（距离/时长/次数/卡路里/爬升）
 - 10+ 项统计汇总卡片（总距离 / 平均配速 / 平均心率 / 累计爬升 / 总卡路里 / 次数 / 总时间 / 平均时长等）
 
-![数据可视化（统计页）](/screenshot/%E6%95%B0%E6%8D%AE%E5%8F%AF%E8%A7%86%E5%8C%96%EF%BC%88%E7%BB%9F%E8%AE%A1%E9%A1%B5%EF%BC%89.png)
+![数据可视化（统计页）](./public/screenshot/%E6%95%B0%E6%8D%AE%E5%8F%AF%E8%A7%86%E5%8C%96%EF%BC%88%E7%BB%9F%E8%AE%A1%E9%A1%B5%EF%BC%89.png)
 
 ---
 
@@ -82,7 +82,7 @@
 
 配速自动基于你的 PB 计算，每一公里都有明确目标。
 
-![AI 训练计划](/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png)
+![AI 训练计划](./public/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png)
 
 ---
 
@@ -92,9 +92,9 @@
 - **路线收藏与对比**：收藏常跑路线，追踪每次表现变化，历史配速对比
 - **附近路线探索**：发现周围跑者常跑的路段
 
-![路线地图](/screenshot/%E8%B7%AF%E7%BA%BF%E5%9C%B0%E5%9B%BE.png)
+![路线地图](./public/screenshot/%E8%B7%AF%E7%BA%BF%E5%9C%B0%E5%9B%BE.png)
 
-![路线收藏](/screenshot/%E8%B7%AF%E7%BA%BF%E6%94%B6%E8%97%8F.png)
+![路线收藏](./public/screenshot/%E8%B7%AF%E7%BA%BF%E6%94%B6%E8%97%8F.png)
 
 ---
 
@@ -103,9 +103,9 @@
 - **单次跑步分享**：透明底路线图 + 可选配速/距离/时间叠层
 - **周期海报**：一周/一个月/一个季度的跑步路线汇总拼图
 
-![单次运动海报分享](/screenshot/%E5%8D%95%E6%AC%A1%E8%BF%90%E5%8A%A8%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
+![单次运动海报分享](./public/screenshot/%E5%8D%95%E6%AC%A1%E8%BF%90%E5%8A%A8%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
 
-![周期海报分享](/screenshot/%E5%91%A8%E6%9C%9F%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
+![周期海报分享](./public/screenshot/%E5%91%A8%E6%9C%9F%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
 
 ---
 
