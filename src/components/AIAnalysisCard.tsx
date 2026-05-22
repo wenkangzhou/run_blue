@@ -106,12 +106,15 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       setTrainingStats(data.trainingProfile);
       setClassification(data.classification);
 
-      localStorage.setItem(`ai_analysis_v3_${activity.id}`, JSON.stringify({
-        analysis: data.analysis,
-        streamAnalysis: data.streamAnalysis,
-        trainingStats: data.trainingProfile,
-        classification: data.classification,
-      }));
+      try {
+        localStorage.setItem(`ai_analysis_v3_${activity.id}`, JSON.stringify({
+          analysis: data.analysis,
+          trainingStats: data.trainingProfile,
+          classification: data.classification,
+        }));
+      } catch {
+        // localStorage quota exceeded — skip caching, analysis still works
+      }
     } catch (err: any) {
       setError(err.message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
