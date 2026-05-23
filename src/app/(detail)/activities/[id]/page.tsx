@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
-import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatDuration, formatPace } from '@/lib/strava';
+import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatPace } from '@/lib/strava';
 import { getCachedActivity, setCachedActivity } from '@/lib/cache';
 import { useActivitiesStore } from '@/store/activities';
 import { ActivityMap } from '@/components/map/ActivityMap';
@@ -442,7 +442,7 @@ export default function ActivityDetailPage() {
             />
             <StatCard 
               label={t('activity.time')}
-              value={formatDuration(activity.moving_time)}
+              value={formatDurationDetail(activity.moving_time)}
             />
             <StatCard 
               label={t('activity.pace')}
@@ -450,7 +450,7 @@ export default function ActivityDetailPage() {
             />
             <StatCard 
               label={t('activity.elapsedTime', '用时')}
-              value={formatDuration(activity.elapsed_time)}
+              value={formatDurationDetail(activity.elapsed_time)}
             />
           </div>
 
@@ -477,7 +477,7 @@ export default function ActivityDetailPage() {
                       {effort.name}
                     </span>
                     <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
-                      {formatDuration(effort.elapsed_time)}
+                      {formatDurationDetail(effort.elapsed_time)}
                     </span>
                   </div>
                 ))}
@@ -538,7 +538,7 @@ export default function ActivityDetailPage() {
                     </div>
                     <div className="text-right shrink-0 ml-3">
                       <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                        {formatDuration(effort.elapsed_time)}
+                        {formatDurationDetail(effort.elapsed_time)}
                       </span>
                     </div>
                   </div>
@@ -746,7 +746,7 @@ export default function ActivityDetailPage() {
         polyline={activity?.map?.polyline || null}
         stats={activity ? {
           distance: formatDistance(activity.distance, 'km'),
-          duration: formatDuration(activity.moving_time),
+          duration: formatDurationDetail(activity.moving_time),
           pace: formatPace(activity.distance, activity.moving_time, 'min/km'),
         } : null}
       />
@@ -821,6 +821,16 @@ function ChartSection({
       )}
     </div>
   );
+}
+
+function formatDurationDetail(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function formatDurationShort(seconds: number): string {
