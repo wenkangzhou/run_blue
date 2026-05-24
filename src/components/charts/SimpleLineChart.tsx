@@ -155,6 +155,7 @@ export function SimpleLineChart({
   const yTicks = showYAxis ? [min, (min + max) / 2, max] : [];
 
   // Click handler: find nearest data point by x position
+  // Maps click position → sampled index → original data index
   const handleChartClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!interactive || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -164,13 +165,13 @@ export function SimpleLineChart({
     const plotWidth = plotRight - plotLeft;
     if (plotWidth <= 0) return;
     const ratio = Math.max(0, Math.min(1, (clickX - plotLeft) / plotWidth));
-    const idx = Math.round(ratio * (sampledData.length - 1));
-    const clampedIdx = Math.max(0, Math.min(sampledData.length - 1, idx));
-    setSelectedIndex(clampedIdx);
+    const sampledIdx = Math.round(ratio * (sampledData.length - 1));
+    const clampedSampledIdx = Math.max(0, Math.min(sampledData.length - 1, sampledIdx));
+    setSelectedIndex(clampedSampledIdx);
     if (onPointClick) {
-      // 将采样后的索引映射回原始数据索引
-      const actualSampleRate = sampleRateProp || sampleRate || 1;
-      const originalIdx = Math.min(clampedIdx * actualSampleRate, data.length - 1);
+      // Map sampled index back to original data index using the actual sample rate
+      // sampledData[i] corresponds to data[i * sampleRate]
+      const originalIdx = Math.min(clampedSampledIdx * sampleRate, data.length - 1);
       onPointClick(originalIdx, data[originalIdx]);
     }
   };
