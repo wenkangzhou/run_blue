@@ -17,6 +17,8 @@ interface SimpleLineChartProps {
   showAvgLine?: boolean;
   interactive?: boolean;
   onPointClick?: (index: number, value: number) => void;
+  /** 采样率，用于将采样后的索引映射回原始索引 */
+  sampleRate?: number;
 }
 
 export function SimpleLineChart({
@@ -34,6 +36,7 @@ export function SimpleLineChart({
   showAvgLine = true,
   interactive = true,
   onPointClick,
+  sampleRate: sampleRateProp,
 }: SimpleLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(320);
@@ -165,7 +168,10 @@ export function SimpleLineChart({
     const clampedIdx = Math.max(0, Math.min(sampledData.length - 1, idx));
     setSelectedIndex(clampedIdx);
     if (onPointClick) {
-      onPointClick(clampedIdx, sampledData[clampedIdx]);
+      // 将采样后的索引映射回原始数据索引
+      const actualSampleRate = sampleRateProp || sampleRate || 1;
+      const originalIdx = Math.min(clampedIdx * actualSampleRate, data.length - 1);
+      onPointClick(originalIdx, data[originalIdx]);
     }
   };
 
