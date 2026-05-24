@@ -540,6 +540,15 @@ export function buildProfessionalPrompt(
     }
   }
 
+  // 鼓励加油的情绪价值要求
+  prompt += en ? `\n\n## Emotional Support & Encouragement` : `\n\n## 情绪价值与鼓励`;
+  prompt += en
+    ? `\nWhen the workout was well-executed (pace consistency, HR control, or ranking top 30% in similar workouts), include genuine praise and encouragement. Examples: "Excellent execution — your pacing was spot on!" / "Strong workout! You're clearly building fitness." / "Great job holding steady — this shows real progress." Avoid generic "good job" — be specific about what was done well.`
+    : `\n当训练执行良好时（配速稳定、心率控制得当、或在同类训练中排名前30%），请给予真诚的表扬和鼓励。例如："执行得很棒——配速控制非常精准！" / "扎实的训练！你的体能明显在提升。" / "保持得很好——这说明你确实在进步。" 避免泛泛的"不错"，要具体指出哪里做得好。`;
+  prompt += en
+    ? `\nEven when pointing out areas for improvement, maintain a supportive, coach-like tone. Frame suggestions as opportunities: "Next time, try..." rather than "You failed to...".` 
+    : `\n即使指出需要改进的地方，也要保持支持性的教练口吻。把建议包装成机会："下次可以尝试..." 而不是 "你没有做到..."`;
+
   prompt += en ? `\n\n## Output Format (JSON)` : `\n\n## 输出格式（JSON）`;
 
   if (classification.isRace) {
@@ -1183,8 +1192,8 @@ function generateFallbackAnalysis(
   if (classification.isRace) {
     return {
       summary: en
-        ? `${classification.raceType || 'Race'} completed! Pace ${paceStr}/km. Great performance.`
-        : `${classification.raceType || '比赛'}完成！配速${paceStr}/km，表现出色。`,
+        ? `🎉 ${classification.raceType || 'Race'} completed! Pace ${paceStr}/km — fantastic effort out there! You pushed through and got it done. Be proud of this performance.`
+        : `🎉 ${classification.raceType || '比赛'}完成！配速${paceStr}/km——太棒了！你坚持了下来并完成了挑战，为这份努力感到骄傲！`,
       intensity: 'extreme',
       recoveryHours: activity.distance > 40000 ? 168 : 48,
       comparisonToAverage: fallbackComparison?.comparisonToAverage || (en ? 'Excellent race performance' : '比赛表现优异'),
@@ -1227,10 +1236,27 @@ function generateFallbackAnalysis(
   // Build comparison text based on accurate data
   let comparisonText = fallbackComparison?.comparisonToAverage || (en ? 'No historical comparison data yet' : '暂无历史对比数据');
 
+  // Add encouragement based on performance
+  const encouragement = (() => {
+    if (fallbackComparison?.similarActivitiesInsight?.includes('top 10%') || fallbackComparison?.similarActivitiesInsight?.includes('超过 90%')) {
+      return en
+        ? " 💪 This was a standout session — excellent execution!"
+        : " 💪 这是一次出色的训练——执行得非常棒！";
+    }
+    if (fallbackComparison?.similarActivitiesInsight?.includes('improving') || fallbackComparison?.similarActivitiesInsight?.includes('进步')) {
+      return en
+        ? " 📈 Nice progress — you're clearly building fitness!"
+        : " 📈 进步明显——你的体能正在稳步提升！";
+    }
+    return en
+      ? " 👍 Solid workout — consistency is key!"
+      : " 👍 扎实的训练——坚持就是胜利！";
+  })();
+
   return {
     summary: en
-      ? `Completed ${(activity.distance / 1000).toFixed(1)}km workout at ${paceStr}/km, in the ${zoneDesc}.`
-      : `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速${paceStr}/km处于${zoneDesc}。`,
+      ? `Completed ${(activity.distance / 1000).toFixed(1)}km workout at ${paceStr}/km, in the ${zoneDesc}.${encouragement}`
+      : `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速${paceStr}/km处于${zoneDesc}。${encouragement}`,
     intensity: 'moderate',
     recoveryHours: activity.distance > 10000 ? 36 : 24,
     comparisonToAverage: comparisonText,
