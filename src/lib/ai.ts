@@ -652,12 +652,15 @@ export async function analyzeActivity(
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
       const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           model: 'kimi-k2.5',
           messages: [
@@ -671,13 +674,14 @@ export async function analyzeActivity(
             },
           ],
           temperature: 0.6,
-          max_tokens: 4096,
+          max_tokens: 16384,
           thinking: {
             type: 'disabled'
           }
         }),
       });
 
+      clearTimeout(timeoutId);
       if (!response.ok) {
         const error = await response.text();
         throw new Error(`AI API error: ${error}`);
@@ -899,139 +903,85 @@ export function buildTrainingPlanPrompt(
   prompt += `\n- ${en ? 'Goal assessment' : '目标评估'}: ${assessment.profileLabel} (${en ? 'equivalent' : '等效成绩'} ${formatDuration(assessment.equivalentTime)}, ${en ? 'goal is' : '目标比等效成绩'} ${assessment.gapPercent > 0 ? '+' : ''}${assessment.gapPercent}%)`;
   prompt += `\n  → ${assessment.message}`;
 
-  // ── Periodization philosophy ──
+  // ── Periodization (concise) ──
   prompt += en
-    ? `\n\n## Periodization Philosophy (phase characteristics, NOT just volume changes)`
-    : `\n\n## 周期化设计哲学（每个周期的特征，不只是跑量变化）`;
+    ? `\n\n## Periodization Rules (MANDATORY)`
+    : `\n\n## 周期化规则（必须遵守）`;
+  prompt += en
+    ? `\n- Base: 1 quality day/week (Tue only). Thu EASY. Sun long = pure E pace. Volume +5-10%/wk.`
+    : `\n- 基础期：每周1堂强度课（仅周二）。周四轻松跑。周日长距离纯E配速。跑量每周+5-10%。`;
+  prompt += en
+    ? `\n- Build: 2 quality days/week (Tue intervals + Thu tempo). Sun long adds M-pace segments in later weeks. Recovery week every 3rd week (vol ~75%).`
+    : `\n- 建立期：每周2堂强度课（周二间歇 + 周四阈值）。后半段周日长距离加入M配速段落。每第3周恢复周（跑量~75%）。`;
+  prompt += en
+    ? `\n- Peak: 2 quality days + Sun long with SIGNIFICANT M blocks. Volume max. Recovery every 3rd week.`
+    : `\n- 巅峰期：2堂强度课 + 周日长距离有显著M配速段落。跑量峰值。每第3周恢复周。`;
+  prompt += en
+    ? `\n- Taper: Vol -30-40%. Tue light speed only. NO long runs in final week.`
+    : `\n- 减量期：跑量-30-40%。仅周二轻速度。最后一周取消长距离。`;
 
-  if (en) {
-    prompt += `\n\nBase (first ~25% weeks): Aerobic accumulation. Only ONE quality day per week (Tue — short intervals or light tempo, just "speed activation", NOT all-out). Sunday long run is purely easy pace. NO race-pace work yet. Volume builds gradually (+5-10% per week).`;
-  } else {
-    prompt += `\n\n基础期（前约25%周数）：有氧积累为主。每周只有**一堂**强度课（周二——短间歇或轻阈值，只是"速度激活"，不是全力）。周日长距离全程轻松配速，**不加入目标配速段落**。跑量逐步建立（每周+5-10%）。`;
-  }
-
-  if (en) {
-    prompt += `\n\nBuild (~25-65% weeks): Threshold development. TWO quality days per week — Tue (intervals, progressing in rep distance) and Thu (tempo, progressing in continuous time). Sunday long run stays easy but gets longer. Introduce race-pace segments in long runs ONLY in the later half of build.`;
-  } else {
-    prompt += `\n\n建立期（约25-65%周数）：阈值能力提升。每周**两堂**强度课——周二（间歇，重复距离逐步加长）和周四（阈值，连续时间逐步加长）。周日长距离保持轻松但距离加长。仅在建立期后半段，长距离中开始加入少量目标配速段落。`;
-  }
-
-  if (en) {
-    prompt += `\n\nPeak (~66-85% weeks): Race-specific. TWO quality days + Sunday long run with significant race-pace blocks. Volume reaches maximum. Every 3rd week is a RECOVERY week (volume drops to ~75%, quality day is shortened or replaced with easy run).`;
-  } else {
-    prompt += `\n\n巅峰期（约66-85%周数）：比赛专项化。两堂强度课 + 周日长距离加入**显著**的目标配速段落。跑量达到峰值。**每第3周安排一个恢复周**（跑量降到约75%，强度课缩短或改为轻松跑）。`;
-  }
-
-  if (en) {
-    prompt += `\n\nTaper (last ~15% weeks): Volume drops 30-40% but keeps ONE light speed session (Tue: 4-6×200m brisk) to maintain neuromuscular firing. Long runs shorten dramatically. NO new stimulus. Sleep and recovery are the training.`;
-  } else {
-    prompt += `\n\n减量期（最后约15%周数）：跑量降低30-40%，但保留**一堂**轻速度激活（周二：4-6组×200m 轻快跑）以维持神经募集。长距离大幅缩短。禁止引入任何新刺激。睡眠和恢复本身就是训练。`;
-  }
-
-  // ── Progression tables ──
-  prompt += en ? `\n\n## Quality Session Progression (use these as a guide, adapt to weekly context)` : `\n\n## 强度课进阶表（作为参考，根据每周上下文灵活调整）`;
-  prompt += en
-    ? `\n\nTuesday Intervals (progress through the table across build/peak phases, roughly one step every 1-2 weeks):`
-    : `\n\n周二间歇（在建立期和巅峰期逐步进阶，大约每1-2周迈进一步）：`;
-  ip.forEach((s, i) => prompt += `\n  W${i + 1}: ${s}`);
-
-  prompt += en
-    ? `\n\nThursday Tempo (progress through the table):`
-    : `\n\n周四阈值（逐步进阶）：`;
-  tp.forEach((s, i) => prompt += `\n  W${i + 1}: ${s}`);
-
-  prompt += en
-    ? `\n\nSunday Long Run (progression, E = easy pace, M = marathon pace for HM/M only):`
-    : `\n\n周日长距离（进阶，E=轻松配速，M=马拉松配速，仅半马/全马）：`;
-  lp.forEach((s, i) => prompt += `\n  W${i + 1}: ${s}`);
-
-  // ── Weekly structure rules ──
-  prompt += en ? `\n\n## Weekly Structure Rules` : `\n\n## 周结构设计规则`;
-  prompt += en
-    ? `\n1. Weekly structure CHANGES by phase — do NOT copy-paste the same 7-day layout every week.`
-    : `\n1. 周结构随周期变化——禁止每周复制粘贴相同的7天布局。`;
-  prompt += en
-    ? `\n2. Base phase: Mon easy / Tue quality(1) / Wed easy or strength / Thu easy / Fri easy / Sat rest / Sun long(E). Only ONE quality day.`
-    : `\n2. 基础期：周一轻松 / 周二强度(1堂) / 周三轻松或力量 / 周四轻松 / 周五轻松 / 周六休息 / 周日长距离(E)。只有一堂强度课。`;
-  prompt += en
-    ? `\n3. Build phase: Mon easy / Tue intervals / Wed easy / Thu tempo / Fri easy / Sat rest / Sun long(E→late build adds M segments). TWO quality days.`
-    : `\n3. 建立期：周一轻松 / 周二间歇 / 周三轻松 / 周四阈值 / 周五轻松 / 周六休息 / 周日长距离（建立期后半段加入M段落）。两堂强度课。`;
-  prompt += en
-    ? `\n4. Peak phase: Mon easy / Tue intervals or tempo / Wed easy / Thu tempo or fartlek / Fri easy / Sat rest / Sun long(with M blocks). Recovery week every 3rd week.`
-    : `\n4. 巅峰期：周一轻松 / 周二间歇或阈值 / 周三轻松 / 周四阈值或法特莱克 / 周五轻松 / 周六休息 / 周日长距离（加入M段落）。每第3周为恢复周。`;
-  prompt += en
-    ? `\n5. Taper phase: Mon easy / Tue light speed(4-6×200m) / Wed easy / Thu easy / Fri easy or rest / Sat rest / Sun short easy. NO long runs in final week.`
-    : `\n5. 减量期：周一轻松 / 周二轻速度(4-6组×200m) / 周三轻松 / 周四轻松 / 周五轻松或休息 / 周六休息 / 周日短轻松跑。最后一周取消长距离。`;
-  prompt += en
-    ? `\n6. Recovery week (every 3rd week in build/peak): volume ~75% of planned, quality session shortened by 30-50% or replaced with easy run.`
-    : `\n6. 恢复周（建立期/巅峰期每第3周）：跑量约为计划值的75%，强度课缩短30-50%或改为轻松跑。`;
-  prompt += en
-    ? `\n7. Weekly volume increase ≤10% vs previous week (except recovery weeks which drop).`
-    : `\n7. 周跑量增幅不超过上周的10%（恢复周除外，恢复周是下降的）。`;
-  prompt += en
-    ? `\n8. Long run ≤30% of weekly volume.`
-    : `\n8. 单次长距离不超过周跑量的30%。`;
-  prompt += en
-    ? `\n9. All distances in INTEGER km.`
-    : `\n9. 所有距离使用整数公里。`;
-
-  // ── Distance-specific emphasis ──
-  prompt += en ? `\n\n## Race-Specific Emphasis` : `\n\n## 赛事专项侧重`;
+  // ── Distance-specific emphasis (concise) ──
+  prompt += en ? `\n\n## Race Focus` : `\n\n## 赛事重点`;
   if (distance === '42k') {
     prompt += en
-      ? `\nMarathon: Endurance is king. Long runs are the most important session. Threshold runs build lactate clearance. Include 2-3 runs of 30km+ in build/peak. M-pace segments in long runs start at 3km and build to 8-10km.`
-      : `\n全程马拉松：耐力为王。长距离是最重要的训练课。阈值跑提升乳酸清除能力。建立期/巅峰期安排2-3次30km+长距离。长距离中的M配速段落从3km开始，逐步增加到8-10km。`;
+      ? `\nMarathon: Long runs are #1 priority. Include 2-3 runs of 30km+. M-pace blocks in long runs build from 3km to 8-10km.`
+      : `\n全马：长距离是最高优先级。安排2-3次30km+。长距离M配速段落从3km逐步增加到8-10km。`;
   } else if (distance === '21k') {
     prompt += en
-      ? `\nHalf marathon: Threshold ability is critical. Tempo runs (T-pace) are the core quality session. Long runs peak at 18-20km. Include M-pace segments in long runs during peak.`
-      : `\n半程马拉松：阈值能力至关重要。阈值跑(T配速)是核心强度课。长距离峰值18-20km。巅峰期长距离中加入M配速段落。`;
+      ? `\nHalf marathon: Threshold is king. Long runs peak at 18-20km. M-pace blocks in peak-phase long runs.`
+      : `\n半马：阈值能力为王。长距离峰值18-20km。巅峰期长距离加入M配速段落。`;
   } else if (distance === '10k') {
     prompt += en
-      ? `\n10K: Speed endurance + threshold. No need for marathon-style long runs. Sunday "long" run is just 10-12km easy. Focus on intervals (800m-1600m) and tempo (4-6km continuous).`
-      : `\n10公里：速度耐力+阈值。不需要马拉松式长距离。周日"长距离"只需10-12km轻松。重点是间歇(800m-1600m)和阈值(4-6km连续)。`;
+      ? `\n10K: Speed endurance. No marathon long runs. Sun "long" = 10-12km easy. Focus on 800m-1600m intervals + 4-6km tempo.`
+      : `\n10K：速度耐力。不需要马拉松式长距离。周日"长距离"=10-12km轻松。重点800m-1600m间歇+4-6km阈值。`;
   } else {
     prompt += en
-      ? `\n5K: Raw speed + VO2max. Sunday run is just 8-10km easy. Focus on short intervals (200m-400m) and short tempo (2-3km).`
-      : `\n5公里： raw speed + 最大摄氧量。周日跑只需8-10km轻松。重点是短间歇(200m-400m)和短阈值(2-3km)。`;
+      ? `\n5K: Raw speed. Sun run = 8-10km easy. Focus on 200m-400m intervals + 2-3km tempo.`
+      : `\n5K：速度为主。周日跑=8-10km轻松。重点200m-400m间歇+2-3km阈值。`;
   }
 
   // ── Output requirements ──
-  prompt += en ? `\n\n## Output Requirements` : `\n\n## 输出要求`;
+  prompt += en ? `\n\n## Output Rules` : `\n\n## 输出规则`;
   prompt += en
-    ? `\n1. Each week: week, phase, totalDistance(km), notes, sessions[].`
-    : `\n1. 每周包含：week, phase, totalDistance(km), notes, sessions[]。`;
+    ? `\n1. Generate ALL ${weeks} weeks in ONE JSON array. Base → Build → Peak → Taper.`
+    : `\n1. 生成全部${weeks}周，放在一个JSON数组中。基础期→建立期→巅峰期→减量期。`;
   prompt += en
-    ? `\n2. Each session: day(0=Mon~6=Sun), type(easy/long/tempo/interval/recovery/rest/race), title, description, distance(km), paceZone(E/M/T/I/R optional).`
-    : `\n2. 每节训练：day(0=周一~6=周日), type, title, description, distance(km), paceZone(E/M/T/I/R 可选)。`;
+    ? `\n2. Week structure MUST differ by phase. Thu MUST be tempo in Build/Peak.`
+    : `\n2. 周结构必须随周期变化。建立期/巅峰期的周四必须是阈值跑。`;
   prompt += en
-    ? `\n3. notes: Write the weekly training focus directly. Do NOT start with phase name (base/build/peak/taper). Example: "Aerobic foundation, keep easy runs conversational" / "Threshold progression week, control pace on Tue" / "Race-pace blocks in Sunday long run" / "Volume drops, keep legs fresh".`
-    : `\n3. notes：直接写本周训练重点。禁止以"基础期/建立期/巅峰期/减量期"开头。示例："有氧基础周，轻松跑保持对话配速" / "阈值进阶周，周二控制配速" / "长距离加入比赛配速段落" / "跑量下降，保持腿部 freshness"。`;
+    ? `\n3. Recovery weeks every 3rd week in Build/Peak: vol ~75%, shorten quality.`
+    : `\n3. 建立期/巅峰期每第3周为恢复周：跑量约75%，缩短强度课。`;
   prompt += en
-    ? `\n4. EVERY session description must include specific pace (e.g. "6km @ E pace 5:30/km" or "5×800m @ I pace 4:15/km with 2min jog recovery").`
-    : `\n4. 每节训练的 description 必须包含具体配速（如"6km @ E配速 5:30/km" 或 "5组×800m @ I配速 4:15/km，组间2分钟慢跑恢复"）。`;
+    ? `\n4. Keep descriptions SHORT: "10km E", "6×800m I 4:00/km", "3×1.5km T 4:25/km", "20km (16E+4M)".`
+    : `\n4. description 尽量简短："10km E"、"6×800m I 4:00/km"、"3×1.5km T 4:25/km"、"20km(16E+4M)"。`;
   prompt += en
-    ? `\n5. Strict JSON, no markdown, no extra text.`
-    : `\n5. 严格JSON格式，不要markdown，不要额外文字。`;
+    ? `\n5. Distances INTEGER km. Return pure JSON array, no markdown, no explanation.`
+    : `\n5. 距离整数公里。返回纯JSON数组，不要markdown，不要解释。`;
+  prompt += en
+    ? `\n6. EVERY week MUST have exactly 7 sessions (day 0=Mon to 6=Sun). NO missing days. ONLY Sat (day 5) can be rest. Max 1 rest day per week.`
+    : `\n6. 每周必须有且仅有7个session（day 0=周一 到 6=周日）。不允许缺失任何一天。只有周六（day 5）可以是休息。每周最多1天休息。`;
+  prompt += en
+    ? `\n7. Mon (day 0) = easy run or long run. Wed (day 2) = strength training (legs & core, ~45min, distance 0).` 
+    : `\n7. 周一（day 0）必须是轻松跑或长距离。周三（day 2）必须是力量训练（下肢+核心，约45分钟，distance 0）。`;
+  prompt += en
+    ? `\n8. EVERY session MUST have a non-empty title (e.g. "Easy", "Intervals", "Tempo", "Long", "Strength"). NEVER leave title blank.`
+    : `\n8. 每个session必须有非空的title（如"轻松跑"、"间歇"、"阈值"、"长距离"、"力量"）。title绝对不允许为空。`;
+  prompt += en
+    ? `\n9. Keep session descriptions under 30 characters. Use "8km E", "6×800m I 4:00/km", "3×1.5km T 4:25/km", "20km(16E+4M)" format.`
+    : `\n9. 每个session的description控制在30字以内。使用"8km E"、"6×800m I 4:00/km"、"3×1.5km T 4:25/km"、"20km(16E+4M)"格式。`;
+  prompt += en
+    ? `\n10. JSON session fields: day (integer 0-6), type (easy/long/tempo/interval/recovery/rest/race), title (string, NEVER empty), description (string), distance (integer km), paceZone (optional: E/M/T/I/R).`
+    : `\n10. JSON session字段：day（整数0-6）、type（easy/long/tempo/interval/recovery/rest/race）、title（字符串，绝不为空）、description（字符串）、distance（整数公里）、paceZone（可选：E/M/T/I/R）。`;
 
-  // ── JSON schema example ──
-  prompt += en ? `\n\nJSON Schema:` : `\n\nJSON Schema:`;
-  prompt += `\n{\n  "weeks": [`;
-  prompt += `\n    {\n      "week": 1,\n      "phase": "base",\n      "totalDistance": 35,\n      "notes": "${en ? 'Aerobic foundation, keep easy runs conversational' : '有氧基础周，轻松跑保持对话配速'}",`;
-  prompt += `\n      "sessions": [`;
-  prompt += `\n        { "day": 0, "type": "easy", "title": "${en ? 'Easy Run' : '轻松跑'}", "description": "${en ? '6km @ E pace' : '6km @ E配速'}", "distance": 6, "paceZone": "E" },`;
-  prompt += `\n        { "day": 1, "type": "interval", "title": "${en ? 'Speed Activation' : '速度激活'}", "description": "${en ? '8×200m brisk + 200m jog rec' : '8组×200m 轻快跑 + 200m 慢跑恢复'}", "distance": 6, "paceZone": "R" },`;
-  prompt += `\n        { "day": 2, "type": "recovery", "title": "${en ? 'Strength' : '力量训练'}", "description": "${en ? 'Lower body + core ~45min' : '下肢力量 + 核心 ~45分钟'}", "distance": 0 },`;
-  prompt += `\n        { "day": 3, "type": "easy", "title": "${en ? 'Easy Run' : '轻松跑'}", "description": "${en ? '6km @ E pace' : '6km @ E配速'}", "distance": 6, "paceZone": "E" },`;
-  prompt += `\n        { "day": 4, "type": "easy", "title": "${en ? 'Easy Run' : '轻松跑'}", "description": "${en ? '6km @ E pace' : '6km @ E配速'}", "distance": 6, "paceZone": "E" },`;
-  prompt += `\n        { "day": 5, "type": "rest", "title": "${en ? 'Rest' : '休息'}", "description": "${en ? 'Complete rest' : '完全休息'}", "distance": 0 },`;
-  prompt += `\n        { "day": 6, "type": "long", "title": "${en ? 'Long Run' : '长距离'}", "description": "${en ? '12km steady E pace' : '12km 匀速 E配速'}", "distance": 12, "paceZone": "E" }`;
-  prompt += `\n      ]\n    }\n  ]\n}`;
+  prompt += en
+    ? `\n\nJSON format: [{"week":1,"phase":"base","totalDistance":50,"notes":"...","sessions":[...]}, ...]`
+    : `\n\nJSON格式：[{"week":1,"phase":"base","totalDistance":50,"notes":"...","sessions":[...]}, ...]`;
 
   return prompt;
 }
 
 /**
- * Generate training plan via AI
+ * Generate training plan using algorithmic template (professional grade)
  */
 export async function generateTrainingPlan(
   distance: RaceDistance,
@@ -1042,11 +992,6 @@ export async function generateTrainingPlan(
   raceDate?: string,
   locale?: string
 ): Promise<TrainingPlan> {
-  const apiKey = process.env.KIMI_API_KEY;
-  if (!apiKey) {
-    throw new Error('KIMI_API_KEY not configured');
-  }
-
   // Goal realism check
   const assessment = assessGoal(distance, targetTimeSeconds, pb5kSec, locale);
   if (!assessment.realistic) {
@@ -1058,92 +1003,13 @@ export async function generateTrainingPlan(
     );
   }
 
-  const prompt = buildTrainingPlanPrompt(distance, targetTimeSeconds, weeks, pb5kSec, weeklyVolume, raceDate, locale);
-
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'kimi-k2.5',
-          messages: [
-            {
-              role: 'system',
-              content: (locale || 'zh').startsWith('en')
-                ? 'You are a national-level running coach. You design periodized training plans that evolve weekly — base builds aerobic capacity with minimal intensity, build develops threshold and speed, peak specializes for race pace, taper reduces volume while keeping neuromuscular sharpness. You never use cookie-cutter weekly templates. Every plan is tailored to the athlete\'s profile and goal.'
-                : '你是一位国家级跑步教练。你设计的周期化训练计划是每周进化的——基础期以最小强度建立有氧能力，建立期发展阈值和速度，巅峰期专项化比赛配速，减量期降低跑量同时保持神经募集。你从不使用千篇一律的周模板。每份计划都根据运动员的画像和目标量身定制。',
-            },
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.4,
-          max_tokens: 4096,
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`AI API error: ${error}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error('Empty response from AI');
-      }
-
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) ||
-                        content.match(/```\n?([\s\S]*?)\n?```/) ||
-                        [null, content];
-      const jsonStr = jsonMatch[1].trim();
-      const result = JSON.parse(jsonStr);
-      const weeksData: WeeklyPlan[] = (result.weeks || []).map((w: any, idx: number) => ({
-        week: w.week || idx + 1,
-        phase: w.phase || 'base',
-        totalDistance: w.totalDistance || 0,
-        notes: w.notes || '',
-        sessions: (w.sessions || []).map((s: any) => ({
-          day: s.day ?? 0,
-          type: s.type || 'rest',
-          title: s.title || '',
-          description: s.description || '',
-          distance: s.distance ?? 0,
-          paceZone: s.paceZone,
-        })),
-      }));
-
-      console.log(`[AI Plan] Attempt ${attempt} succeeded, ${weeksData.length} weeks.`);
-      return {
-        id: `plan_${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        goal: { distance, targetTimeSeconds, raceDate },
-        currentAbility: { pb5k: pb5kSec, weeklyVolume },
-        weeks: weeksData,
-      };
-    } catch (e) {
-      console.error(`[AI Plan] Attempt ${attempt} failed:`, e);
-      if (attempt < maxAttempts) {
-        await new Promise(r => setTimeout(r, 1500));
-      } else {
-        console.error('Failed to parse AI training plan after all attempts');
-        return generateFallbackTrainingPlan(distance, targetTimeSeconds, weeks, pb5kSec, weeklyVolume, locale);
-      }
-    }
+  console.log('[Plan] 🏃 Generating professional training plan via algorithmic template');
+  const plan = generateFallbackTrainingPlan(distance, targetTimeSeconds, weeks, pb5kSec, weeklyVolume, locale);
+  if (raceDate) {
+    plan.goal.raceDate = raceDate;
   }
-
-  // Should never reach here, but satisfy TypeScript
-  return generateFallbackTrainingPlan(distance, targetTimeSeconds, weeks, pb5kSec, weeklyVolume, locale);
+  console.log(`[Plan] ✅ Generated ${plan.weeks.length} weeks, total ${plan.weeks.reduce((s, w) => s + w.totalDistance, 0)}km`);
+  return plan;
 }
 
 /**

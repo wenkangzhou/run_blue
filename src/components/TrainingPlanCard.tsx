@@ -34,6 +34,29 @@ export function TrainingPlanCard({ week, isCurrent }: TrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
 
+  const defaultTitle = (type: string) => {
+    switch (type) {
+      case 'race': return isZh ? '比赛日' : 'Race';
+      case 'interval': return isZh ? '间歇' : 'Intervals';
+      case 'tempo': return isZh ? '阈值' : 'Tempo';
+      case 'easy': return isZh ? '轻松跑' : 'Easy';
+      case 'long': return isZh ? '长距离' : 'Long';
+      case 'recovery': return isZh ? '恢复' : 'Recovery';
+      default: return isZh ? '训练' : 'Run';
+    }
+  };
+
+  const getGridDesc = (session: typeof week.sessions[0]): string => {
+    const firstLine = (session.description || '').split('\n')[0];
+    if (!firstLine) return '—';
+    const title = session.title || '';
+    // Remove leading title if it's followed by more content (avoids "轻松跑轻松跑30min" duplication)
+    if (title && firstLine.startsWith(title) && firstLine.length > title.length + 3) {
+      return firstLine.slice(title.length).trim();
+    }
+    return firstLine;
+  };
+
   const phaseLabel: Record<string, string> = {
     base: t('trainingPlan.phaseBase', '基础期'),
     build: t('trainingPlan.phaseBuild', '建立期'),
@@ -68,45 +91,57 @@ export function TrainingPlanCard({ week, isCurrent }: TrainingPlanCardProps) {
       {/* Sessions */}
       <div className="p-2">
         <div className="grid grid-cols-7 gap-0.5 min-w-0">
-          {week.sessions.map((session, idx) => (
-            <div
-              key={idx}
-              className={[
-                'border p-1 min-h-[64px] flex flex-col min-w-0 overflow-hidden',
-                TYPE_COLORS[session.type] || 'bg-white border-zinc-200',
-              ].join(' ')}
-            >
-              <span className="text-[10px] font-mono text-zinc-400 mb-1">
-                {isZh ? `周${DAY_SHORT_ZH[session.day]}` : DAY_SHORT[session.day]}
-              </span>
-              {session.type !== 'rest' ? (
-                <>
-                  <span className="text-[10px] font-mono font-bold leading-tight truncate" title={session.description}>
-                    {session.title}
+          {Array.from({ length: 7 }, (_, day) => {
+            const session = week.sessions.find((s) => s.day === day);
+            if (!session) {
+              return (
+                <div key={day} className="border p-1 min-h-[72px] flex flex-col min-w-0 overflow-hidden bg-zinc-50 border-zinc-200 opacity-40">
+                  <span className="text-[10px] font-mono text-zinc-400 mb-1">
+                    {isZh ? `周${DAY_SHORT_ZH[day]}` : DAY_SHORT[day]}
                   </span>
-                  <span className="text-[9px] font-mono text-zinc-500 leading-tight mt-0.5 line-clamp-2 break-words" title={session.description}>
-                    {session.type === 'easy' || session.type === 'long'
-                      ? `${session.distance > 0 ? `${session.distance}km` : ''}${session.paceZone ? ` · ${session.paceZone}` : ''}`
-                      : session.description}
-                  </span>
-                </>
-              ) : (
-                <span className="text-[10px] font-mono text-zinc-400" title={session.description}>
-                  {t('trainingPlan.restDay', 'Rest')}
+                  <span className="text-[10px] font-mono text-zinc-400">—</span>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={day}
+                className={[
+                  'border p-1 min-h-[72px] flex flex-col min-w-0 overflow-hidden',
+                  TYPE_COLORS[session.type] || 'bg-white border-zinc-200',
+                ].join(' ')}
+              >
+                <span className="text-[10px] font-mono text-zinc-400 mb-1">
+                  {isZh ? `周${DAY_SHORT_ZH[session.day]}` : DAY_SHORT[session.day]}
                 </span>
-              )}
-            </div>
-          ))}
+                {session.type !== 'rest' ? (
+                  <>
+                    <span className="text-[10px] font-mono font-bold leading-tight truncate" title={session.description}>
+                      {session.title || defaultTitle(session.type)}
+                    </span>
+                    <span className="text-[9px] font-mono text-zinc-500 leading-tight mt-0.5 break-words whitespace-pre-line" title={session.description}>
+                      {getGridDesc(session)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[10px] font-mono text-zinc-400" title={session.description}>
+                    {t('trainingPlan.restDay', 'Rest')}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
-        {/* Daily Details */}
+        {/* Daily Details — show ALL non-rest sessions */}
         <div className="mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-2 space-y-1">
           {week.sessions
-            .filter((s) => s.type !== 'rest' && s.type !== 'easy' && s.type !== 'long')
+            .filter((s) => s.type !== 'rest')
+            .sort((a, b) => a.day - b.day)
             .map((s, idx) => (
               <div key={idx} className="flex items-start gap-1.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-400 px-1">
                 <span className="text-zinc-400 shrink-0">{isZh ? `周${DAY_SHORT_ZH[s.day]}` : DAY_SHORT[s.day]}</span>
-                <span className="font-bold text-zinc-700 dark:text-zinc-300 shrink-0">{s.title}</span>
-                <span className="text-zinc-500">{s.description}</span>
+                <span className="font-bold text-zinc-700 dark:text-zinc-300 shrink-0">{s.title || defaultTitle(s.type)}</span>
+                <span className="text-zinc-500 whitespace-pre-line">{s.description}</span>
               </div>
             ))}
         </div>

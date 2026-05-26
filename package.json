@@ -12,6 +12,7 @@
     "@serwist/next": "^9.5.11",
     "@supabase/supabase-js": "^2.49.4",
     "@vercel/analytics": "^2.0.1",
+    "axios": "^1.16.1",
     "clsx": "^2.1.1",
     "i18next": "^24.2.3",
     "leaflet": "^1.9.4",
