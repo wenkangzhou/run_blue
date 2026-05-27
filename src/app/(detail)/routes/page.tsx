@@ -8,14 +8,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
 import { RouteCard } from '@/components/RouteCard';
-import { MapPinOff, ChevronLeft } from 'lucide-react';
+import { MapPinOff, ChevronLeft, RefreshCw } from 'lucide-react';
 
 export default function RoutesPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { activities } = useActivitiesStore();
-  const { savedRoutes } = useRoutesStore();
+  const { savedRoutes, syncRoutes } = useRoutesStore();
+  const [syncing, setSyncing] = React.useState(false);
 
   React.useEffect(() => {
     if (!isAuthenticated) {
@@ -38,7 +39,22 @@ export default function RoutesPage() {
             {t('common.back')}
           </Link>
           <h1 className="font-pixel text-base font-bold">{t('routes.title', '收藏路线')}</h1>
-          <div className="w-16" />
+          {savedRoutes.length > 0 && (
+            <button
+              onClick={() => {
+                setSyncing(true);
+                syncRoutes(activities);
+                setTimeout(() => setSyncing(false), 600);
+              }}
+              disabled={syncing}
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40 transition-colors"
+              title="重新匹配所有历史活动到已收藏路线"
+            >
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              匹配历史
+            </button>
+          )}
+          {savedRoutes.length === 0 && <div className="w-16" />}
         </div>
       </div>
 

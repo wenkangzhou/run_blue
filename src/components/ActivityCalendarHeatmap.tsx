@@ -24,8 +24,16 @@ const DEFAULT_COLOR_CLASSES = [
   'bg-blue-800 dark:bg-blue-400',                           // 4
 ];
 
+const REVERSE_COLOR_CLASSES = [
+  'bg-zinc-100 dark:bg-zinc-800',                           // 0
+  'bg-blue-200 dark:bg-blue-900/40',                        // 1
+  'bg-blue-400 dark:bg-blue-700',                           // 2
+  'bg-blue-600 dark:bg-blue-500',                           // 3
+  'bg-blue-800 dark:bg-blue-400',                           // 4
+];
+
 export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses }: ActivityCalendarHeatmapProps) {
-  const COLOR_CLASSES = colorClasses || DEFAULT_COLOR_CLASSES;
+
   const { i18n } = useTranslation();
   const locale = i18n.language;
   const isZh = locale.startsWith('zh');
@@ -83,8 +91,19 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
     return { weeks: w, monthLabels: ml, maxValue: max, totalRuns: runs };
   }, [dailyData, year, isZh]);
 
+  const isReverseMetric = metric === 'pace';
+  const COLOR_CLASSES = isReverseMetric ? REVERSE_COLOR_CLASSES : (colorClasses || DEFAULT_COLOR_CLASSES);
+
   const getLevel = (value: number) => {
     if (value <= 0) return 0;
+    if (isReverseMetric) {
+      // For pace: lower = better (faster), so invert ratio
+      const ratio = value / maxValue;
+      if (ratio > 0.75) return 1;
+      if (ratio > 0.5) return 2;
+      if (ratio > 0.25) return 3;
+      return 4;
+    }
     const ratio = value / maxValue;
     if (ratio < 0.25) return 1;
     if (ratio < 0.5) return 2;
@@ -195,11 +214,15 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
 
       {/* Legend */}
       <div className="flex items-center gap-1.5 mt-3">
-        <span className="font-mono text-[9px] text-zinc-400">{isZh ? '少' : 'Less'}</span>
+        <span className="font-mono text-[9px] text-zinc-400">
+          {isReverseMetric ? (isZh ? '慢' : 'Slow') : (isZh ? '少' : 'Less')}
+        </span>
         {COLOR_CLASSES.map((cls, i) => (
           <div key={i} className={`w-[10px] h-[10px] rounded-[2px] ${cls}`} />
         ))}
-        <span className="font-mono text-[9px] text-zinc-400">{isZh ? '多' : 'More'}</span>
+        <span className="font-mono text-[9px] text-zinc-400">
+          {isReverseMetric ? (isZh ? '快' : 'Fast') : (isZh ? '多' : 'More')}
+        </span>
       </div>
     </div>
   );

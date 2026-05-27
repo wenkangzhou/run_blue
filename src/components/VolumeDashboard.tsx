@@ -40,7 +40,7 @@ interface VolumeDashboardProps {
 }
 
 const PERIOD_TYPES: PeriodType[] = ['week', 'month', 'year', 'all'];
-const METRICS: MetricType[] = ['distance', 'duration', 'count', 'calories', 'elevation'];
+const METRICS: MetricType[] = ['distance', 'duration', 'count', 'calories', 'elevation', 'pace'];
 
 export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const { t, i18n } = useTranslation();
@@ -128,6 +128,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
       count: 'stats.metricCount',
       calories: 'stats.metricCalories',
       elevation: 'stats.metricElevation',
+      pace: 'stats.metricPace',
     };
     return t(keys[m]);
   };

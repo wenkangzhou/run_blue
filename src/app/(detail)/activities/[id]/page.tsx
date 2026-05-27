@@ -17,7 +17,8 @@ import { ActivityStats } from '@/components/ActivityStats';
 import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
 import { SharePosterModal } from '@/components/SharePosterModal';
 import { SaveRouteButton } from '@/components/SaveRouteButton';
-import { ChevronLeft, Loader2, RefreshCw, Share2 } from 'lucide-react';
+import { calculatePaceTrend } from '@/lib/paceTrend';
+import { ChevronLeft, Loader2, RefreshCw, Share2, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // 20km threshold for collapsing
@@ -45,6 +46,13 @@ export default function ActivityDetailPage() {
   const [forceShow, setForceShow] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+
+  // Pace trend data
+  const { activities: allActivities } = useActivitiesStore();
+  const paceTrend = useMemo(() => {
+    if (!activity) return null;
+    return calculatePaceTrend(allActivities, activity.id);
+  }, [allActivities, activity]);
 
   // Use ref to track if we have loaded data to avoid infinite loops
   const hasLoadedRef = useRef(false);
@@ -678,6 +686,42 @@ export default function ActivityDetailPage() {
               activity={activity} 
               streams={streams} 
             />
+          )}
+
+          {/* Pace Trend */}
+          {paceTrend && (
+            <div className="mb-4 border-2 border-zinc-200 dark:border-zinc-700 p-3 bg-white dark:bg-zinc-900">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp size={14} className="text-zinc-500" />
+                  <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                    {t('activity.paceTrend', '近期配速趋势')}
+                  </span>
+                </div>
+                <Link
+                  href="/stats"
+                  className="font-mono text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {t('activity.viewDetails', '查看详细对比 →')}
+                </Link>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
+                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.thisRun', '本次')}</div>
+                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.currentPaceStr}</div>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
+                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.last7Days', '近7天')}</div>
+                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.days7AvgStr}</div>
+                  <div className="text-[10px] font-mono text-zinc-500">{paceTrend.days7DiffStr}</div>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
+                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.last28Days', '近28天')}</div>
+                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.days28AvgStr}</div>
+                  <div className="text-[10px] font-mono text-zinc-500">{paceTrend.days28DiffStr}</div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Splits - Show first 20km, collapse rest (only if more than 1) */}

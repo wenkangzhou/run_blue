@@ -2,8 +2,10 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import Link from 'next/link';
 import { StravaActivity } from '@/types';
-import { formatDistance, formatDuration, formatPace, formatDate } from '@/lib/strava';
+import { formatDistance, formatPace, formatDate } from '@/lib/strava';
+import { MiniMap } from './map/MiniMap';
 import { TrendingUp } from 'lucide-react';
 
 interface RouteComparisonTableProps {
@@ -11,7 +13,7 @@ interface RouteComparisonTableProps {
 }
 
 export function RouteComparisonTable({ activities }: RouteComparisonTableProps) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const locale = i18n.language;
 
   if (activities.length === 0) return null;
@@ -30,79 +32,81 @@ export function RouteComparisonTable({ activities }: RouteComparisonTableProps) 
   }
 
   return (
-    <div className="overflow-x-auto -mx-2 scrollbar-hide">
-      <table className="w-full min-w-[600px]">
-        <thead>
-          <tr className="border-b-2 border-zinc-200 dark:border-zinc-700">
-            <th className="text-left py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.date')}
-            </th>
-            <th className="text-right py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.distance')}
-            </th>
-            <th className="text-right py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.time')}
-            </th>
-            <th className="text-right py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.pace')}
-            </th>
-            <th className="text-right py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.heartRate')}
-            </th>
-            <th className="text-right py-2 px-3 font-mono text-[10px] uppercase text-zinc-500">
-              {t('activity.elevation')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((activity) => {
-            const paceSecPerKm =
-              activity.distance > 0
-                ? activity.moving_time / (activity.distance / 1000)
-                : 0;
-            const isBestPace = paceSecPerKm > 0 && paceSecPerKm === bestPace;
+    <table className="w-full">
+      <thead>
+        <tr className="border-b-2 border-zinc-200 dark:border-zinc-700">
+          <th className="text-left py-1.5 px-2 font-mono text-[10px] uppercase text-zinc-500 w-16">
+            路线
+          </th>
+          <th className="text-left py-1.5 px-2 font-mono text-[10px] uppercase text-zinc-500">
+            日期
+          </th>
+          <th className="text-right py-1.5 px-2 font-mono text-[10px] uppercase text-zinc-500">
+            距离
+          </th>
+          <th className="text-right py-1.5 px-2 font-mono text-[10px] uppercase text-zinc-500">
+            配速
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((activity) => {
+          const paceSecPerKm =
+            activity.distance > 0
+              ? activity.moving_time / (activity.distance / 1000)
+              : 0;
+          const isBestPace = paceSecPerKm > 0 && paceSecPerKm === bestPace;
 
-            return (
-              <tr
-                key={activity.id}
-                className={`border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                  isBestPace ? 'bg-green-50 dark:bg-green-900/10' : ''
+          return (
+            <tr
+              key={activity.id}
+              className={`border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                isBestPace ? 'bg-green-50 dark:bg-green-900/10' : ''
+              }`}
+            >
+              <td className="py-1 px-2 w-16">
+                <Link
+                  href={`/activities/${activity.id}`}
+                  className="block rounded overflow-hidden border border-zinc-200 dark:border-zinc-700"
+                  title={activity.name}
+                >
+                  <MiniMap
+                    polyline={activity.map?.summary_polyline || null}
+                    height="36px"
+                  />
+                </Link>
+              </td>
+              <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap">
+                <Link
+                  href={`/activities/${activity.id}`}
+                  className="flex items-center gap-1 hover:underline"
+                >
+                  {isBestPace && (
+                    <TrendingUp size={10} className="text-green-600 dark:text-green-400 flex-shrink-0" />
+                  )}
+                  {formatDate(activity.start_date_local, locale)}
+                </Link>
+              </td>
+              <td className="py-1 px-2 font-mono text-[11px] text-right whitespace-nowrap">
+                <Link href={`/activities/${activity.id}`} className="hover:underline">
+                  {formatDistance(activity.distance, 'km')}
+                </Link>
+              </td>
+              <td
+                className={`py-1 px-2 font-mono text-[11px] text-right whitespace-nowrap font-bold ${
+                  isBestPace ? 'text-green-600 dark:text-green-400' : ''
                 }`}
               >
-                <td className="py-2 px-3 font-mono text-xs">
-                  <div className="flex items-center gap-1.5">
-                    {isBestPace && (
-                      <TrendingUp size={12} className="text-green-600 dark:text-green-400 flex-shrink-0" />
-                    )}
-                    {formatDate(activity.start_date_local, locale)}
-                  </div>
-                </td>
-                <td className="py-2 px-3 font-mono text-xs text-right">
-                  {formatDistance(activity.distance, 'km')}
-                </td>
-                <td className="py-2 px-3 font-mono text-xs text-right">
-                  {formatDuration(activity.moving_time)}
-                </td>
-                <td className={`py-2 px-3 font-mono text-xs text-right font-bold ${isBestPace ? 'text-green-600 dark:text-green-400' : ''}`}>
+                <Link href={`/activities/${activity.id}`} className="hover:underline">
                   {activity.distance > 0 && activity.moving_time > 0
                     ? formatPace(activity.distance, activity.moving_time, 'min/km')
                     : '--'}
-                </td>
-                <td className="py-2 px-3 font-mono text-xs text-right">
-                  {activity.has_heartrate && activity.average_heartrate
-                    ? `${Math.round(activity.average_heartrate)} bpm`
-                    : '--'}
-                </td>
-                <td className="py-2 px-3 font-mono text-xs text-right">
-                  {activity.total_elevation_gain > 0
-                    ? `${Math.round(activity.total_elevation_gain)} m`
-                    : '--'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                </Link>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

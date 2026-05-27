@@ -1,7 +1,7 @@
 import { StravaActivity } from '@/types';
 
 export type PeriodType = 'week' | 'month' | 'year' | 'all';
-export type MetricType = 'distance' | 'duration' | 'count' | 'calories' | 'elevation';
+export type MetricType = 'distance' | 'duration' | 'count' | 'calories' | 'elevation' | 'pace';
 
 export interface ChartDataPoint {
   key: string;
@@ -34,6 +34,7 @@ const METRIC_LABELS: Record<MetricType, { zh: string; en: string; unit: string }
   count: { zh: '次数', en: 'Count', unit: '' },
   calories: { zh: '卡路里', en: 'Calories', unit: 'kcal' },
   elevation: { zh: '爬升', en: 'Elevation', unit: 'm' },
+  pace: { zh: '配速', en: 'Pace', unit: '/km' },
 };
 
 export function getMetricLabel(metric: MetricType, locale: string = 'zh'): string {
@@ -56,6 +57,8 @@ export function formatMetricValue(value: number, metric: MetricType): string {
       return `${Math.round(value)}`;
     case 'elevation':
       return `${Math.round(value)}`;
+    case 'pace':
+      return formatPaceFromSeconds(value);
     default:
       return `${value}`;
   }
@@ -127,6 +130,8 @@ function getMetricValue(activity: StravaActivity, metric: MetricType): number {
       return activity.calories || 0;
     case 'elevation':
       return activity.total_elevation_gain;
+    case 'pace':
+      return activity.distance > 0 ? activity.moving_time / (activity.distance / 1000) : 0;
     default:
       return 0;
   }
@@ -161,7 +166,9 @@ export function aggregateActivities(
       });
 
       return Array.from(weekMap.entries()).map(([week, acts]) => {
-        const value = acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
+        const value = metric === 'pace'
+          ? (acts.reduce((sum, a) => sum + a.moving_time, 0) / (acts.reduce((sum, a) => sum + a.distance, 0) / 1000) || 0)
+          : acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
         // Find a representative date in this week for isCurrent check
         const weekStart = new Date(selectedYear, 0, 1);
         weekStart.setDate(weekStart.getDate() + (week - 1) * 7);
@@ -191,7 +198,9 @@ export function aggregateActivities(
       });
 
       return Array.from(monthMap.entries()).map(([month, acts]) => {
-        const value = acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
+        const value = metric === 'pace'
+          ? (acts.reduce((sum, a) => sum + a.moving_time, 0) / (acts.reduce((sum, a) => sum + a.distance, 0) / 1000) || 0)
+          : acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
         const monthDate = new Date(selectedYear, month - 1, 15);
         return {
           key: `${selectedYear}-${String(month).padStart(2, '0')}`,
@@ -217,7 +226,9 @@ export function aggregateActivities(
       return Array.from(yearMap.entries())
         .sort(([a], [b]) => a - b)
         .map(([year, acts]) => {
-          const value = acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
+          const value = metric === 'pace'
+            ? (acts.reduce((sum, a) => sum + a.moving_time, 0) / (acts.reduce((sum, a) => sum + a.distance, 0) / 1000) || 0)
+            : acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
           const yearDate = new Date(year, 6, 1);
           return {
             key: `${year}`,
@@ -243,7 +254,9 @@ export function aggregateActivities(
       return Array.from(monthKeyMap.entries())
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, acts]) => {
-          const value = acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
+          const value = metric === 'pace'
+            ? (acts.reduce((sum, a) => sum + a.moving_time, 0) / (acts.reduce((sum, a) => sum + a.distance, 0) / 1000) || 0)
+            : acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
           const [year, month] = key.split('-').map(Number);
           const monthDate = new Date(year, month - 1, 15);
           return {
@@ -375,8 +388,14 @@ export function getDailyAggregates(
     if (date.getFullYear() !== year) return;
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const entry = map.get(key) || { value: 0, activities: [] };
-    entry.value += getMetricValue(a, metric);
     entry.activities.push(a);
+    if (metric === 'pace') {
+      const totalTime = entry.activities.reduce((sum, act) => sum + act.moving_time, 0);
+      const totalDist = entry.activities.reduce((sum, act) => sum + act.distance, 0);
+      entry.value = totalDist > 0 ? totalTime / (totalDist / 1000) : 0;
+    } else {
+      entry.value += getMetricValue(a, metric);
+    }
     map.set(key, entry);
   });
 

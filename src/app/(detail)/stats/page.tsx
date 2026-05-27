@@ -6,8 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
+import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
+import { useRoutesStore } from '@/store/routes';
 import { Loader2, ChevronLeft } from 'lucide-react';
 
 const MAX_LOAD_PAGES = 10; // Safety limit: 2000 activities max
@@ -127,6 +129,10 @@ export default function StatsPage() {
       setLoadedPages(page - 1);
       setLastFetchedAt(Date.now());
       setLoadProgress('');
+
+      // Sync saved routes with all loaded activities
+      const allActivities = useActivitiesStore.getState().activities;
+      useRoutesStore.getState().syncRoutes(allActivities);
     };
 
     loadAll();
@@ -184,3 +190,5 @@ export default function StatsPage() {
     </div>
   );
 }
+
+

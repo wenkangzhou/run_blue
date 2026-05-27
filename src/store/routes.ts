@@ -38,6 +38,10 @@ export interface SavedRoute {
   name: string;
   activityIds: number[];
   createdAt: number;
+  referenceActivityId: number; // Activity used as the reference track for matching
+  polyline?: string; // Encoded polyline of the reference track
+  distance: number; // Reference distance in meters
+  elevationGain: number; // Reference elevation gain in meters
 }
 
 interface RoutesState {
@@ -63,22 +67,46 @@ export const useRoutesStore = create<RoutesState>()(
         const key = getRouteKey(activity);
         if (!key) return;
 
-        const existing = get().savedRoutes.find((r) => r.key === key);
-        if (existing) {
-          // Already saved, just ensure this activity is in the list
-          if (!existing.activityIds.includes(activity.id)) {
-            set((state) => ({
-              savedRoutes: state.savedRoutes.map((r) =>
-                r.key === key
-                  ? { ...r, activityIds: [activity.id, ...r.activityIds] }
-                  : r
-              ),
-            }));
-          }
+        // Already saved? Skip.
+        if (get().savedRoutes.some((r) => r.activityIds.includes(activity.id))) {
           return;
         }
 
-        // Find all activities on this route for initial population
+        // Find a compatible existing route with the same key.
+        // If the key matches but the route shape is different (e.g. track vs L-shaped street),
+        // we generate a unique suffixed key instead of merging.
+        let finalKey = key;
+        const sameKeyRoutes = get().savedRoutes.filter((r) => r.key === key || r.key.startsWith(`${key}#`));
+        if (sameKeyRoutes.length > 0) {
+          const compatibleRoute = sameKeyRoutes.find((r) => {
+            const refActivity = allActivities.find((a) => a.id === r.referenceActivityId);
+            if (!refActivity) return false;
+            return areActivitiesSameRoute(activity, refActivity);
+          });
+
+          if (compatibleRoute) {
+            // Merge into compatible route
+            if (!compatibleRoute.activityIds.includes(activity.id)) {
+              set((state) => ({
+                savedRoutes: state.savedRoutes.map((r) =>
+                  r.key === compatibleRoute.key
+                    ? { ...r, activityIds: [activity.id, ...r.activityIds] }
+                    : r
+                ),
+              }));
+            }
+            return;
+          }
+
+          // Same key but incompatible shape → generate unique key
+          let counter = 1;
+          while (get().savedRoutes.some((r) => r.key === `${key}#${counter}`)) {
+            counter++;
+          }
+          finalKey = `${key}#${counter}`;
+        }
+
+        // Create new route — find all historical matches for initial population
         const matchingActivities = allActivities.filter((a) => {
           if (a.id === activity.id) return true;
           return areActivitiesSameRoute(activity, a);
@@ -94,10 +122,14 @@ export const useRoutesStore = create<RoutesState>()(
           savedRoutes: [
             ...state.savedRoutes,
             {
-              key,
+              key: finalKey,
               name: name || activity.name || 'Unnamed Route',
               activityIds,
               createdAt: Date.now(),
+              referenceActivityId: activity.id,
+              polyline: activity.map?.summary_polyline || undefined,
+              distance: activity.distance,
+              elevationGain: activity.total_elevation_gain || 0,
             },
           ],
         }));
@@ -162,22 +194,23 @@ export const useRoutesStore = create<RoutesState>()(
         set((state) => {
           let hasChanges = false;
           const updatedRoutes = state.savedRoutes.map((route) => {
-            // Find a reference activity from current pool to use for distance matching
-            const referenceActivity = allActivities.find((a) =>
-              route.activityIds.includes(a.id)
+            // Use the saved reference activity or find from pool
+            let referenceActivity = allActivities.find(
+              (a) => a.id === route.referenceActivityId
             );
             if (!referenceActivity) {
-              // Keep existing ids if no reference found in current data pool
+              referenceActivity = allActivities.find((a) =>
+                route.activityIds.includes(a.id)
+              );
+            }
+            if (!referenceActivity) {
               return route;
             }
 
-            const routeKey = getRouteKey(referenceActivity);
-            if (!routeKey) return route;
-
-            // Re-match all activities using flexible geographic matching
+            // Re-match all activities using the reference track
             const matchingActivities = allActivities.filter((a) => {
-              if (a.id === referenceActivity.id) return true;
-              return areActivitiesSameRoute(referenceActivity, a);
+              if (a.id === referenceActivity!.id) return true;
+              return areActivitiesSameRoute(referenceActivity!, a);
             });
 
             const activityIds = matchingActivities
@@ -192,11 +225,13 @@ export const useRoutesStore = create<RoutesState>()(
             if (!idsChanged) return route;
 
             hasChanges = true;
-            const name = getDefaultRouteName(matchingActivities);
             return {
               ...route,
-              name: name || route.name,
               activityIds,
+              referenceActivityId: referenceActivity.id,
+              polyline: referenceActivity.map?.summary_polyline || route.polyline,
+              distance: referenceActivity.distance,
+              elevationGain: referenceActivity.total_elevation_gain || route.elevationGain,
             };
           });
 
