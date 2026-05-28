@@ -65,37 +65,24 @@ export const useRoutesStore = create<RoutesState>()(
 
       saveRoute: (activity, allActivities = []) => {
         const key = getRouteKey(activity);
-        // eslint-disable-next-line no-console
-        console.log('[saveRoute]', activity.id, activity.name, 'key:', key, 'poolSize:', allActivities.length);
         if (!key) return;
 
         // Already saved? Skip.
         if (get().savedRoutes.some((r) => r.activityIds.includes(activity.id))) {
-          // eslint-disable-next-line no-console
-          console.log('[saveRoute] already saved, skipping');
           return;
         }
 
         // Find a compatible existing route with the same key.
         let finalKey = key;
         const sameKeyRoutes = get().savedRoutes.filter((r) => r.key === key || r.key.startsWith(`${key}#`));
-        // eslint-disable-next-line no-console
-        console.log('[saveRoute] sameKeyRoutes:', sameKeyRoutes.map((r) => ({ key: r.key, name: r.name, refId: r.referenceActivityId, count: r.activityIds.length })));
         if (sameKeyRoutes.length > 0) {
           const compatibleRoute = sameKeyRoutes.find((r) => {
             const refActivity = allActivities.find((a) => a.id === r.referenceActivityId);
-            // eslint-disable-next-line no-console
-            console.log('[saveRoute] checking compatible with route', r.key, 'refActivity found?', !!refActivity);
             if (!refActivity) return false;
-            const match = areActivitiesSameRoute(activity, refActivity);
-            // eslint-disable-next-line no-console
-            console.log('[saveRoute] areActivitiesSameRoute result:', match);
-            return match;
+            return areActivitiesSameRoute(activity, refActivity);
           });
 
           if (compatibleRoute) {
-            // eslint-disable-next-line no-console
-            console.log('[saveRoute] merging into compatible route:', compatibleRoute.key);
             if (!compatibleRoute.activityIds.includes(activity.id)) {
               set((state) => ({
                 savedRoutes: state.savedRoutes.map((r) =>
@@ -114,19 +101,12 @@ export const useRoutesStore = create<RoutesState>()(
             counter++;
           }
           finalKey = `${key}#${counter}`;
-          // eslint-disable-next-line no-console
-          console.log('[saveRoute] incompatible shape, using unique key:', finalKey);
         }
 
         // Create new route — find all historical matches for initial population
         const matchingActivities = allActivities.filter((a) => {
           if (a.id === activity.id) return true;
-          const match = areActivitiesSameRoute(activity, a);
-          if (match) {
-            // eslint-disable-next-line no-console
-            console.log('[saveRoute] historical match:', a.id, a.name);
-          }
-          return match;
+          return areActivitiesSameRoute(activity, a);
         });
 
         const activityIds = matchingActivities
@@ -134,8 +114,6 @@ export const useRoutesStore = create<RoutesState>()(
           .filter((id, idx, arr) => arr.indexOf(id) === idx); // dedupe
 
         const name = getDefaultRouteName(matchingActivities);
-        // eslint-disable-next-line no-console
-        console.log('[saveRoute] creating new route:', finalKey, 'matched:', matchingActivities.length, 'name:', name);
 
         set((state) => ({
           savedRoutes: [

@@ -115,22 +115,14 @@ function decodePolyline(encoded: string): [number, number][] {
   return points;
 }
 
-function logMatchCheck(label: string, a: StravaActivity, b: StravaActivity, result: string, detail?: any) {
-  // eslint-disable-next-line no-console
-  console.log(`[RouteMatch] ${label}: ${a.name}(${a.id}) vs ${b.name}(${b.id}) -> ${result}`, detail ?? '');
-}
-
 export function areActivitiesSameRoute(
   a: StravaActivity,
   b: StravaActivity,
   startThresholdKm = 0.5,
-  distanceTolerance = 0.15
+  distanceTolerance = 0.25
 ): boolean {
   if (a.id === b.id) return false;
-  if (!a.start_latlng || !b.start_latlng) {
-    logMatchCheck('NO_START', a, b, 'FALSE', 'missing start_latlng');
-    return false;
-  }
+  if (!a.start_latlng || !b.start_latlng) return false;
 
   const startDist = haversineDistance(
     a.start_latlng[0],
@@ -142,10 +134,7 @@ export function areActivitiesSameRoute(
   // Distance check first (cheapest)
   if (a.distance > 0 && b.distance > 0) {
     const distDiff = Math.abs(a.distance - b.distance) / a.distance;
-    if (distDiff > distanceTolerance) {
-      logMatchCheck('DIST_FAIL', a, b, 'FALSE', { distDiff: distDiff.toFixed(2), threshold: distanceTolerance });
-      return false;
-    }
+    if (distDiff > distanceTolerance) return false;
   }
 
   // Elevation check
@@ -153,21 +142,17 @@ export function areActivitiesSameRoute(
   const bElev = b.total_elevation_gain || 0;
   if (aElev > 0) {
     const elevDiff = Math.abs(aElev - bElev) / aElev;
-    if (elevDiff > 0.25) {
-      logMatchCheck('ELEV_FAIL', a, b, 'FALSE', { elevDiff: elevDiff.toFixed(2) });
-      return false;
-    }
+    if (elevDiff > 0.25) return false;
   }
 
   // Path shape check: average radius should be similar.
+  // A track loop has a tiny radius (~0.05-0.15km); an L-shaped street run has a large radius (~0.5-2km).
+  // 50% tolerance allows for polyline simplization noise while still rejecting track-vs-street mixes.
   const aRadius = getPathRadius(a);
   const bRadius = getPathRadius(b);
   if (aRadius && bRadius && Math.max(aRadius, bRadius) > 0) {
     const radiusDiff = Math.abs(aRadius - bRadius) / Math.max(aRadius, bRadius);
-    if (radiusDiff > 0.30) {
-      logMatchCheck('RADIUS_FAIL', a, b, 'FALSE', { aRadius: aRadius.toFixed(0), bRadius: bRadius.toFixed(0), radiusDiff: radiusDiff.toFixed(2) });
-      return false;
-    }
+    if (radiusDiff > 0.50) return false;
   }
 
   // Fallback: no end points available
@@ -182,16 +167,17 @@ export function areActivitiesSameRoute(
         const maxDist = Math.max(...distances);
         const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
         const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-        const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
-        logMatchCheck('FALLBACK_SAMPLE', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length, startDist: startDist.toFixed(0) });
-        if (ok) return true;
+        if (
+          maxDist <= startThresholdKm * 2 &&
+          avgDist <= startThresholdKm * 0.6 &&
+          closeCount >= distances.length * 0.9
+        ) {
+          return true;
+        }
       } else {
-        const ok = startDist <= startThresholdKm * 0.3;
-        logMatchCheck('FALLBACK_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
-        if (ok) return true;
+        return startDist <= startThresholdKm * 0.3;
       }
     }
-    logMatchCheck('FALLBACK_END', a, b, 'FALSE', { startDist: startDist.toFixed(0) });
     return false;
   }
 
@@ -202,7 +188,7 @@ export function areActivitiesSameRoute(
     b.end_latlng[1]
   );
 
-  // Rule 1: Same direction
+  // Rule 1: Same direction — start close AND end close
   if (startDist <= startThresholdKm && endDist <= startThresholdKm) {
     const aPts = getSamplePoints(a, 10);
     const bPts = getSamplePoints(b, 10);
@@ -213,13 +199,15 @@ export function areActivitiesSameRoute(
       const maxDist = Math.max(...distances);
       const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
       const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-      const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
-      logMatchCheck('SAME_DIR', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length, startDist: startDist.toFixed(0), endDist: endDist.toFixed(0) });
-      if (ok) return true;
+      if (
+        maxDist <= startThresholdKm * 2 &&
+        avgDist <= startThresholdKm * 0.6 &&
+        closeCount >= distances.length * 0.9
+      ) {
+        return true;
+      }
     } else {
-      const ok = startDist <= startThresholdKm * 0.3;
-      logMatchCheck('SAME_DIR_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), endDist: endDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
-      if (ok) return true;
+      return startDist <= startThresholdKm * 0.3;
     }
   }
 
@@ -247,17 +235,18 @@ export function areActivitiesSameRoute(
       const maxDist = Math.max(...distances);
       const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
       const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-      const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
-      logMatchCheck('REVERSE', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length });
-      if (ok) return true;
+      if (
+        maxDist <= startThresholdKm * 2 &&
+        avgDist <= startThresholdKm * 0.6 &&
+        closeCount >= distances.length * 0.9
+      ) {
+        return true;
+      }
     } else {
-      const ok = startDist <= startThresholdKm * 0.3;
-      logMatchCheck('REVERSE_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
-      if (ok) return true;
+      return startDist <= startThresholdKm * 0.3;
     }
   }
 
-  logMatchCheck('NO_MATCH', a, b, 'FALSE', { startDist: startDist.toFixed(0), endDist: endDist?.toFixed(0), aStartToBEnd: aStartToBEnd.toFixed(0), aEndToBStart: aEndToBStart.toFixed(0) });
   return false;
 }
 
