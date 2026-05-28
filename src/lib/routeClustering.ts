@@ -115,6 +115,11 @@ function decodePolyline(encoded: string): [number, number][] {
   return points;
 }
 
+function logMatchCheck(label: string, a: StravaActivity, b: StravaActivity, result: string, detail?: any) {
+  // eslint-disable-next-line no-console
+  console.log(`[RouteMatch] ${label}: ${a.name}(${a.id}) vs ${b.name}(${b.id}) -> ${result}`, detail ?? '');
+}
+
 export function areActivitiesSameRoute(
   a: StravaActivity,
   b: StravaActivity,
@@ -122,7 +127,10 @@ export function areActivitiesSameRoute(
   distanceTolerance = 0.15
 ): boolean {
   if (a.id === b.id) return false;
-  if (!a.start_latlng || !b.start_latlng) return false;
+  if (!a.start_latlng || !b.start_latlng) {
+    logMatchCheck('NO_START', a, b, 'FALSE', 'missing start_latlng');
+    return false;
+  }
 
   const startDist = haversineDistance(
     a.start_latlng[0],
@@ -134,7 +142,10 @@ export function areActivitiesSameRoute(
   // Distance check first (cheapest)
   if (a.distance > 0 && b.distance > 0) {
     const distDiff = Math.abs(a.distance - b.distance) / a.distance;
-    if (distDiff > distanceTolerance) return false;
+    if (distDiff > distanceTolerance) {
+      logMatchCheck('DIST_FAIL', a, b, 'FALSE', { distDiff: distDiff.toFixed(2), threshold: distanceTolerance });
+      return false;
+    }
   }
 
   // Elevation check
@@ -142,20 +153,24 @@ export function areActivitiesSameRoute(
   const bElev = b.total_elevation_gain || 0;
   if (aElev > 0) {
     const elevDiff = Math.abs(aElev - bElev) / aElev;
-    if (elevDiff > 0.25) return false; // 25% elevation tolerance
+    if (elevDiff > 0.25) {
+      logMatchCheck('ELEV_FAIL', a, b, 'FALSE', { elevDiff: elevDiff.toFixed(2) });
+      return false;
+    }
   }
 
   // Path shape check: average radius should be similar.
-  // This prevents matching a track loop (small radius) with an L-shaped street run (large radius)
-  // even if they start/end at the same spot.
   const aRadius = getPathRadius(a);
   const bRadius = getPathRadius(b);
   if (aRadius && bRadius && Math.max(aRadius, bRadius) > 0) {
     const radiusDiff = Math.abs(aRadius - bRadius) / Math.max(aRadius, bRadius);
-    if (radiusDiff > 0.30) return false; // 30% radius tolerance
+    if (radiusDiff > 0.30) {
+      logMatchCheck('RADIUS_FAIL', a, b, 'FALSE', { aRadius: aRadius.toFixed(0), bRadius: bRadius.toFixed(0), radiusDiff: radiusDiff.toFixed(2) });
+      return false;
+    }
   }
 
-  // Fallback: no end points available — rely on start + sample points
+  // Fallback: no end points available
   if (!a.end_latlng || !b.end_latlng) {
     if (startDist <= startThresholdKm) {
       const aPts = getSamplePoints(a, 10);
@@ -167,18 +182,16 @@ export function areActivitiesSameRoute(
         const maxDist = Math.max(...distances);
         const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
         const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-        if (
-          maxDist <= startThresholdKm * 2 &&
-          avgDist <= startThresholdKm * 0.6 &&
-          closeCount >= distances.length * 0.9
-        ) {
-          return true;
-        }
+        const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
+        logMatchCheck('FALLBACK_SAMPLE', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length, startDist: startDist.toFixed(0) });
+        if (ok) return true;
       } else {
-        // One or both polylines missing: reject unless start is extremely close
-        return startDist <= startThresholdKm * 0.3;
+        const ok = startDist <= startThresholdKm * 0.3;
+        logMatchCheck('FALLBACK_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
+        if (ok) return true;
       }
     }
+    logMatchCheck('FALLBACK_END', a, b, 'FALSE', { startDist: startDist.toFixed(0) });
     return false;
   }
 
@@ -189,9 +202,8 @@ export function areActivitiesSameRoute(
     b.end_latlng[1]
   );
 
-  // Rule 1: Same direction — start close AND end close
+  // Rule 1: Same direction
   if (startDist <= startThresholdKm && endDist <= startThresholdKm) {
-    // Sample points check (10 key points along the route)
     const aPts = getSamplePoints(a, 10);
     const bPts = getSamplePoints(b, 10);
     if (aPts && bPts) {
@@ -201,17 +213,13 @@ export function areActivitiesSameRoute(
       const maxDist = Math.max(...distances);
       const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
       const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-      // Strict majority pass: at least 90% points close, tight average & max bounds
-      if (
-        maxDist <= startThresholdKm * 2 &&
-        avgDist <= startThresholdKm * 0.6 &&
-        closeCount >= distances.length * 0.9
-      ) {
-        return true;
-      }
+      const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
+      logMatchCheck('SAME_DIR', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length, startDist: startDist.toFixed(0), endDist: endDist.toFixed(0) });
+      if (ok) return true;
     } else {
-      // Missing polyline on either side: reject unless start is extremely close
-      return startDist <= startThresholdKm * 0.3;
+      const ok = startDist <= startThresholdKm * 0.3;
+      logMatchCheck('SAME_DIR_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), endDist: endDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
+      if (ok) return true;
     }
   }
 
@@ -230,7 +238,6 @@ export function areActivitiesSameRoute(
   );
 
   if (aStartToBEnd <= startThresholdKm && aEndToBStart <= startThresholdKm) {
-    // Reverse sample points check (A vs reversed B)
     const aPts = getSamplePoints(a, 10);
     const bPts = getSamplePoints(b, 10);
     if (aPts && bPts) {
@@ -240,18 +247,17 @@ export function areActivitiesSameRoute(
       const maxDist = Math.max(...distances);
       const avgDist = distances.reduce((s, d) => s + d, 0) / distances.length;
       const closeCount = distances.filter((d) => d <= startThresholdKm).length;
-      if (
-        maxDist <= startThresholdKm * 2 &&
-        avgDist <= startThresholdKm * 0.6 &&
-        closeCount >= distances.length * 0.9
-      ) {
-        return true;
-      }
+      const ok = maxDist <= startThresholdKm * 2 && avgDist <= startThresholdKm * 0.6 && closeCount >= distances.length * 0.9;
+      logMatchCheck('REVERSE', a, b, ok ? 'TRUE' : 'FALSE', { maxDist: maxDist.toFixed(0), avgDist: avgDist.toFixed(0), closeCount, total: distances.length });
+      if (ok) return true;
     } else {
-      return startDist <= startThresholdKm * 0.3;
+      const ok = startDist <= startThresholdKm * 0.3;
+      logMatchCheck('REVERSE_NO_POLY', a, b, ok ? 'TRUE' : 'FALSE', { startDist: startDist.toFixed(0), aPts: aPts?.length ?? 0, bPts: bPts?.length ?? 0 });
+      if (ok) return true;
     }
   }
 
+  logMatchCheck('NO_MATCH', a, b, 'FALSE', { startDist: startDist.toFixed(0), endDist: endDist?.toFixed(0), aStartToBEnd: aStartToBEnd.toFixed(0), aEndToBStart: aEndToBStart.toFixed(0) });
   return false;
 }
 
