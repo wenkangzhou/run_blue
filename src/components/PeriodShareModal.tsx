@@ -1,11 +1,13 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element -- Generated data URL previews need native image save behavior. */
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton, PixelCard } from '@/components/ui';
 import { drawMultiRouteToCanvas, downloadPNG } from '@/lib/multiRouteCanvas';
 import type { StravaActivity } from '@/types';
-import { X, Download, ImageIcon, CheckCircle2, Calendar } from 'lucide-react';
+import { X, Download, CheckCircle2, Calendar } from 'lucide-react';
 
 type PeriodType = 'week' | 'month' | 'quarter' | 'halfYear';
 

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Link from 'next/link';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatPace, formatDate } from '@/lib/strava';
+import { getActivityTimestamp } from '@/lib/dates';
 import { MiniMap } from './map/MiniMap';
 import { TrendingUp } from 'lucide-react';
 
@@ -19,7 +20,7 @@ export function RouteComparisonTable({ activities }: RouteComparisonTableProps) 
   if (activities.length === 0) return null;
 
   const sorted = [...activities].sort(
-    (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+    (a, b) => getActivityTimestamp(b) - getActivityTimestamp(a)
   );
 
   // Find best pace

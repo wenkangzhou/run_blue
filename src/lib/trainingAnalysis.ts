@@ -104,7 +104,6 @@ export interface TrainingProfile {
 function calculatePhysiologyMetrics(pbs: EstimatedPBs): PhysiologyMetrics {
   const pb5k = pbs['5k'];
   const pb10k = pbs['10k'];
-  const pb21k = pbs['21k'];
   const pb42k = pbs['42k'];
   
   // 1. Estimate VO2max using Daniels formula
@@ -121,8 +120,8 @@ function calculatePhysiologyMetrics(pbs: EstimatedPBs): PhysiologyMetrics {
   else if (vo2maxValue < 40) vo2maxLevel = 'below_average';
   
   // 2. Estimate Lactate Threshold
-  let ltPace = pb10k > 0 ? pb10k / 10 : (pb5k > 0 ? pb5k / 5 * 1.05 : 300);
-  let ltHeartRate = 170;
+  const ltPace = pb10k > 0 ? pb10k / 10 : (pb5k > 0 ? pb5k / 5 * 1.05 : 300);
+  const ltHeartRate = 170;
   
   // 3. Running Economy analysis
   let economyScore: PhysiologyMetrics['runningEconomy']['score'] = 'good';
@@ -231,9 +230,6 @@ export function classifyActivity(activity: StravaActivity): ActivityClassificati
   const raceKeywords = ['比赛', '马拉松', '半马', '全马', 'marathon', 'half marathon', 'race', '10k', '5k'];
   const nameLower = activity.name.toLowerCase();
   const hasRaceInName = raceKeywords.some(kw => nameLower.includes(kw.toLowerCase()));
-  
-  // Check if it's a race effort based on effort count
-  const hasEfforts = activity.best_efforts && activity.best_efforts.length > 0;
   
   const isRace = isWorkoutRace || hasRaceInName;
   
@@ -598,30 +594,6 @@ function findBestSplitTime(runs: StravaActivity[], targetKm: number): number | n
   const sorted = [...splitTimes].sort((a, b) => a - b);
   const index = Math.floor(sorted.length * 0.05);
   return sorted[index] || sorted[0];
-}
-
-/**
- * Estimate other distances from 5k PB using Riegel formula
- */
-function estimateFrom5k(pb5k: number | undefined, targetKm: number): number | null {
-  if (!pb5k || pb5k <= 0) return null;
-  return Math.round(pb5k * Math.pow(targetKm / 5, RIEGEL_EXPONENT));
-}
-
-/**
- * Estimate other distances from 10k PB using Riegel formula
- */
-function estimateFrom10k(pb10k: number | undefined, targetKm: number): number | null {
-  if (!pb10k || pb10k <= 0) return null;
-  return Math.round(pb10k * Math.pow(targetKm / 10, RIEGEL_EXPONENT));
-}
-
-/**
- * Estimate other distances from half marathon PB using Riegel formula
- */
-function estimateFrom21k(pb21k: number | undefined, targetKm: number): number | null {
-  if (!pb21k || pb21k <= 0) return null;
-  return Math.round(pb21k * Math.pow(targetKm / 21.0975, RIEGEL_EXPONENT));
 }
 
 /**

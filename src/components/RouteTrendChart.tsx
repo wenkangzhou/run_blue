@@ -3,6 +3,7 @@
 import React from 'react';
 import { StravaActivity } from '@/types';
 import { SimpleLineChart } from './charts/SimpleLineChart';
+import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 
 interface RouteTrendChartProps {
   activities: StravaActivity[];
@@ -13,7 +14,7 @@ export function RouteTrendChart({ activities }: RouteTrendChartProps) {
 
   // Sort by date ascending for the chart
   const sorted = [...activities].sort(
-    (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+    (a, b) => getActivityTimestamp(a) - getActivityTimestamp(b)
   );
 
   // Pace in seconds per km
@@ -25,7 +26,7 @@ export function RouteTrendChart({ activities }: RouteTrendChartProps) {
   });
 
   const xLabels = sorted.map((a) => {
-    const d = new Date(a.start_date_local);
+    const d = getActivityDate(a);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   });
 

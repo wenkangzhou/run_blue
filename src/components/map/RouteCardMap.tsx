@@ -3,7 +3,9 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
+import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
 import { getSavedTileLayer, TILE_LAYERS } from '@/lib/mapTileLayers';
+import type { LatLngExpression, Map as LeafletMap, TileLayerOptions } from 'leaflet';
 
 interface RouteCardMapProps {
   polyline: string | null;
@@ -12,29 +14,28 @@ interface RouteCardMapProps {
 
 export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
-  const [isClient, setIsClient] = React.useState(false);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
   React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+    const container = mapRef.current;
+    if (!container || !polyline || polyline.length < 10) return;
 
-  React.useEffect(() => {
-    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
-
-    let map: any;
-    let polylineLayer: any;
+    let cancelled = false;
+    let map: LeafletMap | null = null;
 
     const initMap = async () => {
       try {
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
+        if (cancelled || !container.isConnected) return;
 
         const points = decodePolyline(polyline);
-        if (points.length < 2 || !mapRef.current) return;
+        if (cancelled || points.length < 2 || !container.isConnected) return;
 
-        map = L.map(mapRef.current as HTMLElement, {
+        prepareLeafletContainer(container);
+
+        map = L.map(container, {
           zoomControl: false,
           attributionControl: false,
           scrollWheelZoom: false,
@@ -45,7 +46,7 @@ export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
         const savedLayer = getSavedTileLayer();
         const config = TILE_LAYERS[savedLayer];
         if (config.url) {
-          const options: Record<string, any> = {};
+          const options: TileLayerOptions = {};
           if (config.subdomains) {
             options.subdomains = config.subdomains;
           }
@@ -53,8 +54,8 @@ export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
         }
 
         const lineColor = isDark ? '#fbbf24' : '#2563eb';
-        const latLngs = points.map(p => [p[0], p[1]]);
-        polylineLayer = L.polyline(latLngs as any, {
+        const latLngs: LatLngExpression[] = points.map(p => [p[0], p[1]]);
+        const polylineLayer = L.polyline(latLngs, {
           color: lineColor,
           weight: 3,
           opacity: 0.9,
@@ -62,18 +63,23 @@ export function RouteCardMap({ polyline, height = '100%' }: RouteCardMapProps) {
 
         map.fitBounds(polylineLayer.getBounds(), { padding: [12, 12], maxZoom: 17 });
       } catch (e) {
-        console.error('Error initializing map:', e);
+        if (!cancelled) {
+          console.error('Error initializing map:', e);
+        }
       }
     };
 
     initMap();
 
     return () => {
+      cancelled = true;
       if (map) {
         map.remove();
+        map = null;
       }
+      releaseLeafletContainer(container);
     };
-  }, [isClient, polyline, isDark]);
+  }, [polyline, isDark]);
 
   const hasValidPolyline = polyline && polyline.length >= 10;
   const bgColor = isDark ? '#18181b' : '#f4f4f5';

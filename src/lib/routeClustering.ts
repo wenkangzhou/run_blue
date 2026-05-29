@@ -1,4 +1,4 @@
-import { StravaActivity } from '@/types';
+import type { StravaActivity } from '@/types';
 
 /**
  * Haversine distance between two lat/lng points in kilometers.

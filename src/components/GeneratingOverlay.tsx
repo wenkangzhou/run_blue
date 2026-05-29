@@ -66,7 +66,6 @@ export function GeneratingOverlay({ isOpen, onCancel }: GeneratingOverlayProps) 
     // Simulate progress: fast start, slow middle, crawl near end
     let current = 0;
     const interval = setInterval(() => {
-      const remaining = 100 - current;
       let increment = 0;
       if (current < 20) increment = Math.random() * 5 + 2;
       else if (current < 50) increment = Math.random() * 3 + 1;

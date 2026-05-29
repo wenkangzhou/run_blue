@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useTranslation } from 'react-i18next';
 
 export function Footer() {
@@ -12,9 +13,11 @@ export function Footer() {
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img
+            <Image
               src="/logo.png"
               alt="跑蓝"
+              width={24}
+              height={24}
               className="w-6 h-6 object-contain"
             />
             <span className="font-mono text-sm font-bold">{t('common.appName')}</span>

@@ -3,24 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { TypingText } from './TypingText';
 
+const STEPS = [
+  '$ ./bootstrap.sh',
+  '> Mounting filesystem...',
+  '> Loading activity archive...',
+  '> Decoding polylines...',
+  '> Rendering trajectory canvas...',
+  '> Ready.',
+];
+
 export function TerminalLoader() {
   const [step, setStep] = useState(0);
-
-  const steps = [
-    '$ ./bootstrap.sh',
-    '> Mounting filesystem...',
-    '> Loading activity archive...',
-    '> Decoding polylines...',
-    '> Rendering trajectory canvas...',
-    '> Ready.',
-  ];
 
   useEffect(() => {
     let current = 0;
     const timers: NodeJS.Timeout[] = [];
     const advance = () => {
       current++;
-      if (current < steps.length) {
+      if (current < STEPS.length) {
         setStep(current);
         timers.push(setTimeout(advance, 400));
       }
@@ -40,16 +40,16 @@ export function TerminalLoader() {
             <span className="text-[10px] text-zinc-600 ml-2">boot_sequence</span>
           </div>
           <div className="p-4 space-y-1 text-xs sm:text-sm">
-            {steps.slice(0, step + 1).map((s, i) => (
+            {STEPS.slice(0, step + 1).map((s, i) => (
               <div key={i} className={i === step ? 'text-green-400' : 'text-zinc-500'}>
                 {i === step ? (
-                  <TypingText text={s} speed={20} showCursor={i === steps.length - 1} />
+                  <TypingText text={s} speed={20} showCursor={i === STEPS.length - 1} />
                 ) : (
                   <span className={s.startsWith('>') && s.includes('...') ? 'text-zinc-400' : ''}>{s}</span>
                 )}
               </div>
             ))}
-            {step >= steps.length - 1 && (
+            {step >= STEPS.length - 1 && (
               <div className="pt-2 text-[10px] text-zinc-600 animate-pulse">
                 _
               </div>

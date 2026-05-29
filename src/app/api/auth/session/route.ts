@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAccessToken } from '@/lib/strava';
 
+interface StravaAthleteResponse {
+  id: number;
+  firstname: string;
+  lastname: string;
+  profile: string | null;
+}
+
+interface SessionData {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    image: string | null;
+    accessToken: string;
+    refreshToken: string | undefined;
+  };
+  stravaId: number;
+  accessToken: string;
+  refreshToken: string | undefined;
+}
+
 // In-memory cache to reduce Strava API calls (30s TTL)
-const sessionCache = new Map<string, { data: any; timestamp: number }>();
+const sessionCache = new Map<string, { data: SessionData; timestamp: number }>();
 const SESSION_CACHE_TTL = 30 * 1000; // 30 seconds
 
 export async function GET(request: NextRequest) {
@@ -59,7 +80,7 @@ export async function GET(request: NextRequest) {
         throw new Error(`Refresh failed: ${response.status}`);
       }
       
-      const athlete = await response.json();
+      const athlete = (await response.json()) as StravaAthleteResponse;
 
       const sessionData = {
         user: {
@@ -103,7 +124,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ user: null, error: 'strava_error', status });
   }
 
-  const athlete = await response.json();
+  const athlete = (await response.json()) as StravaAthleteResponse;
 
   const sessionData = {
     user: {

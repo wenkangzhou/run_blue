@@ -47,7 +47,7 @@ const safeLocalStorage = {
     const str = localStorage.getItem(name);
     return str ? JSON.parse(str) : null;
   },
-  setItem: (name: string, value: StorageValue<any>) => {
+  setItem: (name: string, value: StorageValue<Record<string, unknown>>) => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(name, JSON.stringify(value));

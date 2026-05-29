@@ -6,6 +6,8 @@ import { ActivityGridCard } from './ActivityGridCard';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { Clock, Route, Calendar, ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { getActivityDate } from '@/lib/dates';
 
 type GroupBy = 'week' | 'month' | 'year';
 
@@ -27,7 +29,7 @@ interface ActivityGroup {
   totalTime: number;
 }
 
-export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriodShare }: GroupedActivitiesProps) {
+export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActivitiesProps) {
   const { t } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
 
@@ -115,12 +117,12 @@ export function GroupedActivities({ activities, hasMore, isLoading, onOpenPeriod
 function groupActivities(
   activities: StravaActivity[],
   groupBy: GroupBy,
-  t: any
+  t: TFunction
 ): ActivityGroup[] {
   const groups = new Map<string, ActivityGroup>();
 
   activities.forEach((activity) => {
-    const date = new Date(activity.start_date);
+    const date = getActivityDate(activity);
     let key: string;
     let label: string;
     let startDate: Date;
@@ -138,7 +140,7 @@ function groupActivities(
       
       startDate = weekStart;
       endDate = weekEnd;
-      label = formatWeekLabel(weekStart, weekEnd, t);
+      label = formatWeekLabel(weekStart, weekEnd);
     } else if (groupBy === 'month') {
       const year = date.getFullYear();
       const month = date.getMonth();
@@ -153,7 +155,7 @@ function groupActivities(
       
       startDate = new Date(year, 0, 1);
       endDate = new Date(year, 11, 31);
-      label = formatYearLabel(year, t);
+      label = formatYearLabel(year);
     }
 
     if (!groups.has(key)) {
@@ -195,14 +197,14 @@ function getWeekStart(date: Date): Date {
   return new Date(d.setDate(diff));
 }
 
-function formatWeekLabel(start: Date, end: Date, t: any): string {
+function formatWeekLabel(start: Date, end: Date): string {
   const startStr = `${start.getMonth() + 1}/${start.getDate()}`;
   const endStr = `${end.getMonth() + 1}/${end.getDate()}`;
   const yearStr = start.getFullYear();
   return `${yearStr}: ${startStr} - ${endStr}`;
 }
 
-function formatMonthLabel(year: number, month: number, t: any): string {
+function formatMonthLabel(year: number, month: number, t: TFunction): string {
   const monthNames = [
     t('months.jan', '1月'),
     t('months.feb', '2月'),
@@ -220,6 +222,6 @@ function formatMonthLabel(year: number, month: number, t: any): string {
   return `${year}年 ${monthNames[month]}`;
 }
 
-function formatYearLabel(year: number, t: any): string {
+function formatYearLabel(year: number): string {
   return `${year}年`;
 }

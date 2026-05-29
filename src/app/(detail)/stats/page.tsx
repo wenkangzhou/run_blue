@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
-import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { useRoutesStore } from '@/store/routes';
@@ -21,7 +20,6 @@ export default function StatsPage() {
   const {
     activities,
     isLoading: storeLoading,
-    hasMore: storeHasMore,
     loadedPages,
     lastFetchedAt,
     setActivities,
@@ -190,5 +188,4 @@ export default function StatsPage() {
     </div>
   );
 }
-
 

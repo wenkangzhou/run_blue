@@ -1,4 +1,5 @@
 import { StravaActivity } from '@/types';
+import { getActivityDate } from './dates';
 
 export type PeriodType = 'week' | 'month' | 'year' | 'all';
 export type MetricType = 'distance' | 'duration' | 'count' | 'calories' | 'elevation' | 'pace';
@@ -70,12 +71,6 @@ function formatMetricDisplay(value: number, metric: MetricType): string {
   return unit ? `${num} ${unit}` : num;
 }
 
-function getActivityDate(a: StravaActivity): Date {
-  // Use start_date_local if available, otherwise start_date
-  const dateStr = a.start_date_local || a.start_date;
-  return new Date(dateStr);
-}
-
 function getWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -91,8 +86,7 @@ function getMaxWeekOfYear(year: number): number {
 
 function isDateInCurrentPeriod(
   date: Date,
-  periodType: PeriodType,
-  periodKey: string
+  periodType: PeriodType
 ): boolean {
   const now = new Date();
   switch (periodType) {
@@ -145,7 +139,6 @@ export function aggregateActivities(
   locale: string = 'zh'
 ): ChartDataPoint[] {
   const runs = activities.filter((a) => a.type === 'Run');
-  const now = new Date();
 
   switch (periodType) {
     case 'week': {
@@ -178,7 +171,7 @@ export function aggregateActivities(
           value,
           displayValue: formatMetricDisplay(value, metric),
           activities: acts,
-          isCurrent: isDateInCurrentPeriod(weekStart, 'week', ''),
+          isCurrent: isDateInCurrentPeriod(weekStart, 'week'),
         };
       });
     }
@@ -208,7 +201,7 @@ export function aggregateActivities(
           value,
           displayValue: formatMetricDisplay(value, metric),
           activities: acts,
-          isCurrent: isDateInCurrentPeriod(monthDate, 'month', ''),
+          isCurrent: isDateInCurrentPeriod(monthDate, 'month'),
         };
       });
     }
@@ -236,7 +229,7 @@ export function aggregateActivities(
             value,
             displayValue: formatMetricDisplay(value, metric),
             activities: acts,
-            isCurrent: isDateInCurrentPeriod(yearDate, 'year', ''),
+            isCurrent: isDateInCurrentPeriod(yearDate, 'year'),
           };
         });
     }
@@ -267,7 +260,7 @@ export function aggregateActivities(
             value,
             displayValue: formatMetricDisplay(value, metric),
             activities: acts,
-            isCurrent: isDateInCurrentPeriod(monthDate, 'all', key),
+            isCurrent: isDateInCurrentPeriod(monthDate, 'all'),
           };
         });
     }
@@ -285,8 +278,7 @@ export function getAvailableYears(activities: StravaActivity[]): number[] {
 }
 
 export function calculateSummaryStats(
-  chartData: ChartDataPoint[],
-  metric: MetricType
+  chartData: ChartDataPoint[]
 ): SummaryStats {
   const allActivities = chartData.flatMap((d) => d.activities);
 
@@ -415,5 +407,3 @@ export function getDailyAggregates(
   }
   return result;
 }
-
-

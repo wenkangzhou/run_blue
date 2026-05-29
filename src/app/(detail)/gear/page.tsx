@@ -218,18 +218,18 @@ export default function GearPage() {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `HTTP ${res.status}`);
         }
-        const data = await res.json();
+        const data = (await res.json()) as { gears?: StravaGear[] };
         if (!cancelled) {
           setGearDetails((prev) => {
             const next = new Map(prev);
-            for (const g of data.gears as StravaGear[]) {
+            for (const g of data.gears || []) {
               next.set(g.id, g);
             }
             return next;
           });
         }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'load_failed');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -305,9 +305,9 @@ export default function GearPage() {
       }
       console.log(`[Gear] Done. Pages=${pagesLoaded}, newActivities=${totalNew}`);
       setGearCache({ loadedPages: currentPage - 1, hasMore: localHasMore, lastFetchedAt: Date.now() });
-    } catch (err: any) {
+    } catch (err) {
       console.error('[Gear] Load failed:', err);
-      const msg = err?.message || '';
+      const msg = err instanceof Error ? err.message : '';
       if (msg.includes('429')) setError('rate_limited');
       else if (msg.includes('401')) setError('token_expired');
       else setError('load_failed');

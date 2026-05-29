@@ -74,7 +74,7 @@ export function ActivityCard({ activity, showMap = false, compact = false }: Act
             </p>
           </div>
           <PixelBadge variant={isRun ? 'primary' : 'default'}>
-            {t(`activity.${activity.type.toLowerCase()}` as any) || activity.type}
+            {t(`activity.${activity.type.toLowerCase()}`) || activity.type}
           </PixelBadge>
         </div>
 

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeToken } from '@/lib/strava';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
@@ -47,9 +51,9 @@ export async function GET(request: NextRequest) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err) {
     console.error('Strava callback error:', err);
-    const errorMessage = encodeURIComponent(err.message || 'auth_failed');
+    const errorMessage = encodeURIComponent(getErrorMessage(err, 'auth_failed'));
     return NextResponse.redirect(new URL(`/?error=${errorMessage}`, request.url));
   }
 }

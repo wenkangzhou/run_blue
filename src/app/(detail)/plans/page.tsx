@@ -9,6 +9,7 @@ import { TrainingPlanForm } from '@/components/TrainingPlanForm';
 import { GeneratingOverlay } from '@/components/GeneratingOverlay';
 import { PixelButton } from '@/components/ui';
 import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
+import { getActivityDate } from '@/lib/dates';
 import {
   getStoredTrainingPlans,
   saveTrainingPlan,
@@ -46,7 +47,7 @@ export default function TrainingPlansListPage() {
       const now = new Date();
       const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
       const recentRuns = activities.filter(
-        (a) => a.type === 'Run' && new Date(a.start_date) >= fourWeeksAgo
+        (a) => a.type === 'Run' && getActivityDate(a) >= fourWeeksAgo
       );
       const totalDist = recentRuns.reduce((sum, a) => sum + a.distance, 0);
       setWeeklyVolume(Math.round(totalDist / 4000));
@@ -112,17 +113,17 @@ export default function TrainingPlansListPage() {
         throw new Error(err.error || 'Failed');
       }
 
-      const json = await res.json();
+      const json = (await res.json()) as { plan: TrainingPlan };
       saveTrainingPlan(json.plan);
       setPlans(getStoredTrainingPlans());
       setShowForm(false);
       // Navigate to detail page
       router.push(`/plans/${json.plan.id}`);
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
         setError(isZh ? '已取消生成' : 'Generation cancelled');
       } else {
-        setError(err.message || t('trainingPlan.generateError'));
+        setError(err instanceof Error ? err.message : t('trainingPlan.generateError'));
       }
     } finally {
       setLoading(false);

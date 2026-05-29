@@ -17,8 +17,6 @@ interface SimpleLineChartProps {
   showAvgLine?: boolean;
   interactive?: boolean;
   onPointClick?: (index: number, value: number) => void;
-  /** 采样率，用于将采样后的索引映射回原始索引 */
-  sampleRate?: number;
 }
 
 export function SimpleLineChart({
@@ -36,11 +34,12 @@ export function SimpleLineChart({
   showAvgLine = true,
   interactive = true,
   onPointClick,
-  sampleRate: sampleRateProp,
 }: SimpleLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(320);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // Gradient id (unique per instance to avoid collisions)
+  const gradId = React.useId().replace(/:/g, '');
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -94,9 +93,6 @@ export function SimpleLineChart({
   const bottomPad = showYAxis ? 14 : 18;
   const chartWidth = containerWidth;
   const chartHeight = height - xLabelHeight - topPad - bottomPad;
-
-  // Gradient id (unique per instance to avoid collisions)
-  const gradId = React.useId().replace(/:/g, '');
 
   // Build segments
   type Point = { x: number; y: number };

@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useLocalActivities } from '@/hooks/useLocalActivities';
+import { getActivityDate } from '@/lib/dates';
 
 import { HeroSection } from '@/components/me/HeroSection';
 import { MeMap } from '@/components/me/MeMap';
@@ -22,7 +23,7 @@ export default function MePage() {
     const totalTime = activities.reduce((s, a) => s + a.moving_time, 0);
     const totalElevation = activities.reduce((s, a) => s + (a.total_elevation_gain || 0), 0);
     const totalRuns = activities.length;
-    const years = new Set(activities.map((a) => new Date(a.start_date).getFullYear()));
+    const years = new Set(activities.map((a) => getActivityDate(a).getFullYear()));
     const firstRun = activities[activities.length - 1];
     const latestRun = activities[0];
     return {

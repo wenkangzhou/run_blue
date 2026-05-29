@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 import { AIAnalysis } from '@/lib/ai';
 import { ActivityClassification } from '@/lib/trainingAnalysis';
 import type { StreamAnalysis } from '@/lib/streamAnalysis';
@@ -15,7 +15,99 @@ import { useActivitiesStore } from '@/store/activities';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
-  streams: Record<string, any> | null;
+  streams: Record<string, ActivityStream> | null;
+}
+
+interface AITrainingStats {
+  totalRunsAnalyzed: number;
+  estimatedPBs?: unknown;
+  paceZones?: unknown;
+  patterns?: unknown;
+  physiologyMetrics?: unknown;
+}
+
+interface CachedAIAnalysis {
+  analysis: AIAnalysis;
+  streamAnalysis: StreamAnalysis | null;
+  trainingStats: AITrainingStats | null;
+  classification: ActivityClassification | null;
+  isQuotaExceeded?: boolean;
+}
+
+interface AIAnalyzeResponse {
+  analysis: AIAnalysis;
+  streamAnalysis: StreamAnalysis | null;
+  trainingProfile: AITrainingStats | null;
+  classification: ActivityClassification | null;
+}
+
+const AI_ANALYSIS_CACHE_VERSION = 'v4';
+const AI_ANALYSIS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+const AI_ANALYSIS_QUOTA_TTL = 60 * 60 * 1000;
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getHistoryFingerprint(activities: StravaActivity[]): string {
+  if (activities.length === 0) return 'empty';
+  const newest = activities[0];
+  const oldest = activities[activities.length - 1];
+  return [
+    activities.length,
+    newest?.id,
+    newest?.start_date,
+    oldest?.id,
+    oldest?.start_date,
+  ].join(':');
+}
+
+function getStreamFingerprint(streams: Record<string, ActivityStream> | null): string {
+  if (!streams) return 'none';
+  return Object.keys(streams)
+    .sort()
+    .map((key) => `${key}:${streams[key]?.original_size ?? 0}`)
+    .join('|');
+}
+
+function getAIAnalysisCacheKey(
+  activity: StravaActivity,
+  streams: Record<string, ActivityStream> | null,
+  activities: StravaActivity[],
+  locale: string,
+): string {
+  const profile = getUserProfile();
+  const inputFingerprint = {
+    version: AI_ANALYSIS_CACHE_VERSION,
+    activity: {
+      id: activity.id,
+      distance: activity.distance,
+      movingTime: activity.moving_time,
+      updatedAt: activity.start_date,
+      avgHr: activity.average_heartrate ?? null,
+      maxHr: activity.max_heartrate ?? null,
+      workoutType: activity.workout_type ?? null,
+    },
+    locale,
+    profile: profile
+      ? {
+          pbs: profile.pbs,
+          height: profile.height,
+          weight: profile.weight,
+          lthr: profile.lthr,
+          updatedAt: profile.updatedAt,
+        }
+      : null,
+    history: getHistoryFingerprint(activities),
+    streams: getStreamFingerprint(streams),
+  };
+
+  return `ai_analysis_${AI_ANALYSIS_CACHE_VERSION}_${activity.id}_${hashString(JSON.stringify(inputFingerprint))}`;
 }
 
 const intensityColors: Record<string, { color: string; bg: string }> = {
@@ -44,43 +136,18 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const { activities } = useActivitiesStore();
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [streamAnalysis, setStreamAnalysis] = useState<StreamAnalysis | null>(null);
-  const [trainingStats, setTrainingStats] = useState<any>(null);
+  const [trainingStats, setTrainingStats] = useState<AITrainingStats | null>(null);
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    const cachedKey = `ai_analysis_v3_${activity.id}`;
-    const cached = localStorage.getItem(cachedKey);
-
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        const maxAge = parsed.isQuotaExceeded ? 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
-        if (Date.now() - parsed.analysis?.generatedAt < maxAge) {
-          setAnalysis(parsed.analysis);
-          setStreamAnalysis(parsed.streamAnalysis);
-          setTrainingStats(parsed.trainingStats);
-          setClassification(parsed.classification);
-          if (parsed.isQuotaExceeded) {
-            setError('AI 分析配额已用完，请稍后再试。已显示系统生成的基础分析。');
-          }
-          return;
-        }
-      } catch {
-        // Invalid cache
-      }
-    }
-
-    fetchAnalysis();
-  }, [activity.id]);
-
-  const fetchAnalysis = async () => {
+  const fetchAnalysis = React.useCallback(async () => {
     setLoading(true);
     setError('');
 
     const profile = getUserProfile();
+    const cachedKey = getAIAnalysisCacheKey(activity, streams, activities, i18n.language);
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
     const physique = profile ? { height: profile.height, weight: profile.weight } : undefined;
 
@@ -100,27 +167,55 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
         throw new Error(err.error || t('errors.aiAnalysisFailed', 'AI analysis failed'));
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as AIAnalyzeResponse;
       setAnalysis(data.analysis);
       setStreamAnalysis(data.streamAnalysis);
       setTrainingStats(data.trainingProfile);
       setClassification(data.classification);
 
       try {
-        localStorage.setItem(`ai_analysis_v3_${activity.id}`, JSON.stringify({
+        localStorage.setItem(cachedKey, JSON.stringify({
           analysis: data.analysis,
+          streamAnalysis: data.streamAnalysis,
           trainingStats: data.trainingProfile,
           classification: data.classification,
         }));
       } catch {
         // localStorage quota exceeded — skip caching, analysis still works
       }
-    } catch (err: any) {
-      setError(err.message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [activity, streams, activities, i18n.language, t]);
+
+  useEffect(() => {
+    const cachedKey = getAIAnalysisCacheKey(activity, streams, activities, i18n.language);
+    const cached = localStorage.getItem(cachedKey);
+
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as CachedAIAnalysis;
+        const maxAge = parsed.isQuotaExceeded ? AI_ANALYSIS_QUOTA_TTL : AI_ANALYSIS_CACHE_TTL;
+        if (Date.now() - parsed.analysis?.generatedAt < maxAge) {
+          setAnalysis(parsed.analysis);
+          setStreamAnalysis(parsed.streamAnalysis);
+          setTrainingStats(parsed.trainingStats);
+          setClassification(parsed.classification);
+          if (parsed.isQuotaExceeded) {
+            setError('AI 分析配额已用完，请稍后再试。已显示系统生成的基础分析。');
+          }
+          return;
+        }
+      } catch {
+        // Invalid cache
+      }
+    }
+
+    fetchAnalysis();
+  }, [activity, streams, activities, i18n.language, fetchAnalysis]);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');
   const intensity = analysis?.intensity

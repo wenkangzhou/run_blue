@@ -1,4 +1,5 @@
-import { getZoneForHR, type HRZones } from './heartRateZones';
+import type { ActivityStream } from '@/types';
+import { getZoneForHR } from './heartRateZones';
 
 export type PacePattern =
   | 'warmup-cooldown'   // slow start + slow end, fast middle
@@ -105,7 +106,7 @@ function detectPacePattern(segments: SegmentData[], isRace: boolean): { pattern:
 /* ── main analysis ───────────────────────────────────────── */
 
 export function analyzeActivityStreams(
-  streams: Record<string, any> | null,
+  streams: Record<string, ActivityStream> | null,
   lthr: number,
   avgPaceSecPerKm: number,
   isRace: boolean = false

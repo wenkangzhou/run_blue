@@ -43,7 +43,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
     return getDailyAggregates(activities, year, metric);
   }, [activities, year, metric]);
 
-  const { weeks, monthLabels, maxValue, totalRuns } = useMemo(() => {
+  const { weeks, maxValue, totalRuns } = useMemo(() => {
     // Build date → value map
     const valueMap = new Map<string, number>();
     dailyData.forEach((d) => valueMap.set(d.date, d.value));
@@ -63,8 +63,6 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
 
     // Generate weeks
     const w: Date[][] = [];
-    const ml: { weekIndex: number; label: string }[] = [];
-    let lastMonth = -1;
 
     for (let wi = 0; wi < WEEKS_TO_SHOW; wi++) {
       const week: Date[] = [];
@@ -74,22 +72,10 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
         week.push(d);
       }
       w.push(week);
-
-      // Month label: if this week contains the 1st of a month
-      const midDay = week[3]; // Thursday of this week
-      if (midDay.getDate() <= 7 && midDay.getMonth() !== lastMonth) {
-        lastMonth = midDay.getMonth();
-        ml.push({
-          weekIndex: wi,
-          label: isZh
-            ? `${midDay.getMonth() + 1}月`
-            : midDay.toLocaleDateString('en-US', { month: 'short' }),
-        });
-      }
     }
 
-    return { weeks: w, monthLabels: ml, maxValue: max, totalRuns: runs };
-  }, [dailyData, year, isZh]);
+    return { weeks: w, maxValue: max, totalRuns: runs };
+  }, [dailyData, year]);
 
   const isReverseMetric = metric === 'pace';
   const COLOR_CLASSES = isReverseMetric ? REVERSE_COLOR_CLASSES : (colorClasses || DEFAULT_COLOR_CLASSES);

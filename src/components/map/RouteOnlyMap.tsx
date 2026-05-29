@@ -3,6 +3,8 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
+import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
+import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 
 interface RouteOnlyMapProps {
   polyline: string | null;
@@ -11,31 +13,30 @@ interface RouteOnlyMapProps {
 
 export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
-  const [isClient, setIsClient] = React.useState(false);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
   React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+    const container = mapRef.current;
+    if (!container || !polyline || polyline.length < 10) return;
 
-  React.useEffect(() => {
-    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
-
-    let map: any;
-    let polylineLayer: any;
+    let cancelled = false;
+    let map: LeafletMap | null = null;
 
     const initMap = async () => {
       try {
         // Dynamically import leaflet only on client
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
+        if (cancelled || !container.isConnected) return;
 
         const points = decodePolyline(polyline);
-        if (points.length < 2 || !mapRef.current) return;
+        if (cancelled || points.length < 2 || !container.isConnected) return;
+
+        prepareLeafletContainer(container);
 
         // Create map
-        map = L.map(mapRef.current as HTMLElement, {
+        map = L.map(container, {
           zoomControl: false,
           attributionControl: false,
           scrollWheelZoom: false,
@@ -50,8 +51,8 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
 
         // Add polyline with appropriate color for theme
         const lineColor = isDark ? '#a1a1aa' : '#1a1a1a'; // zinc-400 for dark, dark for light
-        const latLngs = points.map(p => [p[0], p[1]]);
-        polylineLayer = L.polyline(latLngs as any, {
+        const latLngs: LatLngExpression[] = points.map(p => [p[0], p[1]]);
+        const polylineLayer = L.polyline(latLngs, {
           color: lineColor,
           weight: 2.5,
           opacity: isDark ? 1 : 0.9,
@@ -60,18 +61,23 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
         // Fit bounds
         map.fitBounds(polylineLayer.getBounds(), { padding: [8, 8], maxZoom: 17 });
       } catch (e) {
-        console.error('Error initializing map:', e);
+        if (!cancelled) {
+          console.error('Error initializing map:', e);
+        }
       }
     };
 
     initMap();
 
     return () => {
+      cancelled = true;
       if (map) {
         map.remove();
+        map = null;
       }
+      releaseLeafletContainer(container);
     };
-  }, [isClient, polyline, isDark]);
+  }, [polyline, isDark]);
 
   // Check if we have valid polyline
   const hasValidPolyline = polyline && polyline.length >= 10;

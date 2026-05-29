@@ -1,6 +1,6 @@
 import type { WrappedData } from './wrapped';
 
-export interface WrappedCanvasData extends WrappedData {}
+export type WrappedCanvasData = WrappedData;
 
 function formatDuration(sec: number): string {
   const h = Math.floor(sec / 3600);
@@ -42,15 +42,6 @@ function timeOfDayLabel(key: string, isEn: boolean): string {
     night: '深夜跑',
   };
   return map[key] || key;
-}
-
-function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  for (let i = text.length - 1; i > 0; i--) {
-    const sub = text.slice(0, i) + '…';
-    if (ctx.measureText(sub).width <= maxWidth) return sub;
-  }
-  return '…';
 }
 
 // Pixel-style shadow rect: draw a hard offset shadow then the main rect with border
@@ -98,24 +89,6 @@ function drawPixelStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, si
   for (const [rx, ry, rw, rh] of rects) {
     ctx.fillRect(cx + rx * u - (5 * u) / 2, cy + ry * u - (5 * u) / 2, rw * u, rh * u);
   }
-}
-
-// Draw a tiny pixel badge/ribbon shape (a rectangle with a small hanging tail)
-function drawPixelBadge(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, border: string) {
-  pixelRect(ctx, x, y, w, h, { fill: color, stroke: border, shadow: 'rgba(0,0,0,0.15)', shadowOffset: 4 });
-  const tailW = 16;
-  const tailH = 10;
-  ctx.fillStyle = color;
-  ctx.fillRect(x + (w - tailW) / 2, y + h, tailW, tailH);
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(x + (w - tailW) / 2, y + h);
-  ctx.lineTo(x + (w - tailW) / 2, y + h + tailH);
-  ctx.lineTo(x + w / 2, y + h + tailH - 4);
-  ctx.lineTo(x + (w + tailW) / 2, y + h + tailH);
-  ctx.lineTo(x + (w + tailW) / 2, y + h);
-  ctx.stroke();
 }
 
 export function drawWrappedToCanvas(
@@ -294,7 +267,6 @@ export function drawWrappedToCanvas(
   if (data.longestRouteName) {
     const longestCardX = paddingX + 2 * (heroCardWidth + heroGap);
     const longestCardY = currentY;
-    const routeLabel = isEn ? 'Longest' : '最长跑';
     const fullText = data.longestRouteName;
     ctx.font = `400 14px ${fontStack}`;
     const textW = ctx.measureText(fullText).width;

@@ -38,10 +38,6 @@ function formatDate(iso: string, isZh: boolean): string {
   return `${monthNames[d.getMonth()]} ${d.getDate()}`;
 }
 
-function formatTime(hour: number, minute: number): string {
-  return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-}
-
 function secToPaceSec(distanceM: number, movingTimeSec: number): number {
   if (!distanceM || !movingTimeSec) return 0;
   return movingTimeSec / (distanceM / 1000);

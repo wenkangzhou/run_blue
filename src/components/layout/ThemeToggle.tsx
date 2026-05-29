@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 export function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [mounted, setMounted] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -14,9 +14,6 @@ export function ThemeToggle() {
   React.useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Use resolvedTheme for actual dark/light detection
-  const activeTheme = resolvedTheme || 'light';
 
   if (!mounted) {
     return (

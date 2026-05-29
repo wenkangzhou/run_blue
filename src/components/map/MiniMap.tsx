@@ -3,7 +3,9 @@
 import React from 'react';
 import { useTheme } from 'next-themes';
 import { decodePolyline } from '@/lib/strava';
+import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
 import { getSavedTileLayer, TILE_LAYERS } from '@/lib/mapTileLayers';
+import type { LatLngExpression, Map as LeafletMap, TileLayerOptions } from 'leaflet';
 
 interface MiniMapProps {
   polyline: string | null;
@@ -12,28 +14,27 @@ interface MiniMapProps {
 
 export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
-  const [isClient, setIsClient] = React.useState(false);
   const { theme } = useTheme();
 
   React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+    const container = mapRef.current;
+    if (!container || !polyline || polyline.length < 10) return;
 
-  React.useEffect(() => {
-    if (!isClient || !mapRef.current || !polyline || polyline.length < 10) return;
-
-    let map: any;
-    let polylineLayer: any;
+    let cancelled = false;
+    let map: LeafletMap | null = null;
 
     const initMap = async () => {
       try {
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
+        if (cancelled || !container.isConnected) return;
 
         const points = decodePolyline(polyline);
-        if (points.length < 2 || !mapRef.current) return;
+        if (cancelled || points.length < 2 || !container.isConnected) return;
 
-        map = L.map(mapRef.current as HTMLElement, {
+        prepareLeafletContainer(container);
+
+        map = L.map(container, {
           zoomControl: false,
           attributionControl: false,
           scrollWheelZoom: false,
@@ -45,15 +46,15 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
         const savedLayer = getSavedTileLayer();
         const config = TILE_LAYERS[savedLayer];
         if (config.url) {
-          const options: Record<string, any> = {};
+          const options: TileLayerOptions = {};
           if (config.subdomains) {
             options.subdomains = config.subdomains;
           }
           L.tileLayer(config.url, options).addTo(map);
         }
 
-        const latLngs = points.map(p => [p[0], p[1]]);
-        polylineLayer = L.polyline(latLngs as any, {
+        const latLngs: LatLngExpression[] = points.map(p => [p[0], p[1]]);
+        const polylineLayer = L.polyline(latLngs, {
           color: theme === 'dark' ? '#60a5fa' : '#2563eb',
           weight: 3,
           opacity: 0.9,
@@ -61,18 +62,23 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
 
         map.fitBounds(polylineLayer.getBounds(), { padding: [10, 10], maxZoom: 16 });
       } catch (e) {
-        console.error('Error initializing map:', e);
+        if (!cancelled) {
+          console.error('Error initializing map:', e);
+        }
       }
     };
 
     initMap();
 
     return () => {
+      cancelled = true;
       if (map) {
         map.remove();
+        map = null;
       }
+      releaseLeafletContainer(container);
     };
-  }, [isClient, polyline, theme]);
+  }, [polyline, theme]);
 
   const hasValidPolyline = polyline && polyline.length >= 10;
 

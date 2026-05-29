@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { StravaActivity } from '@/types';
+import { getActivityTimestamp } from '@/lib/dates';
 
 interface UseLocalActivitiesResult {
   activities: StravaActivity[];
@@ -31,7 +32,7 @@ export function useLocalActivities(): UseLocalActivitiesResult {
         // Filter only runs
         const runs = acts.filter((a) => a.type === 'Run');
         // Sort by date desc
-        runs.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+        runs.sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a));
         cachedActivities = runs;
         setActivities(runs);
       } catch (err) {

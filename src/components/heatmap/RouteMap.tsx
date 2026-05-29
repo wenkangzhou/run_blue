@@ -4,6 +4,25 @@ import React, { useEffect, useRef } from 'react';
 import { decodePolyline } from '@/lib/strava';
 import { useMapTileLayer } from '@/hooks/useMapTileLayer';
 import { TILE_LAYERS } from '@/lib/mapTileLayers';
+import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
+import type {
+  CircleMarker,
+  LatLngBounds,
+  Layer,
+  LayerGroup,
+  LeafletMouseEvent,
+  Map as LeafletMap,
+  Polyline,
+  TileLayer,
+  TileLayerOptions,
+} from 'leaflet';
+
+type LeafletModule = typeof import('leaflet');
+
+export interface RouteMapHandle {
+  fitActivity: (activityId: number) => void;
+  getBounds: () => LatLngBounds | null;
+}
 
 interface MapActivity {
   id: number;
@@ -36,10 +55,10 @@ interface RouteMapProps {
   segments?: SegmentItem[];
 }
 
-function addTileLayer(map: any, layerKey: string, isDark: boolean, L: any) {
+function addTileLayer(map: LeafletMap, layerKey: string, isDark: boolean, L: LeafletModule): TileLayer | null {
   const config = TILE_LAYERS[layerKey as keyof typeof TILE_LAYERS] || TILE_LAYERS.osm;
   if (!config.url) return null;
-  const options: Record<string, any> = {
+  const options: TileLayerOptions = {
     opacity: isDark ? 0.7 : 1,
     attribution: '',
     maxZoom: 18,
@@ -79,7 +98,7 @@ function buildClusters(activities: MapActivity[], cellSizeDeg: number = 0.3): Cl
   }));
 }
 
-function computeSmartBounds(activities: MapActivity[], L: any): any {
+function computeSmartBounds(activities: MapActivity[], L: LeafletModule): LatLngBounds | null {
   if (activities.length === 0) return null;
   const tryBounds = (acts: MapActivity[]) => {
     const b = L.latLngBounds([]);
@@ -106,16 +125,16 @@ function computeSmartBounds(activities: MapActivity[], L: any): any {
 
 export const RouteMap = React.forwardRef(function RouteMap(
   { activities, selectedId, onSelect, onShowPopup, sidebarOpen, isDark = false, segments }: RouteMapProps,
-  forwardedRef: React.Ref<any>
+  forwardedRef: React.Ref<RouteMapHandle>
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const layersRef = useRef<Map<number, any>>(new Map());
-  const clusterLayerRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
+  const layersRef = useRef<Map<number, Polyline>>(new Map());
+  const clusterLayerRef = useRef<LayerGroup | null>(null);
   const clusterClickLock = useRef(false);
-  const startEndMarkersRef = useRef<Map<number, { start: any; end: any }>>(new Map());
-  const startEndGroupRef = useRef<any>(null);
-  const segmentsLayerRef = useRef<any>(null);
+  const startEndMarkersRef = useRef<Map<number, { start: CircleMarker; end: CircleMarker }>>(new Map());
+  const startEndGroupRef = useRef<LayerGroup | null>(null);
+  const segmentsLayerRef = useRef<LayerGroup | null>(null);
   const segmentsRef = useRef<SegmentItem[] | undefined>(segments);
   useEffect(() => { segmentsRef.current = segments; });
   const { layer } = useMapTileLayer();
@@ -134,15 +153,15 @@ export const RouteMap = React.forwardRef(function RouteMap(
   // Initialize map
   useEffect(() => {
     let destroyed = false;
+    let mapContainer: HTMLDivElement | null = null;
     const init = async () => {
       try {
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
         const el = containerRef.current;
         if (!el || destroyed) return;
-        (el as any)._leaflet_id = null;
-        el.innerHTML = '';
-        el.classList.remove('leaflet-container', 'leaflet-touch', 'leaflet-fade-anim');
+        mapContainer = el;
+        prepareLeafletContainer(el);
 
         const map = L.map(el, { scrollWheelZoom: true, zoomControl: true, attributionControl: false });
         map.zoomControl.setPosition('bottomright');
@@ -166,11 +185,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
         const doRender = () => {
           if (!destroyed) renderAll(map, L, sidebarOpenRef.current);
         };
-        let located = false;
         if (typeof navigator !== 'undefined' && navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              located = true;
               doRender();
               if (!destroyed) {
                 map.setView([pos.coords.latitude, pos.coords.longitude], 15);
@@ -196,7 +213,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
       layersRef.current.clear();
       clusterLayerRef.current = null;
       startEndMarkersRef.current.clear();
+      releaseLeafletContainer(mapContainer);
     };
+    // renderAll reads latest activities/sidebar state through refs; the map instance should initialize once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update tile layer
@@ -205,7 +225,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     if (!map) return;
     (async () => {
       const L = (await import('leaflet')).default;
-      map.eachLayer((l: any) => { if (l instanceof L.TileLayer) map.removeLayer(l); });
+      map.eachLayer((l: Layer) => { if (l instanceof L.TileLayer) map.removeLayer(l); });
       addTileLayer(map, layer, isDark, L);
     })();
   }, [layer, isDark]);
@@ -218,16 +238,15 @@ export const RouteMap = React.forwardRef(function RouteMap(
       const L = (await import('leaflet')).default;
       renderAll(map, L, sidebarOpenRef.current);
     })();
+    // renderAll reads latest activities/sidebar state through refs, so activities is the actual trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activities]);
 
   // Handle selection changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    (async () => {
-      const L = (await import('leaflet')).default;
-      updateSelectionStyles(map, L);
-    })();
+    updateSelectionStyles();
   }, [selectedId]);
 
   // Render when segments change
@@ -246,7 +265,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     return sidebarOpenRef.current ? [40, 220] : [40, 40];
   }
 
-  function updateClusterVisibility(map: any) {
+  function updateClusterVisibility(map: LeafletMap) {
     try {
       const zoom = map.getZoom();
       if (clusterLayerRef.current) {
@@ -261,7 +280,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     }
   }
 
-  function renderAll(map: any, L: any, sbOpen: boolean) {
+  function renderAll(map: LeafletMap, L: LeafletModule, sbOpen: boolean) {
     try {
       sidebarOpenRef.current = sbOpen;
       const currentActs = activitiesRef.current;
@@ -301,7 +320,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
           const svgPaths = document.querySelectorAll('.leaflet-overlay-pane svg path').length;
           const markers = document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon').length;
           const circles = document.querySelectorAll('.leaflet-overlay-pane svg circle').length;
-          const layerCount = Object.keys(map._layers || {}).length;
+          const layerCount = Object.keys((map as LeafletMap & { _layers?: Record<string, Layer> })._layers || {}).length;
           console.log('[RouteMap] DOM check: svgPaths=', svgPaths, 'markers=', markers, 'circles=', circles, 'layerCount=', layerCount);
         } catch (e) {
           console.warn('[RouteMap] DOM check failed:', e);
@@ -312,7 +331,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     }
   }
 
-  function renderClusters(map: any, L: any, acts: MapActivity[]) {
+  function renderClusters(map: LeafletMap, L: LeafletModule, acts: MapActivity[]) {
     if (clusterLayerRef.current) {
       try { map.removeLayer(clusterLayerRef.current); } catch {}
       clusterLayerRef.current = null;
@@ -361,7 +380,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
         interactive: true,
       }).addTo(group);
 
-      hitLayer.on('click', (e: any) => {
+      hitLayer.on('click', (e: LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         clusterClickLock.current = true;
         const clusterActs = acts.filter(a => c.activityIds.includes(a.id));
@@ -383,7 +402,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
   const HIGHLIGHT_COLOR = '#facc15';
 
-  function updateStartEndVisibility(map: any) {
+  function updateStartEndVisibility(map: LeafletMap) {
     try {
       const zoom = map.getZoom();
       const show = zoom >= 13;
@@ -399,7 +418,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     }
   }
 
-  function renderSegments(map: any, L: any) {
+  function renderSegments(map: LeafletMap, L: LeafletModule) {
     if (segmentsLayerRef.current) {
       map.removeLayer(segmentsLayerRef.current);
       segmentsLayerRef.current = null;
@@ -442,10 +461,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
     });
   }
 
-  function renderPolylines(map: any, L: any, acts: MapActivity[]) {
+  function renderPolylines(map: LeafletMap, L: LeafletModule, acts: MapActivity[]) {
     const currentSelected = selectedRef.current;
-    const newLayers = new Map<number, any>();
-    const newStartEnd = new Map<number, { start: any; end: any }>();
+    const newLayers = new Map<number, Polyline>();
+    const newStartEnd = new Map<number, { start: CircleMarker; end: CircleMarker }>();
     const currentIds = new Set(acts.map(a => a.id));
 
     // Remove stale polylines and their start/end markers
@@ -496,7 +515,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
             className: 'heatmap-polyline',
           }).addTo(map);
 
-          polyLayer.on('click', (e: any) => {
+          polyLayer.on('click', (e: LeafletMouseEvent) => {
             L.DomEvent.stopPropagation(e);
             if (clusterClickLock.current) return;
             const newId = activity.id === selectedRef.current ? null : activity.id;
@@ -537,7 +556,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     updateStartEndVisibility(map);
   }
 
-  function updateSelectionStyles(map: any, L: any) {
+  function updateSelectionStyles() {
     try {
       const currentSelected = selectedRef.current;
       layersRef.current.forEach((layer, id) => {

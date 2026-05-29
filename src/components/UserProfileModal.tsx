@@ -10,7 +10,7 @@ import {
   formatSecondsToTime,
   type UserProfilePBs,
 } from '@/lib/userProfile';
-import { X, Trophy, Clock, AlertCircle, Ruler, Weight, HeartPulse } from 'lucide-react';
+import { X, Trophy, Clock, AlertCircle, HeartPulse } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;

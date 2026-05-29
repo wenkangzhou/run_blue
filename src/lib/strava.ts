@@ -1,4 +1,5 @@
 import { StravaActivity, StravaToken, StravaAthlete, ActivityStream } from '@/types';
+import { parseStravaLocalDate } from './dates';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -291,17 +292,8 @@ export function formatPace(
   return `${minutes}'${secs.toString().padStart(2, '0')}"${unit === 'min/mi' ? '/mi' : '/km'}`;
 }
 
-// Parse local datetime string (e.g., "2024-01-15T07:30:00Z") without timezone conversion
-// Strava's start_date_local includes 'Z' suffix but represents local time
-function parseLocalDate(dateString: string): Date {
-  // Remove Z suffix if present to treat as local time
-  const cleanDateString = dateString.replace(/Z$/, '');
-  const date = new Date(cleanDateString);
-  return date;
-}
-
 export function formatDate(dateString: string, locale: string = 'zh-CN'): string {
-  const date = parseLocalDate(dateString);
+  const date = parseStravaLocalDate(dateString);
   
   // Format manually to avoid locale issues in SSR
   const year = date.getFullYear();
@@ -317,7 +309,7 @@ export function formatDate(dateString: string, locale: string = 'zh-CN'): string
 }
 
 export function formatDateTime(dateString: string, locale: string = 'zh-CN'): string {
-  const date = parseLocalDate(dateString);
+  const date = parseStravaLocalDate(dateString);
   const dateStr = formatDate(dateString, locale);
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');

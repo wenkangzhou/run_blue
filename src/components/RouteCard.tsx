@@ -10,6 +10,7 @@ import { RouteCardMap } from './map/RouteCardMap';
 import { MapPin, TrendingUp, Clock, Calendar } from 'lucide-react';
 import { formatDistance, formatPace, formatDuration } from '@/lib/strava';
 import { getBestPaceActivity } from '@/lib/routeClustering';
+import { getActivityTimestamp } from '@/lib/dates';
 
 interface RouteCardProps {
   route: SavedRoute;
@@ -24,7 +25,7 @@ export function RouteCard({ route, activities }: RouteCardProps) {
 
   const sorted = count > 0
     ? [...routeActivities].sort(
-        (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+        (a, b) => getActivityTimestamp(b) - getActivityTimestamp(a)
       )
     : [];
 

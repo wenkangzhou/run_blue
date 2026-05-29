@@ -2,9 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { analyzeActivity } from '@/lib/ai';
 import { analyzeTrainingHistory, classifyActivity } from '@/lib/trainingAnalysis';
 import { analyzeActivityStreams, formatStreamAnalysisForPrompt } from '@/lib/streamAnalysis';
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
+
+interface AnalyzeRequestBody {
+  activity: StravaActivity;
+  streams: Record<string, ActivityStream> | null;
+  userProfilePBs?: Record<string, number> | null;
+  recentActivities?: StravaActivity[];
+  locale?: string;
+  physique?: { height?: number | null; weight?: number | null };
+  lthr?: number | null;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,16 +32,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    const body = await request.json();
-    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = body as {
-      activity: StravaActivity;
-      streams: Record<string, any> | null;
-      userProfilePBs?: Record<string, number> | null;
-      recentActivities?: StravaActivity[];
-      locale?: string;
-      physique?: { height?: number | null; weight?: number | null };
-      lthr?: number | null;
-    };
+    const body = (await request.json()) as AnalyzeRequestBody;
+    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = body;
 
     if (!activity) {
       return NextResponse.json({ error: 'Activity data required' }, { status: 400 });
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest) {
       if (fullActivity) {
         currentActivity = fullActivity;
       }
-    } catch (e) {
+    } catch {
       console.log('Could not fetch full activity details, using provided data');
     }
 
@@ -91,9 +97,9 @@ export async function POST(request: NextRequest) {
       classification,
       officialPBs: mergedPBs,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('AI analyze error:', error);
-    const msg = error.message || '';
+    const msg = getErrorMessage(error, '');
     const isQuota = msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exceeded');
     if (isQuota) {
       return NextResponse.json(
@@ -102,7 +108,7 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: error.message || 'Analysis failed' },
+      { error: msg || 'Analysis failed' },
       { status: 500 }
     );
   }
@@ -143,62 +149,6 @@ function extractPBsFromActivity(activity: StravaActivity): Record<string, number
 }
 
 /**
- * Fetch athlete stats including official PBs (best_efforts)
- */
-async function fetchAthleteStats(accessToken: string): Promise<Record<string, number> | null> {
-  try {
-    // First get athlete ID
-    const athleteRes = await fetch(`${STRAVA_API_BASE}/athlete`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    
-    if (!athleteRes.ok) return null;
-    
-    const athlete = await athleteRes.json();
-    const athleteId = athlete.id;
-    
-    // Get athlete stats (includes all-time bests)
-    const statsRes = await fetch(`${STRAVA_API_BASE}/athletes/${athleteId}/stats`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    
-    if (!statsRes.ok) return null;
-    
-    const stats = await statsRes.json();
-    
-    // Extract best_efforts from recent_run_totals if available
-    const pbs: Record<string, number> = {};
-    
-    // Strava stats structure includes all_run_totals with best efforts
-    if (stats.all_run_totals?.best_efforts) {
-      const efforts = stats.all_run_totals.best_efforts;
-      
-      for (const effort of efforts) {
-        const name = effort.name?.toLowerCase() || '';
-        const time = effort.elapsed_time;
-        
-        if (name.includes('400m')) pbs['400m'] = time;
-        else if (name.includes('1k') || name.includes('1 kilometer')) pbs['1k'] = time;
-        else if (name.includes('1 mile')) pbs['1mile'] = time;
-        else if (name.includes('2 mile')) pbs['2mile'] = time;
-        else if (name.includes('5k') || name.includes('5 kilometer')) pbs['5k'] = time;
-        else if (name.includes('10k') || name.includes('10 kilometer')) pbs['10k'] = time;
-        else if (name.includes('15k') || name.includes('15 kilometer')) pbs['15k'] = time;
-        else if (name.includes('20k') || name.includes('20 kilometer')) pbs['20k'] = time;
-        else if (name.includes('half') || name.includes('21k')) pbs['21k'] = time;
-        else if (name.includes('30k') || name.includes('30 kilometer')) pbs['30k'] = time;
-        else if (name.includes('marathon') || name.includes('42k')) pbs['42k'] = time;
-      }
-    }
-    
-    return Object.keys(pbs).length > 0 ? pbs : null;
-  } catch (error) {
-    console.error('Failed to fetch athlete stats:', error);
-    return null;
-  }
-}
-
-/**
  * Fetch full activity details including splits and best_efforts
  */
 async function fetchActivityDetails(
@@ -220,7 +170,7 @@ async function fetchActivityDetails(
     }
 
     return response.json();
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -255,7 +205,7 @@ async function fetchRecentActivities(
         throw new Error(`Failed to fetch activities: ${response.status}`);
       }
 
-      const pageActivities = await response.json();
+      const pageActivities = (await response.json()) as unknown;
       
       if (!Array.isArray(pageActivities) || pageActivities.length === 0) {
         break;
@@ -263,7 +213,11 @@ async function fetchRecentActivities(
 
       // Filter to runs only
       const runs = pageActivities.filter(
-        (a: any) => a.type === 'Run' || a.type === 'TrailRun'
+        (a): a is StravaActivity =>
+          typeof a === 'object' &&
+          a !== null &&
+          ('type' in a || 'sport_type' in a) &&
+          ((a as Partial<StravaActivity>).type === 'Run' || (a as Partial<StravaActivity>).type === 'TrailRun')
       );
       
       activities.push(...runs);

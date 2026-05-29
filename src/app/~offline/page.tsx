@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { WifiOff } from "lucide-react";
 
@@ -20,12 +21,12 @@ export default function OfflinePage() {
           )}
         </p>
         <div className="pt-4">
-          <a
+          <Link
             href="/"
             className="inline-block px-4 py-2 bg-blue-600 text-white text-sm font-mono hover:bg-blue-700 transition-colors"
           >
             {t("offline.goHome", "返回首页")}
-          </a>
+          </Link>
         </div>
       </div>
     </div>

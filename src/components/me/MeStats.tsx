@@ -17,7 +17,7 @@ export function MeStats({ activities }: MeStatsProps) {
 
   const yearChartData = useMemo(
     () => aggregateActivities(activities, 'year', selectedYear, 'distance', 'zh'),
-    [activities]
+    [activities, selectedYear]
   );
 
   const yearIndex = years.indexOf(selectedYear);

@@ -158,10 +158,10 @@ export default function ActivityDetailPage() {
         };
         store.setActivities(updated);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to refresh activity:', err);
       
-      const errorMessage = err?.message || '';
+      const errorMessage = err instanceof Error ? err.message : '';
       const currentActivity = activityRef.current;
       
       // Check if it's an auth error
@@ -849,7 +849,10 @@ function ChartSection({
           <span className="font-mono text-[10px] text-zinc-400">{rangeValue}</span>
         )}
       </div>
-      {React.cloneElement(children as React.ReactElement<any>, {
+      {React.cloneElement(children as React.ReactElement<{
+        onPointClick?: (index: number) => void;
+        interactive?: boolean;
+      }>, {
         onPointClick: handlePointClick,
         interactive: true,
       })}

@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element -- Generated data URL previews need native image save behavior. */
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,7 +27,6 @@ export function WrappedShareModal({
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const locale = i18n.language;
-  const isZh = locale === 'zh';
 
   const [period, setPeriod] = useState<WrappedPeriod>('year');
   const currentYear = new Date().getFullYear();
@@ -50,7 +51,7 @@ export function WrappedShareModal({
       setHistoryError(false);
       let page = 1;
       const maxPages = 10;
-      let merged = [...allActivities];
+      let merged = [...activities];
       try {
         while (!cancelled && page <= maxPages) {
           const res = await getActivities(user.accessToken, page, 200);
@@ -83,7 +84,7 @@ export function WrappedShareModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, user?.accessToken]);
+  }, [isOpen, user?.accessToken, activities]);
 
   // Allow year navigation freely within a reasonable range regardless of loaded history
   const { minYear, maxYear } = useMemo(() => {

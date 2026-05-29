@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,7 +10,7 @@ import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { Menu, X, Settings, Dumbbell, Trophy, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
+import { Menu, X, Dumbbell, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -27,9 +28,11 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <img
+            <Image
               src="/logo.png"
               alt="跑蓝"
+              width={32}
+              height={32}
               className="w-8 h-8 object-contain"
             />
             <span className="font-mono text-xl font-bold tracking-tighter">
@@ -115,9 +118,12 @@ export function Header() {
                   <User size={18} />
                 </PixelButton>
                 {user?.image && (
-                  <img
+                  <Image
                     src={user.image}
                     alt={user.name}
+                    width={32}
+                    height={32}
+                    unoptimized
                     className="w-8 h-8 border-2 border-zinc-800 dark:border-zinc-200"
                   />
                 )}
@@ -131,9 +137,12 @@ export function Header() {
           {/* Mobile Menu Button & Avatar */}
           <div className="md:hidden flex items-center gap-2">
             {isAuthenticated && user?.image && (
-              <img
+              <Image
                 src={user.image}
                 alt={user.name}
+                width={32}
+                height={32}
+                unoptimized
                 className="w-8 h-8 border-2 border-zinc-800 dark:border-zinc-200"
               />
             )}

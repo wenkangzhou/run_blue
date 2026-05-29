@@ -3,7 +3,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StravaActivity } from '@/types';
-import { formatDistance, formatDuration, formatPace, formatGearDistance } from '@/lib/strava';
+import { formatPace, formatGearDistance } from '@/lib/strava';
 
 interface ActivityStatsProps {
   activity: StravaActivity;

@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { ChartDataPoint, MetricType, formatMetricValue, getMetricUnit } from '@/lib/stats';
+import { ChartDataPoint, MetricType, formatMetricValue } from '@/lib/stats';
 
 interface VolumeBarChartProps {
   data: ChartDataPoint[];
@@ -35,8 +35,6 @@ export function VolumeBarChart({ data, metric, colors }: VolumeBarChartProps) {
       </div>
     );
   }
-
-  const maxValue = Math.max(...data.map((d) => d.value), 1);
 
   // Determine Y-axis tick count and format
   const yTickFormatter = (value: number) => {

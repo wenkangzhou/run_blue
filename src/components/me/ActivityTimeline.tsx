@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain } from 'lucide-react';
@@ -141,7 +141,7 @@ function ActivityCard({ act }: { act: StravaActivity }) {
       </div>
       {pace > 0 && (
         <div className="mt-1 text-[10px] text-zinc-600">
-          {min}'{sec.toString().padStart(2, '0')}" /km
+          {`${min}'${sec.toString().padStart(2, '0')}" /km`}
         </div>
       )}
     </div>

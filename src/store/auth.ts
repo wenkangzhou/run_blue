@@ -11,6 +11,16 @@ interface AuthState {
   logout: () => void;
 }
 
+function stripAuthTokens(user: User | null): User | null {
+  if (!user) return null;
+  return {
+    ...user,
+    accessToken: '',
+    refreshToken: '',
+    expiresAt: 0,
+  };
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -33,6 +43,21 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      version: 2,
+      partialize: (state) => ({
+        user: stripAuthTokens(state.user),
+        isAuthenticated: state.isAuthenticated,
+        isLoading: true,
+      }),
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<AuthState>;
+        const user = stripAuthTokens(state.user ?? null);
+        return {
+          user,
+          isAuthenticated: !!user,
+          isLoading: true,
+        };
+      },
     }
   )
 );

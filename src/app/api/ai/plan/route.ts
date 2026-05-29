@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateTrainingPlan } from '@/lib/ai';
 import type { RaceDistance } from '@/lib/trainingPlan';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
@@ -39,10 +43,11 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ plan });
-  } catch (error: any) {
+  } catch (error) {
     console.error('AI plan error:', error);
+    const message = getErrorMessage(error, 'Plan generation failed');
     return NextResponse.json(
-      { error: error.message || 'Plan generation failed' },
+      { error: message },
       { status: 500 }
     );
   }

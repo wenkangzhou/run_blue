@@ -23,8 +23,9 @@ export function useAuth() {
 
   // Check auth status on mount
   useEffect(() => {
-    // Skip if already authenticated (reduces Strava API calls)
-    if (user) {
+    // Skip only when the in-memory session already has a token. Persisted auth
+    // deliberately strips tokens and must be hydrated from the HttpOnly cookie.
+    if (user?.accessToken) {
       setIsReady(true);
       return;
     }

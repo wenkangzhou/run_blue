@@ -4,7 +4,16 @@ import React from 'react';
 import { decodePolyline } from '@/lib/strava';
 import { useMapTileLayer } from '@/hooks/useMapTileLayer';
 import { TILE_LAYERS, TileLayerKey } from '@/lib/mapTileLayers';
+import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
 import { Layers } from 'lucide-react';
+import type {
+  Map as LeafletMap,
+  Polyline,
+  TileLayer,
+  TileLayerOptions,
+} from 'leaflet';
+
+type LeafletModule = typeof import('leaflet');
 
 interface ActivityMapProps {
   polyline: string | null;
@@ -17,17 +26,15 @@ interface ActivityMapProps {
 
 export function ActivityMap({ 
   polyline, 
-  startLatlng, 
-  endLatlng, 
   height = '300px', 
   onReady,
   isDark = false 
 }: ActivityMapProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<HTMLDivElement>(null);
-  const mapInstanceRef = React.useRef<any>(null);
-  const tileLayerRef = React.useRef<any>(null);
-  const polylineLayerRef = React.useRef<any>(null);
+  const mapInstanceRef = React.useRef<LeafletMap | null>(null);
+  const tileLayerRef = React.useRef<TileLayer | null>(null);
+  const polylineLayerRef = React.useRef<Polyline | null>(null);
   const [mapReady, setMapReady] = React.useState(false);
   const [showLayerMenu, setShowLayerMenu] = React.useState(false);
   const { layer, setLayer, isReady } = useMapTileLayer();
@@ -44,7 +51,8 @@ export function ActivityMap({
 
   // Initialize map when polyline changes
   React.useEffect(() => {
-    if (!mapRef.current || !polyline || polyline.length < 10) {
+    const container = mapRef.current;
+    if (!container || !polyline || polyline.length < 10) {
       if ((!polyline || polyline.length < 10) && onReadyRef.current) {
         onReadyRef.current();
       }
@@ -58,6 +66,8 @@ export function ActivityMap({
       tileLayerRef.current = null;
       polylineLayerRef.current = null;
     }
+
+    let cancelled = false;
     
     setMapReady(false);
     
@@ -68,11 +78,14 @@ export function ActivityMap({
       try {
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
+        if (cancelled || !container.isConnected) return;
 
         const points = decodePolyline(polyline);
-        if (points.length < 2 || !mapRef.current) return;
+        if (cancelled || points.length < 2 || !container.isConnected) return;
 
-        const map = L.map(mapRef.current, {
+        prepareLeafletContainer(container);
+
+        const map = L.map(container, {
           scrollWheelZoom: false,
           zoomControl: true,
           attributionControl: false,
@@ -134,16 +147,26 @@ export function ActivityMap({
         if (onReadyRef.current) onReadyRef.current();
 
       } catch (e) {
-        console.error('[Map] Error:', e);
-        setMapReady(true);
-        if (onReadyRef.current) onReadyRef.current();
+        if (!cancelled) {
+          console.error('[Map] Error:', e);
+          setMapReady(true);
+          if (onReadyRef.current) onReadyRef.current();
+        }
       }
     };
 
     const timer = setTimeout(initMap, 50);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      tileLayerRef.current = null;
+      polylineLayerRef.current = null;
+      releaseLeafletContainer(container);
     };
   }, [polyline]); // ONLY depend on polyline
 
@@ -158,11 +181,18 @@ export function ActivityMap({
       tileLayerRef.current = null;
     }
 
+    let cancelled = false;
+
     const initTile = async () => {
       const L = (await import('leaflet')).default;
+      if (cancelled || mapInstanceRef.current !== map) return;
       tileLayerRef.current = addTileLayer(map, layer, isDark, L);
     };
     initTile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [layer, mapReady, isDark]);
 
   const bgColor = isDark ? '#27272a' : '#f4f4f5';
@@ -223,11 +253,11 @@ export function ActivityMap({
   );
 }
 
-function addTileLayer(map: any, layerKey: TileLayerKey, isDark: boolean, L: any) {
+function addTileLayer(map: LeafletMap, layerKey: TileLayerKey, isDark: boolean, L: LeafletModule): TileLayer | null {
   const config = TILE_LAYERS[layerKey];
   if (!config.url) return null;
 
-  const options: Record<string, any> = {
+  const options: TileLayerOptions = {
     opacity: isDark ? 0.7 : 1,
   };
   if (config.subdomains) {

@@ -4,15 +4,32 @@ import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
+import type { RouteMapHandle, SegmentItem } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { getActivities } from '@/lib/strava';
+import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
 
 interface FilterState {
   years: number[];
   types: string[];
 }
+
+interface HeatmapActivity {
+  id: number;
+  name: string;
+  distance: number;
+  start_date: string;
+  start_date_local: string;
+  type: string;
+  summary_polyline: string | null;
+  color: string;
+}
+
+type PopupActivity = Pick<HeatmapActivity, 'id' | 'name' | 'distance' | 'start_date'> & {
+  start_date_local?: string;
+};
 
 const TYPE_LABELS: Record<string, string> = {
   Run: 'activity.run', Ride: 'activity.bike', Walk: 'activity.walk',
@@ -33,43 +50,45 @@ export function HeatmapClient() {
   const { activities, hasMore, loadedPages, appendActivitiesBatch } = useActivitiesStore();
   const { language } = useSettingsStore();
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [popupActivity, setPopupActivity] = useState<{ id: number; name: string; distance: number; start_date: string } | null>(null);
+  const [popupActivity, setPopupActivity] = useState<PopupActivity | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>({ years: [], types: ['Run'] });
   const [loadingMore, setLoadingMore] = useState(false);
-  const [segments, setSegments] = useState<any[]>([]);
+  const [segments, setSegments] = useState<SegmentItem[]>([]);
   const [showSegments, setShowSegments] = useState(false);
   const [loadingSegments, setLoadingSegments] = useState(false);
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<RouteMapHandle | null>(null);
+  const { user } = useAuth();
+  const accessToken = user?.accessToken;
 
   const allYears = useMemo(() => {
     const years = new Set<number>();
-    activities.forEach(a => years.add(new Date(a.start_date).getFullYear()));
+    activities.forEach(a => years.add(getActivityDate(a).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);
   }, [activities]);
 
-  const mapActivities = useMemo(() => {
+  const mapActivities = useMemo<HeatmapActivity[]>(() => {
     return activities
       .filter(a => {
         if (!a.map?.summary_polyline) return false;
-        const year = new Date(a.start_date).getFullYear();
+        const year = getActivityDate(a).getFullYear();
         if (filters.years.length > 0 && !filters.years.includes(year)) return false;
         if (filters.types.length > 0 && !filters.types.includes(a.type)) return false;
         return true;
       })
       .map(a => ({
         id: a.id, name: a.name, distance: a.distance,
-        start_date: a.start_date, type: a.type,
+        start_date: a.start_date, start_date_local: a.start_date_local, type: a.type,
         summary_polyline: a.map?.summary_polyline ?? null,
-        color: getYearColor(new Date(a.start_date).getFullYear()),
+        color: getYearColor(getActivityDate(a).getFullYear()),
       }));
   }, [activities, filters]);
 
   const grouped = useMemo(() => {
     const groups: Record<number, typeof mapActivities> = {};
     mapActivities.forEach(a => {
-      const y = new Date(a.start_date).getFullYear();
+      const y = getActivityDate(a).getFullYear();
       if (!groups[y]) groups[y] = [];
       groups[y].push(a);
     });
@@ -77,23 +96,22 @@ export function HeatmapClient() {
       .sort((a, b) => Number(b[0]) - Number(a[0]))
       .map(([year, items]) => ({
         year: Number(year),
-        items: items.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()),
+        items: items.sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a)),
         totalDistance: items.reduce((s, i) => s + i.distance, 0),
       }));
   }, [mapActivities]);
 
   const totalRuns = mapActivities.length;
-  const totalDistance = mapActivities.reduce((s, a) => s + a.distance, 0);
 
   const handleSelect = useCallback((id: number | null) => {
     setSelectedId(id);
   }, []);
 
-  const handleShowPopup = useCallback((activity: { id: number; name: string; distance: number; start_date: string } | null) => {
+  const handleShowPopup = useCallback((activity: PopupActivity | null) => {
     setPopupActivity(activity);
   }, []);
 
-  const handleListClick = useCallback((activity: typeof mapActivities[0]) => {
+  const handleListClick = useCallback((activity: HeatmapActivity) => {
     setSelectedId(activity.id);
     setPopupActivity(activity); // show popup directly — one-step interaction
     // Fit map to this route
@@ -112,14 +130,12 @@ export function HeatmapClient() {
     }));
   }, []);
 
-  const { user } = useAuth();
-
   const loadMore = useCallback(async () => {
-    if (loadingMore || !user?.accessToken) return;
+    if (loadingMore || !accessToken) return;
     setLoadingMore(true);
     try {
       const nextPage = loadedPages + 1;
-      const newActivities = await getActivities(user.accessToken, nextPage, 200);
+      const newActivities = await getActivities(accessToken, nextPage, 200);
       if (newActivities.length > 0) {
         appendActivitiesBatch(newActivities, nextPage, newActivities.length >= 195, Date.now());
       }
@@ -128,7 +144,7 @@ export function HeatmapClient() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadedPages, loadingMore, appendActivitiesBatch, user?.accessToken]);
+  }, [loadedPages, loadingMore, appendActivitiesBatch, accessToken]);
 
   const loadSegments = useCallback(async () => {
     if (loadingSegments) return;
@@ -144,7 +160,7 @@ export function HeatmapClient() {
       }
       const res = await fetch(`/api/segments/explore?bounds=${bounds}`);
       if (!res.ok) throw new Error('Failed to load segments');
-      const data = await res.json();
+      const data = (await res.json()) as { segments?: SegmentItem[] };
       setSegments(data.segments || []);
     } catch (err) {
       console.error('Load segments failed:', err);
@@ -174,7 +190,7 @@ export function HeatmapClient() {
               <div className="min-w-0">
                 <p className="font-mono text-xs font-bold truncate">{popupActivity.name}</p>
                 <p className="font-mono text-[10px] text-zinc-500">
-                  {formatDistance(popupActivity.distance)} · {new Date(popupActivity.start_date).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                  {formatDistance(popupActivity.distance)} · {getActivityDate(popupActivity).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
                 </p>
               </div>
               <button
@@ -359,7 +375,7 @@ export function HeatmapClient() {
                           <div className="min-w-0 flex-1">
                             <p className="font-mono text-[10px] truncate">{activity.name}</p>
                             <p className="font-mono text-[9px] text-zinc-400">
-                              {new Date(activity.start_date).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })}
+                              {getActivityDate(activity).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })}
                             </p>
                           </div>
                         </button>

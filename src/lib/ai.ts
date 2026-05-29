@@ -1,13 +1,12 @@
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 import {
   TrainingProfile,
   ActivityClassification,
   classifyActivity,
-  analyzeTrainingHistory,
   formatTime,
   formatPace,
 } from './trainingAnalysis';
-import type { RaceDistance, TrainingPlan, WeeklyPlan } from './trainingPlan';
+import type { RaceDistance, TrainingPlan } from './trainingPlan';
 import { calculatePaceZones, generateFallbackTrainingPlan } from './trainingPlan';
 
 // Format seconds to HH:MM:SS or MM:SS
@@ -234,7 +233,7 @@ export interface UserPhysique {
 
 export function buildProfessionalPrompt(
   activity: StravaActivity,
-  streams: Record<string, any> | null,
+  streams: Record<string, ActivityStream> | null,
   trainingProfile: TrainingProfile,
   classification: ActivityClassification,
   locale: string = 'zh',
@@ -248,7 +247,7 @@ export function buildProfessionalPrompt(
   const paceSecKm = (activity.moving_time / activity.distance * 1000);
   const paceStr = formatPace(paceSecKm);
   
-  const { estimatedPBs, paceZones, patterns, recentLoad, similarStats } = trainingProfile;
+  const { estimatedPBs, recentLoad, similarStats } = trainingProfile;
 
   // Build the comprehensive prompt
   let prompt = en
@@ -631,7 +630,7 @@ export function buildProfessionalPrompt(
  */
 export async function analyzeActivity(
   activity: StravaActivity,
-  streams: Record<string, any> | null,
+  streams: Record<string, ActivityStream> | null,
   trainingProfile: TrainingProfile,
   locale: string = 'zh',
   physique?: UserPhysique,
@@ -644,7 +643,6 @@ export async function analyzeActivity(
     throw new Error('KIMI_API_KEY not configured');
   }
 
-  const en = locale.startsWith('en');
   const classification = classifyActivity(activity);
   const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique, lthr, streamAnalysis);
 
@@ -851,30 +849,6 @@ export function buildTrainingPlanPrompt(
   const raceName = en
     ? (distance === '5k' ? '5K' : distance === '10k' ? '10K' : distance === '21k' ? 'Half Marathon' : 'Marathon')
     : (distance === '5k' ? '5公里' : distance === '10k' ? '10公里' : distance === '21k' ? '半程马拉松' : '全程马拉松');
-
-  // ── Progression tables tailored to distance ──
-  const intervalProgression: Record<string, string[]> = {
-    '5k':  ['8×200m @ R', '6×400m @ I', '5×400m @ I', '4×600m @ I', '3×800m @ I', '5×400m @ I', '3×1000m @ I', '4×600m @ I'],
-    '10k': ['6×400m @ I', '5×600m @ I', '4×800m @ I', '5×800m @ I', '4×1000m @ I', '3×1200m @ I', '5×800m @ I', '3×1600m @ I'],
-    '21k': ['6×400m @ I', '5×800m @ I', '4×1000m @ I', '3×1200m @ I', '4×1000m @ I', '3×1600m @ I', '2×3km @ T', '3×2km @ T'],
-    '42k': ['6×400m @ I', '5×800m @ I', '4×1000m @ I', '3×1200m @ I', '4×1000m @ I', '3×1600m @ I', '2×3km @ T', '3×2km @ T'],
-  };
-  const tempoProgression: Record<string, string[]> = {
-    '5k':  ['3×1km @ T', '2×1.5km @ T', '1×3km @ T', '2×2km @ T', '1×4km @ T', '2×1.5km @ T', '1×3km @ T', '3×1km @ T'],
-    '10k': ['3×1km @ T', '2×2km @ T', '1×4km @ T', '2×3km @ T', '1×5km @ T', '2×2km @ T', '1×6km @ T', '3×2km @ T'],
-    '21k': ['3×1.5km @ T', '2×3km @ T', '1×5km @ T', '1×6km @ T', '1×8km @ T', '2×4km @ T', '1×10km @ T', '1×6km @ T'],
-    '42k': ['3×1.5km @ T', '2×3km @ T', '1×5km @ T', '1×6km @ T', '1×8km @ T', '2×4km @ T', '1×10km @ T', '1×6km @ T'],
-  };
-  const longProgression: Record<string, string[]> = {
-    '5k':  ['8km E', '10km E', '8km E', '10km E', '8km E', '10km E', '8km E', '6km E'],
-    '10k': ['10km E', '12km E', '10km E', '12km E', '10km E', '12km E', '10km E', '8km E'],
-    '21k': ['12km E', '14km E', '16km(E+2km@M)', '14km E', '18km(E+3km@M)', '16km(E+4km@M)', '14km(E+3km@M)', '10km E'],
-    '42k': ['14km E', '18km E', '22km(E+3km@M)', '26km(E+4km@M)', '30km(E+5km@M)', '32km(E+6km@M)', '22km(E+4km@M)', '12km E'],
-  };
-
-  const ip = intervalProgression[distance];
-  const tp = tempoProgression[distance];
-  const lp = longProgression[distance];
 
   let prompt = en
     ? `You are a national-level running coach with deep expertise in periodization and exercise physiology.`
@@ -1100,7 +1074,7 @@ function generateFallbackAnalysis(
   }
 
   // Build comparison text based on accurate data
-  let comparisonText = fallbackComparison?.comparisonToAverage || (en ? 'No historical comparison data yet' : '暂无历史对比数据');
+  const comparisonText = fallbackComparison?.comparisonToAverage || (en ? 'No historical comparison data yet' : '暂无历史对比数据');
 
   // Add encouragement based on performance
   const encouragement = (() => {

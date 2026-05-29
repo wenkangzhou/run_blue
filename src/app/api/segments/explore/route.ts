@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function parseCookies(cookieHeader: string): Record<string, string> {
   const cookies: Record<string, string> = {};
   if (!cookieHeader) return cookies;
@@ -44,10 +48,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: err }, { status: response.status });
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { segments?: unknown[] };
     return NextResponse.json({ segments: data.segments || [] });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Segments explore error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error, 'Segments explore failed') }, { status: 500 });
   }
 }

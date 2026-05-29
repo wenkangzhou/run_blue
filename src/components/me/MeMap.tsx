@@ -4,18 +4,20 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { StravaActivity } from '@/types';
 import { getAvailableYears } from '@/lib/stats';
 import { decodePolyline } from '@/lib/strava';
-import { Map, ChevronLeft, ChevronRight, Globe } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Globe } from 'lucide-react';
 import { RadarScan } from './RadarScan';
+import { getActivityDate } from '@/lib/dates';
+import type { LayerGroup, Map as LeafletMap } from 'leaflet';
+
+type LeafletModule = typeof import('leaflet');
 
 // Dynamic import leaflet to avoid SSR issues
-let L: any = null;
-const leafletPromise = typeof window !== 'undefined'
+const leafletPromise: Promise<LeafletModule | null> = typeof window !== 'undefined'
   ? Promise.all([
       import('leaflet'),
       import('leaflet/dist/leaflet.css'),
     ]).then(([mod]) => {
-      L = mod.default || mod;
-      return L;
+      return mod.default;
     })
   : Promise.resolve(null);
 
@@ -25,8 +27,8 @@ interface MeMapProps {
 
 export function MeMap({ activities }: MeMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<any>(null);
-  const layerRef = useRef<any>(null);
+  const leafletMapRef = useRef<LeafletMap | null>(null);
+  const layerRef = useRef<LayerGroup | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [isReady, setIsReady] = useState(false);
 
@@ -35,7 +37,7 @@ export function MeMap({ activities }: MeMapProps) {
     if (selectedYear === 'all') {
       return activities.filter((a) => a.map?.summary_polyline);
     }
-    return activities.filter((a) => new Date(a.start_date).getFullYear() === selectedYear);
+    return activities.filter((a) => getActivityDate(a).getFullYear() === selectedYear);
   }, [activities, selectedYear]);
 
   // Init map
@@ -79,7 +81,7 @@ export function MeMap({ activities }: MeMapProps) {
       const layer = layerRef.current;
       layer.clearLayers();
 
-      const bounds = leaflet.latLngBounds();
+      const bounds = leaflet.latLngBounds([]);
       let hasValid = false;
 
       filteredActs.forEach((act) => {
@@ -107,8 +109,6 @@ export function MeMap({ activities }: MeMapProps) {
       }
     });
   }, [filteredActs, isReady, selectedYear]);
-
-  const yearIndex = selectedYear === 'all' ? -1 : years.indexOf(selectedYear);
 
   const prevYear = () => {
     if (years.length === 0) return;

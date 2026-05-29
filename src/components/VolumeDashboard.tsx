@@ -33,7 +33,7 @@ import {
   Activity,
   BarChart3,
 } from 'lucide-react';
-import { formatDistance, formatDuration } from '@/lib/strava';
+import { formatDuration } from '@/lib/strava';
 
 interface VolumeDashboardProps {
   activities: StravaActivity[];
@@ -95,8 +95,8 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   );
 
   const summary = useMemo(
-    () => calculateSummaryStats(chartData, metric),
-    [chartData, metric]
+    () => calculateSummaryStats(chartData),
+    [chartData]
   );
 
   const showYearNav = periodType === 'week' || periodType === 'month';

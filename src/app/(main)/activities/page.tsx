@@ -8,11 +8,14 @@ import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
 import { StravaActivity } from '@/types';
 import { getActivities } from '@/lib/strava';
+import { getActivityDate } from '@/lib/dates';
 import { Loader2, RefreshCw, ChevronUp, Search, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
+
+const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -36,7 +39,6 @@ export default function ActivitiesPage() {
     setLastFetchedAt,
     setLoadedPages,
     setLatestActivityId,
-    clearActivities,
   } = useActivitiesStore();
 
   const [initialLoading, setInitialLoading] = useState(true);
@@ -77,7 +79,7 @@ export default function ActivitiesPage() {
       if (!hasRoute) return false;
 
       // Date filter
-      const activityDate = new Date(a.start_date);
+      const activityDate = getActivityDate(a);
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
@@ -120,8 +122,6 @@ export default function ActivitiesPage() {
       currentPage = nextPageRef.current;
     }
     
-    console.log(`[LoadActivities] calculated currentPage=${currentPage}, nextPageRef=${nextPageRef.current}, loadedPages=${loadedPages}`);
-    
     if (type === 'refresh') {
       setRefreshing(true);
     } else if (type === 'more') {
@@ -140,9 +140,7 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      console.log(`[LoadActivities] type=${type}, page=${currentPage}, nextPageRef=${nextPageRef.current}`);
       const newActivities = await getActivities(user.accessToken, currentPage, 200);
-      console.log(`[LoadActivities] received ${newActivities.length} activities`);
       
       if (type === 'refresh') {
         setActivities(newActivities);
@@ -174,8 +172,8 @@ export default function ActivitiesPage() {
 
       // Sync saved routes with newly loaded activities
       useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
-    } catch (err: any) {
-      const errorMessage = err?.message || '';
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '';
       
       if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
         setNeedsReauth(true);
@@ -197,31 +195,19 @@ export default function ActivitiesPage() {
       setRefreshing(false);
       setInitialLoading(false);
     }
-  }, [user?.accessToken, activities.length, setActivities, appendActivities, setLoading, setError, setHasMore, setLastFetchedAt, t]);
-
-  // Initial load
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/');
-      return;
-    }
-    if (!user?.accessToken) return;
-
-    if (activities.length === 0) {
-      loadActivities('initial');
-    } else if (isActivitiesCacheStale(lastFetchedAt)) {
-      setInitialLoading(false);
-      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
-      console.log(`[Refresh] restored nextPageRef=${nextPageRef.current}`);
-      loadActivities('refresh');
-    } else {
-      // 缓存未过期，恢复 nextPageRef 并静默检查新数据
-      setInitialLoading(false);
-      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
-      console.log(`[Cache] restored nextPageRef=${nextPageRef.current}, checking for new data...`);
-      checkForNewActivities();
-    }
-  }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    user?.accessToken,
+    activities.length,
+    setActivities,
+    appendActivities,
+    setLoading,
+    setError,
+    setHasMore,
+    setLastFetchedAt,
+    setLoadedPages,
+    setLatestActivityId,
+    t,
+  ]);
 
   // Scroll to top button visibility
   useEffect(() => {
@@ -232,14 +218,12 @@ export default function ActivitiesPage() {
 
   const handleLoadMore = () => {
     if (!isLoading && hasMore) {
-      console.log(`[HandleLoadMore] nextPageRef=${nextPageRef.current}`);
       loadActivities('more');
     }
   };
 
   // 限制 checkForNewActivities 调用频率：最少间隔 5 分钟
   const lastCheckRef = useRef<number>(0);
-  const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
   // 检查是否有新数据
   const checkForNewActivities = useCallback(async () => {
@@ -247,13 +231,11 @@ export default function ActivitiesPage() {
 
     const now = Date.now();
     if (now - lastCheckRef.current < CHECK_NEW_INTERVAL) {
-      console.log('[CheckNew] skipped: too soon since last check');
       return;
     }
     lastCheckRef.current = now;
 
     try {
-      console.log('[CheckNew] checking for new activities...');
       // 获取 page 1 的前 200 条
       const page1Activities = await getActivities(user.accessToken, 1, 200);
       
@@ -262,8 +244,6 @@ export default function ActivitiesPage() {
       // 找出所有新活动（ID不在缓存中的）
       const existingIds = new Set(activities.map(a => a.id));
       const newActivities = page1Activities.filter(a => !existingIds.has(a.id));
-      
-      console.log(`[CheckNew] found ${newActivities.length} new activities`);
       
       if (newActivities.length === 0) {
         // 没有新数据，更新 lastFetchedAt
@@ -276,12 +256,10 @@ export default function ActivitiesPage() {
         prependActivities(newActivities);
         setLatestActivityId(page1Activities[0]?.id || null);
         setLastFetchedAt(Date.now());
-        console.log('[CheckNew] prepended new activities');
         // Sync saved routes with newly loaded activities
         useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
       } else {
         // 新数据>=200条，可能错过数据，需要完全刷新
-        console.log('[CheckNew] too many new activities, full refresh needed');
         setActivities(page1Activities);
         nextPageRef.current = 2;
         setLoadedPages(1);
@@ -296,19 +274,34 @@ export default function ActivitiesPage() {
     }
   }, [user?.accessToken, activities, latestActivityId, prependActivities, setActivities, setHasMore, setLastFetchedAt, setLatestActivityId, setLoadedPages]);
 
+  // Initial load
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/');
+      return;
+    }
+    if (!user?.accessToken) return;
+
+    if (activities.length === 0) {
+      loadActivities('initial');
+    } else if (isActivitiesCacheStale(lastFetchedAt)) {
+      setInitialLoading(false);
+      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
+      loadActivities('refresh');
+    } else {
+      // 缓存未过期，恢复 nextPageRef 并静默检查新数据
+      setInitialLoading(false);
+      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
+      checkForNewActivities();
+    }
+  }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleRefresh = () => {
     nextPageRef.current = 1;
     setLoadedPages(0);
     setLatestActivityId(null);
     loadActivities('refresh');
   };
-  
-  const handleForceRefresh = () => {
-    nextPageRef.current = 1;
-    clearActivities();
-    loadActivities('refresh');
-  };
-
   const handleReauth = () => {
     logout();
     router.push('/api/auth/signin/strava');
