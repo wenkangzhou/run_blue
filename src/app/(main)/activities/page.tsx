@@ -16,6 +16,25 @@ import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
 
 const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const ACTIVITIES_PER_PAGE = 200;
+const HAS_MORE_THRESHOLD = 195;
+
+function getNextPage(loadedPages: number, activityCount: number) {
+  if (loadedPages > 0) return loadedPages + 1;
+  if (activityCount === 0) return 1;
+  return Math.ceil(activityCount / ACTIVITIES_PER_PAGE) + 1;
+}
+
+function syncSavedRoutes() {
+  useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
+}
+
+function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'generic' {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('401') || message.includes('Unauthorized')) return 'auth';
+  if (message.includes('429')) return 'rateLimit';
+  return 'generic';
+}
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -30,15 +49,12 @@ export default function ActivitiesPage() {
     lastFetchedAt,
     loadedPages,
     latestActivityId,
-    setActivities,
-    appendActivities,
-    prependActivities,
+    replaceActivitiesBatch,
+    appendActivitiesBatch,
+    prependActivitiesBatch,
     setLoading,
     setError,
-    setHasMore,
-    setLastFetchedAt,
-    setLoadedPages,
-    setLatestActivityId,
+    batchUpdate,
   } = useActivitiesStore();
 
   const [initialLoading, setInitialLoading] = useState(true);
@@ -130,8 +146,7 @@ export default function ActivitiesPage() {
       // initial
       if (activities.length > 0) {
         // 已有缓存，从缓存推算下一页
-        const pagesLoaded = Math.ceil(activities.length / 200);
-        nextPageRef.current = pagesLoaded + 1;
+        nextPageRef.current = getNextPage(loadedPages, activities.length);
         setInitialLoading(false);
         return;
       }
@@ -140,47 +155,43 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      const newActivities = await getActivities(user.accessToken, currentPage, 200);
+      const newActivities = await getActivities(user.accessToken, currentPage, ACTIVITIES_PER_PAGE);
+      const now = Date.now();
+      const hasMoreData = newActivities.length >= HAS_MORE_THRESHOLD;
       
       if (type === 'refresh') {
-        setActivities(newActivities);
+        replaceActivitiesBatch(newActivities, 1, hasMoreData, now);
         nextPageRef.current = 2;
-        setLoadedPages(1);
-        setLatestActivityId(newActivities[0]?.id || null);
-        setHasMore(newActivities.length >= 195);
       } else if (type === 'more') {
         if (newActivities.length === 0) {
-          setHasMore(false);
+          batchUpdate({
+            hasMore: false,
+            loadedPages: Math.max(0, currentPage - 1),
+            lastFetchedAt: now,
+          });
         } else {
-          appendActivities(newActivities);
+          appendActivitiesBatch(newActivities, currentPage, hasMoreData, now);
           nextPageRef.current = currentPage + 1;
-          setLoadedPages(currentPage);
-          setHasMore(newActivities.length >= 195);
         }
       } else {
         // initial
-        setActivities(newActivities);
+        replaceActivitiesBatch(newActivities, 1, hasMoreData, now);
         nextPageRef.current = 2;
-        setLoadedPages(1);
-        setLatestActivityId(newActivities[0]?.id || null);
-        setHasMore(newActivities.length >= 195);
       }
-      
-      setLastFetchedAt(Date.now());
+
       setNeedsReauth(false);
       setRateLimited(false);
 
-      // Sync saved routes with newly loaded activities
-      useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
+      syncSavedRoutes();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '';
-      
-      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      const errorKind = getActivityLoadErrorKind(err);
+
+      if (errorKind === 'auth') {
         setNeedsReauth(true);
         if (activities.length === 0) {
           setError(t('auth.sessionExpired'));
         }
-      } else if (errorMessage.includes('429')) {
+      } else if (errorKind === 'rateLimit') {
         setRateLimited(true);
         if (activities.length === 0) {
           setError(t('errors.rateLimited'));
@@ -198,14 +209,12 @@ export default function ActivitiesPage() {
   }, [
     user?.accessToken,
     activities.length,
-    setActivities,
-    appendActivities,
+    loadedPages,
+    replaceActivitiesBatch,
+    appendActivitiesBatch,
     setLoading,
     setError,
-    setHasMore,
-    setLastFetchedAt,
-    setLoadedPages,
-    setLatestActivityId,
+    batchUpdate,
     t,
   ]);
 
@@ -237,7 +246,7 @@ export default function ActivitiesPage() {
 
     try {
       // 获取 page 1 的前 200 条
-      const page1Activities = await getActivities(user.accessToken, 1, 200);
+      const page1Activities = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
       
       if (page1Activities.length === 0) return;
       
@@ -247,32 +256,37 @@ export default function ActivitiesPage() {
       
       if (newActivities.length === 0) {
         // 没有新数据，更新 lastFetchedAt
-        setLastFetchedAt(Date.now());
+        batchUpdate({ lastFetchedAt: Date.now() });
         return;
       }
       
-      if (newActivities.length < 200) {
+      if (newActivities.length < ACTIVITIES_PER_PAGE) {
         // 新数据少于200条，prepend 到缓存
-        prependActivities(newActivities);
-        setLatestActivityId(page1Activities[0]?.id || null);
-        setLastFetchedAt(Date.now());
-        // Sync saved routes with newly loaded activities
-        useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
+        prependActivitiesBatch(newActivities, Date.now(), page1Activities[0]?.id || null);
+        syncSavedRoutes();
       } else {
         // 新数据>=200条，可能错过数据，需要完全刷新
-        setActivities(page1Activities);
+        replaceActivitiesBatch(
+          page1Activities,
+          1,
+          page1Activities.length >= HAS_MORE_THRESHOLD,
+          Date.now(),
+          page1Activities[0]?.id || null
+        );
         nextPageRef.current = 2;
-        setLoadedPages(1);
-        setLatestActivityId(page1Activities[0]?.id || null);
-        setLastFetchedAt(Date.now());
-        setHasMore(page1Activities.length === 200);
-        // Sync saved routes with newly loaded activities
-        useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
+        syncSavedRoutes();
       }
     } catch (err) {
       console.error('[CheckNew] failed:', err);
     }
-  }, [user?.accessToken, activities, latestActivityId, prependActivities, setActivities, setHasMore, setLastFetchedAt, setLatestActivityId, setLoadedPages]);
+  }, [
+    user?.accessToken,
+    activities,
+    latestActivityId,
+    prependActivitiesBatch,
+    replaceActivitiesBatch,
+    batchUpdate,
+  ]);
 
   // Initial load
   useEffect(() => {
@@ -286,20 +300,19 @@ export default function ActivitiesPage() {
       loadActivities('initial');
     } else if (isActivitiesCacheStale(lastFetchedAt)) {
       setInitialLoading(false);
-      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
+      nextPageRef.current = getNextPage(loadedPages, activities.length);
       loadActivities('refresh');
     } else {
       // 缓存未过期，恢复 nextPageRef 并静默检查新数据
       setInitialLoading(false);
-      nextPageRef.current = loadedPages > 0 ? loadedPages + 1 : 1;
+      nextPageRef.current = getNextPage(loadedPages, activities.length);
       checkForNewActivities();
     }
   }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
     nextPageRef.current = 1;
-    setLoadedPages(0);
-    setLatestActivityId(null);
+    batchUpdate({ loadedPages: 0, latestActivityId: null });
     loadActivities('refresh');
   };
   const handleReauth = () => {

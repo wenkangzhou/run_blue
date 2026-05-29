@@ -55,6 +55,8 @@ interface CachedActivityEntry {
 
 const CACHE_PREFIX = 'run_blue_cache_activity_';
 const LOAD_DELAY_MS = 300; // delay between pages to avoid rate limiting
+const ACTIVITIES_PER_PAGE = 200;
+const HAS_MORE_THRESHOLD = 195;
 
 /** Scan localStorage for activity caches that contain gear data. */
 function scanActivityCaches(): StravaActivity[] {
@@ -252,32 +254,27 @@ export default function GearPage() {
     } else if (loadedPages > 0) {
       currentPage = loadedPages + 1;
     } else if (activities.length > 0) {
-      currentPage = Math.ceil(activities.length / 200) + 1;
+      currentPage = Math.ceil(activities.length / ACTIVITIES_PER_PAGE) + 1;
     } else {
       currentPage = 1;
     }
 
     // Sanity check: if loadedPages looks way off compared to actual activity count,
     // start from page 1 to avoid skipping data due to stale cache.
-    const estimatedPages = Math.max(1, Math.ceil(activities.length / 200));
+    const estimatedPages = Math.max(1, Math.ceil(activities.length / ACTIVITIES_PER_PAGE));
     if (currentPage > estimatedPages + 2) {
       console.warn(`[Gear] loadedPages (${currentPage - 1}) seems off for ${activities.length} activities. Starting from page 1.`);
       currentPage = 1;
     }
 
-    console.log(`[Gear] Loading all from page ${currentPage}, gearCachePages=${gearCache?.loadedPages ?? 0}, storeLoadedPages=${loadedPages}, storeActivities=${activities.length}`);
-
     let localHasMore = hasMore;
     let pagesLoaded = 0;
-    let totalNew = 0;
 
     try {
       while (localHasMore) {
         pagesLoaded++;
         setLoadProgress({ current: pagesLoaded });
-        console.log(`[Gear] Fetching page ${currentPage}...`);
-        const newActivities = await getActivities(user.accessToken, currentPage, 200);
-        console.log(`[Gear] Page ${currentPage} returned ${newActivities.length} activities`);
+        const newActivities = await getActivities(user.accessToken, currentPage, ACTIVITIES_PER_PAGE);
 
         if (newActivities.length === 0) {
           localHasMore = false;
@@ -290,20 +287,18 @@ export default function GearPage() {
         useActivitiesStore.getState().appendActivitiesBatch(
           newActivities,
           currentPage,
-          newActivities.length === 200,
+          newActivities.length >= HAS_MORE_THRESHOLD,
           Date.now()
         );
         mergeIntoGearCache(newActivities);
-        totalNew += newActivities.length;
 
-        localHasMore = newActivities.length === 200;
+        localHasMore = newActivities.length >= HAS_MORE_THRESHOLD;
         currentPage++;
 
         if (localHasMore) {
           await new Promise((r) => setTimeout(r, LOAD_DELAY_MS));
         }
       }
-      console.log(`[Gear] Done. Pages=${pagesLoaded}, newActivities=${totalNew}`);
       setGearCache({ loadedPages: currentPage - 1, hasMore: localHasMore, lastFetchedAt: Date.now() });
     } catch (err) {
       console.error('[Gear] Load failed:', err);

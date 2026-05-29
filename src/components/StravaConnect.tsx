@@ -2,10 +2,14 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { PixelCard, PixelButton } from '@/components/ui';
-import { Activity, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Activity, ArrowRight } from 'lucide-react';
 
-export function StravaConnect() {
+interface StravaConnectProps {
+  className?: string;
+}
+
+export function StravaConnect({ className }: StravaConnectProps) {
   const { t } = useTranslation();
 
   const handleConnect = () => {
@@ -14,34 +18,24 @@ export function StravaConnect() {
   };
 
   return (
-    <PixelCard variant="primary" className="p-8 max-w-md mx-auto text-center">
-      <div className="w-20 h-20 mx-auto mb-6 bg-orange-500 border-4 border-orange-700 flex items-center justify-center">
-        <Activity size={40} className="text-white" />
-      </div>
-      
-      <h2 className="font-mono text-2xl font-bold mb-3">
-        {t('auth.loginTitle')}
-      </h2>
-      
-      <p className="font-mono text-sm text-zinc-600 dark:text-zinc-400 mb-8">
-        {t('auth.loginDescription')}
-      </p>
-
-      <PixelButton
-        size="lg"
+    <div className={cn('space-y-4', className)}>
+      <button
+        type="button"
         onClick={handleConnect}
-        className="w-full bg-orange-500 border-orange-700 hover:bg-orange-400 dark:bg-orange-600 dark:border-orange-800"
+        className="group flex w-full items-center justify-between gap-4 rounded-lg border border-orange-600 bg-orange-500 px-4 py-3 text-left text-white shadow-[0_10px_24px_rgba(234,88,12,0.22)] transition-colors hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:ring-offset-2 dark:focus:ring-offset-zinc-950"
       >
-        <span className="flex items-center justify-center gap-2">
-          {t('auth.loginButton')}
-          <ChevronRight size={18} />
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/15">
+            <Activity size={22} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-bold">{t('auth.loginButton')}</span>
+            <span className="block truncate text-xs text-orange-100">Powered by Strava API</span>
+          </span>
         </span>
-      </PixelButton>
+        <ArrowRight size={20} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
+      </button>
 
-      <div className="mt-6 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500">
-        <span className="w-2 h-2 bg-green-500" />
-        <span>Powered by Strava API</span>
-      </div>
-    </PixelCard>
+    </div>
   );
 }

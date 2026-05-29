@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
   const cacheKey = `${userId}:${accessToken.slice(-8)}`;
   const cached = sessionCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < SESSION_CACHE_TTL) {
-    console.log('[Session] returning cached session');
     return NextResponse.json(cached.data);
   }
 
@@ -57,7 +56,6 @@ export async function GET(request: NextRequest) {
   // If token expired, try to refresh
   if (response.status === 401 && refreshToken) {
     try {
-      console.log('[Session] Token expired, attempting refresh...');
       const tokenData = await refreshAccessToken(refreshToken);
       accessToken = tokenData.access_token;
       refreshToken = tokenData.refresh_token;
@@ -105,7 +103,6 @@ export async function GET(request: NextRequest) {
       res.headers.set('Set-Cookie', `access_token=${accessToken}${cookieOptions}`);
       res.headers.append('Set-Cookie', `refresh_token=${refreshToken}${cookieOptions}`);
       
-      console.log('[Session] Token refreshed successfully');
       return res;
     } catch (error) {
       console.error('[Session] Failed to refresh token:', error);

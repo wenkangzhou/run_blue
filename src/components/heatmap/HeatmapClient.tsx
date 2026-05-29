@@ -35,6 +35,8 @@ const TYPE_LABELS: Record<string, string> = {
   Run: 'activity.run', Ride: 'activity.bike', Walk: 'activity.walk',
   Hike: 'activity.hike', Swim: 'activity.swim',
 };
+const ACTIVITIES_PER_PAGE = 200;
+const HAS_MORE_THRESHOLD = 195;
 
 function getYearColor(year: number): string {
   const palette = ['#3b82f6','#22c55e','#ef4444','#f97316','#a855f7','#06b6d4','#ec4899','#eab308','#14b8a6','#f43f5e'];
@@ -47,7 +49,7 @@ function formatDistance(meters: number): string {
 
 export function HeatmapClient() {
   const { t } = useTranslation();
-  const { activities, hasMore, loadedPages, appendActivitiesBatch } = useActivitiesStore();
+  const { activities, hasMore, loadedPages, appendActivitiesBatch, batchUpdate } = useActivitiesStore();
   const { language } = useSettingsStore();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [popupActivity, setPopupActivity] = useState<PopupActivity | null>(null);
@@ -134,17 +136,21 @@ export function HeatmapClient() {
     if (loadingMore || !accessToken) return;
     setLoadingMore(true);
     try {
-      const nextPage = loadedPages + 1;
-      const newActivities = await getActivities(accessToken, nextPage, 200);
+      const nextPage = loadedPages > 0
+        ? loadedPages + 1
+        : Math.ceil(activities.length / ACTIVITIES_PER_PAGE) + 1;
+      const newActivities = await getActivities(accessToken, nextPage, ACTIVITIES_PER_PAGE);
       if (newActivities.length > 0) {
-        appendActivitiesBatch(newActivities, nextPage, newActivities.length >= 195, Date.now());
+        appendActivitiesBatch(newActivities, nextPage, newActivities.length >= HAS_MORE_THRESHOLD, Date.now());
+      } else {
+        batchUpdate({ hasMore: false, loadedPages: Math.max(0, nextPage - 1), lastFetchedAt: Date.now() });
       }
     } catch (err) {
       console.error('Load more failed:', err);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadedPages, loadingMore, appendActivitiesBatch, accessToken]);
+  }, [accessToken, activities.length, appendActivitiesBatch, batchUpdate, loadedPages, loadingMore]);
 
   const loadSegments = useCallback(async () => {
     if (loadingSegments) return;

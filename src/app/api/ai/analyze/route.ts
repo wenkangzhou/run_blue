@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         currentActivity = fullActivity;
       }
     } catch {
-      console.log('Could not fetch full activity details, using provided data');
+      // Continue with the provided activity when optional detail enrichment fails.
     }
 
     // Extract PBs from current activity's best_efforts if available

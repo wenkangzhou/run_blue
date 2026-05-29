@@ -105,11 +105,23 @@ interface ActivitiesState {
   setActivities: (activities: StravaActivity[]) => void;
   appendActivities: (activities: StravaActivity[]) => void;
   prependActivities: (activities: StravaActivity[]) => void;
+  replaceActivitiesBatch: (
+    activities: StravaActivity[],
+    loadedPages: number,
+    hasMore: boolean,
+    lastFetchedAt: number,
+    latestActivityId?: number | null
+  ) => void;
   appendActivitiesBatch: (
     activities: StravaActivity[],
     loadedPages: number,
     hasMore: boolean,
     lastFetchedAt: number
+  ) => void;
+  prependActivitiesBatch: (
+    activities: StravaActivity[],
+    lastFetchedAt: number,
+    latestActivityId?: number | null
   ) => void;
   selectActivity: (activity: StravaActivity | null) => void;
   setLoading: (loading: boolean) => void;
@@ -137,7 +149,7 @@ export const useActivitiesStore = create<ActivitiesState>()(
       lastFetchedAt: null,
       loadedPages: 0, // 初始为0，表示还没加载任何页
       latestActivityId: null, // 初始无最新活动
-      setActivities: (activities) => set({ activities }),
+      setActivities: (activities) => set({ activities, totalLoaded: activities.length }),
       appendActivities: (activities) =>
         set((state) => {
           const existingIds = new Set(state.activities.map(a => a.id));
@@ -156,6 +168,16 @@ export const useActivitiesStore = create<ActivitiesState>()(
             totalLoaded: state.totalLoaded + newActivities.length,
           };
         }),
+      /** Replace activities + paging meta in a single persist write. */
+      replaceActivitiesBatch: (activities, loadedPages, hasMore, lastFetchedAt, latestActivityId) =>
+        set({
+          activities,
+          totalLoaded: activities.length,
+          loadedPages,
+          hasMore,
+          lastFetchedAt,
+          latestActivityId: latestActivityId ?? activities[0]?.id ?? null,
+        }),
       /** Batch append + meta update in a single persist write (saves quota). */
       appendActivitiesBatch: (activities, loadedPages, hasMore, lastFetchedAt) =>
         set((state) => {
@@ -167,6 +189,19 @@ export const useActivitiesStore = create<ActivitiesState>()(
             loadedPages,
             hasMore,
             lastFetchedAt,
+            latestActivityId: state.latestActivityId ?? newActivities[0]?.id ?? null,
+          };
+        }),
+      /** Batch prepend + meta update in a single persist write (saves quota). */
+      prependActivitiesBatch: (activities, lastFetchedAt, latestActivityId) =>
+        set((state) => {
+          const existingIds = new Set(state.activities.map(a => a.id));
+          const newActivities = activities.filter(a => !existingIds.has(a.id));
+          return {
+            activities: [...newActivities, ...state.activities],
+            totalLoaded: state.totalLoaded + newActivities.length,
+            lastFetchedAt,
+            latestActivityId: latestActivityId ?? newActivities[0]?.id ?? state.latestActivityId,
           };
         }),
       selectActivity: (activity) => set({ selectedActivity: activity }),

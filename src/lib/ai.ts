@@ -9,6 +9,13 @@ import {
 import type { RaceDistance, TrainingPlan } from './trainingPlan';
 import { calculatePaceZones, generateFallbackTrainingPlan } from './trainingPlan';
 
+export class TrainingPlanInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TrainingPlanInputError';
+  }
+}
+
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
   const hrs = Math.floor(seconds / 3600);
@@ -693,7 +700,6 @@ export async function analyzeActivity(
       }
 
       const result = parseAIResponse(content, activity, trainingProfile, classification, locale);
-      console.log(`[AI] Attempt ${attempt} succeeded. Summary length: ${result.summary.length}`);
       return result;
     } catch (e) {
       console.error(`[AI] Attempt ${attempt} failed:`, e);
@@ -970,19 +976,17 @@ export async function generateTrainingPlan(
   const assessment = assessGoal(distance, targetTimeSeconds, pb5kSec, locale);
   if (!assessment.realistic) {
     const en = (locale || 'zh').startsWith('en');
-    throw new Error(
+    throw new TrainingPlanInputError(
       en
         ? `Goal seems unrealistic. Your 5K PB (${formatDuration(pb5kSec)}) suggests an equivalent ${distance === '42k' ? 'marathon' : distance === '21k' ? 'half marathon' : distance === '10k' ? '10K' : '5K'} time of ~${formatDuration(assessment.equivalentTime)}, but your target is ${formatDuration(targetTimeSeconds)} (${assessment.gapPercent > 0 ? '+' : ''}${assessment.gapPercent}%). Consider adjusting your goal or updating your PB in profile.`
         : `目标不太现实。你的 5K PB（${formatDuration(pb5kSec)}）推算的等效${distance === '42k' ? '全马' : distance === '21k' ? '半马' : distance === '10k' ? '10公里' : '5公里'}成绩约为 ${formatDuration(assessment.equivalentTime)}，但你的目标是 ${formatDuration(targetTimeSeconds)}（${assessment.gapPercent > 0 ? '+' : ''}${assessment.gapPercent}%）。建议调整目标或在跑者档案中更新 PB。`
     );
   }
 
-  console.log('[Plan] 🏃 Generating professional training plan via algorithmic template');
   const plan = generateFallbackTrainingPlan(distance, targetTimeSeconds, weeks, pb5kSec, weeklyVolume, locale);
   if (raceDate) {
     plan.goal.raceDate = raceDate;
   }
-  console.log(`[Plan] ✅ Generated ${plan.weeks.length} weeks, total ${plan.weeks.reduce((s, w) => s + w.totalDistance, 0)}km`);
   return plan;
 }
 

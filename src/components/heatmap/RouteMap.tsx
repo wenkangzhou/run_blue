@@ -284,15 +284,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
     try {
       sidebarOpenRef.current = sbOpen;
       const currentActs = activitiesRef.current;
-      console.log('[RouteMap] renderAll start, activities=', currentActs.length);
 
       // 1. Set view first so layers are projected against correct viewport
       const bounds = computeSmartBounds(currentActs, L);
-      console.log('[RouteMap] computeSmartBounds result=', bounds ? 'valid' : 'null');
       if (bounds) {
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-        console.log('[RouteMap] bounds sw=', sw?.lat, sw?.lng, 'ne=', ne?.lat, ne?.lng);
         const pad = getPadding();
         try {
           map.fitBounds(bounds, {
@@ -313,19 +308,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
       renderClusters(map, L, currentActs);
       renderPolylines(map, L, currentActs);
       renderSegments(map, L);
-
-      console.log('[RouteMap] renderAll done');
-      setTimeout(() => {
-        try {
-          const svgPaths = document.querySelectorAll('.leaflet-overlay-pane svg path').length;
-          const markers = document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon').length;
-          const circles = document.querySelectorAll('.leaflet-overlay-pane svg circle').length;
-          const layerCount = Object.keys((map as LeafletMap & { _layers?: Record<string, Layer> })._layers || {}).length;
-          console.log('[RouteMap] DOM check: svgPaths=', svgPaths, 'markers=', markers, 'circles=', circles, 'layerCount=', layerCount);
-        } catch (e) {
-          console.warn('[RouteMap] DOM check failed:', e);
-        }
-      }, 500);
     } catch (e) {
       console.error('renderAll failed:', e);
     }
@@ -337,7 +319,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
       clusterLayerRef.current = null;
     }
     const clusters = buildClusters(acts);
-    console.log('[RouteMap] buildClusters result=', clusters.length);
     if (clusters.length === 0) return;
     const group = L.layerGroup().addTo(map);
     clusterLayerRef.current = group;
@@ -479,7 +460,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
       }
     });
 
-    let renderedCount = 0;
     // Remove old start/end group if exists
     if (startEndGroupRef.current && map.hasLayer(startEndGroupRef.current)) {
       try { map.removeLayer(startEndGroupRef.current); } catch {}
@@ -543,13 +523,11 @@ export const RouteMap = React.forwardRef(function RouteMap(
           startEndGroup.addLayer(seMarkers.start);
           startEndGroup.addLayer(seMarkers.end);
         }
-        renderedCount++;
       } catch (e) {
         console.warn('Failed to render polyline for activity', activity.id, e);
       }
     });
     startEndGroupRef.current = startEndGroup;
-    console.log('[RouteMap] renderPolylines done, rendered=', renderedCount, 'total acts=', acts.length);
 
     layersRef.current = newLayers;
     startEndMarkersRef.current = newStartEnd;

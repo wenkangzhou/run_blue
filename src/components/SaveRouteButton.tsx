@@ -28,10 +28,8 @@ export function SaveRouteButton({ activity, variant = 'button' }: SaveRouteButto
       return;
     }
     if (saved) {
-      console.log('[SaveRouteButton] Unsaving activity', activity.id);
       unsaveActivity(activity.id);
     } else {
-      console.log('[SaveRouteButton] Saving activity', activity.id, 'routeKey:', routeKey);
       // Ensure current activity is included in the search pool
       const pool = activities.some((a) => a.id === activity.id)
         ? activities

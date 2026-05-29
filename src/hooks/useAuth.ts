@@ -49,7 +49,6 @@ export function useAuth() {
             });
           } else if (session.error === 'token_expired') {
             // Token expired, need to re-login
-            console.log('Token expired');
             setNeedsReauth(true);
             logout();
           } else {

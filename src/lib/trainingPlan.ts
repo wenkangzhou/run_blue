@@ -60,19 +60,12 @@ function setStoredPlans(plans: TrainingPlan[]): void {
 }
 
 export function getStoredTrainingPlans(): TrainingPlan[] {
-  const plans = getStoredPlans();
-  if (plans.length > 0) {
-    console.log(`[Plan Storage] 📦 Loaded ${plans.length} plan(s) from localStorage`);
-  }
-  return plans;
+  return getStoredPlans();
 }
 
 export function getStoredTrainingPlan(id?: string): TrainingPlan | null {
   const plans = getStoredPlans();
   const found = id ? plans.find((p) => p.id === id) : plans[0] || null;
-  if (found) {
-    console.log(`[Plan Storage] 📦 Loaded plan ${found.id} from localStorage (${found.weeks.length} weeks)`);
-  }
   return found || null;
 }
 

@@ -12,6 +12,8 @@ import { useRoutesStore } from '@/store/routes';
 import { Loader2, ChevronLeft } from 'lucide-react';
 
 const MAX_LOAD_PAGES = 10; // Safety limit: 2000 activities max
+const ACTIVITIES_PER_PAGE = 200;
+const HAS_MORE_THRESHOLD = 195;
 
 export default function StatsPage() {
   const { t } = useTranslation();
@@ -22,13 +24,11 @@ export default function StatsPage() {
     isLoading: storeLoading,
     loadedPages,
     lastFetchedAt,
-    setActivities,
-    appendActivities,
+    replaceActivitiesBatch,
+    appendActivitiesBatch,
     setLoading,
     setError,
-    setHasMore,
-    setLoadedPages,
-    setLastFetchedAt,
+    batchUpdate,
   } = useActivitiesStore();
   const [localLoading, setLocalLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState('');
@@ -48,13 +48,11 @@ export default function StatsPage() {
         setLocalLoading(true);
         setLoading(true);
         try {
-          const data = await getActivities(user.accessToken, 1, 200);
-          setActivities(data);
-          setHasMore(data.length === 200);
-          setLoadedPages(1);
-          setLastFetchedAt(Date.now());
+          const data = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
+          const hasMoreData = data.length >= HAS_MORE_THRESHOLD;
+          replaceActivitiesBatch(data, 1, hasMoreData, Date.now());
 
-          if (data.length === 200) {
+          if (hasMoreData) {
             await loadRemaining(2);
           }
         } catch (err) {
@@ -72,13 +70,11 @@ export default function StatsPage() {
         setLocalLoading(true);
         setLoading(true);
         try {
-          const data = await getActivities(user.accessToken, 1, 200);
-          setActivities(data);
-          setHasMore(data.length === 200);
-          setLoadedPages(1);
-          setLastFetchedAt(Date.now());
+          const data = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
+          const hasMoreData = data.length >= HAS_MORE_THRESHOLD;
+          replaceActivitiesBatch(data, 1, hasMoreData, Date.now());
 
-          if (data.length === 200) {
+          if (hasMoreData) {
             await loadRemaining(2);
           }
         } catch (err) {
@@ -111,21 +107,23 @@ export default function StatsPage() {
 
       while (hasMoreData && page <= MAX_LOAD_PAGES) {
         setLoadProgress(t('common.loading') + ` (${page} ${t('stats.pages', '页')})`);
-        const data = await getActivities(user.accessToken, page, 200);
+        const data = await getActivities(user.accessToken, page, ACTIVITIES_PER_PAGE);
 
         if (data.length === 0) {
           hasMoreData = false;
+          batchUpdate({
+            hasMore: false,
+            loadedPages: Math.max(0, page - 1),
+            lastFetchedAt: Date.now(),
+          });
           break;
         }
 
-        appendActivities(data);
-        hasMoreData = data.length >= 195;
+        hasMoreData = data.length >= HAS_MORE_THRESHOLD;
+        appendActivitiesBatch(data, page, hasMoreData, Date.now());
         page++;
       }
 
-      setHasMore(hasMoreData);
-      setLoadedPages(page - 1);
-      setLastFetchedAt(Date.now());
       setLoadProgress('');
 
       // Sync saved routes with all loaded activities
@@ -188,4 +186,3 @@ export default function StatsPage() {
     </div>
   );
 }
-
