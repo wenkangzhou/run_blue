@@ -733,20 +733,15 @@ export default function ActivityDetailPage() {
                 </h2>
               </div>
               <div className="mt-3">
-                <SplitsTable splits={visibleSplits} showHeader={true} />
+                <SplitsTable splits={splitsExpanded ? [...visibleSplits, ...hiddenSplits] : visibleSplits} showHeader={true} />
                 
                 {hasHiddenSplits && (
-                  <>
-                    {splitsExpanded && (
-                      <SplitsTable splits={hiddenSplits} showHeader={false} />
-                    )}
-                    <button
-                      onClick={() => setSplitsExpanded(!splitsExpanded)}
-                      className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
-                    >
-                      {splitsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
-                    </button>
-                  </>
+                  <button
+                    onClick={() => setSplitsExpanded(!splitsExpanded)}
+                    className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
+                  >
+                    {splitsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                  </button>
                 )}
               </div>
             </div>
@@ -761,20 +756,15 @@ export default function ActivityDetailPage() {
                 </h2>
               </div>
               <div className="mt-3">
-                <LapsTable laps={visibleLaps} showHeader={true} />
+                <LapsTable laps={lapsExpanded ? [...visibleLaps, ...hiddenLaps] : visibleLaps} showHeader={true} />
                 
                 {hasHiddenLaps && (
-                  <>
-                    {lapsExpanded && (
-                      <LapsTable laps={hiddenLaps} showHeader={false} />
-                    )}
-                    <button
-                      onClick={() => setLapsExpanded(!lapsExpanded)}
-                      className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
-                    >
-                      {lapsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
-                    </button>
-                  </>
+                  <button
+                    onClick={() => setLapsExpanded(!lapsExpanded)}
+                    className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
+                  >
+                    {lapsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                  </button>
                 )}
               </div>
             </div>

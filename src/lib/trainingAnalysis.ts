@@ -238,7 +238,7 @@ export function classifyActivity(activity: StravaActivity): ActivityClassificati
   const distKm = activity.distance / 1000;
   if (isRace) {
     if (distKm >= 40) raceType = '马拉松';
-    else if (distKm >= 20) raceType = '半程马拉松';
+    else if (distKm >= 21) raceType = '半程马拉松';
     else if (distKm >= 9.5 && distKm <= 10.5) raceType = '10公里';
     else if (distKm >= 4.8 && distKm <= 5.3) raceType = '5公里';
     else raceType = '比赛';
