@@ -78,21 +78,21 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
         {groups.map((group) => (
           <div key={group.key} className="border-t-2 border-zinc-200 dark:border-zinc-700 pt-4">
             {/* Group Header */}
-            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3 px-1">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center gap-2 min-w-0">
                 <Calendar size={14} className="text-zinc-400 flex-shrink-0" />
-                <span className="font-pixel text-sm font-bold">{group.label}</span>
+                <span className="font-pixel text-sm font-bold truncate">{group.label}</span>
               </div>
-              <div className="flex items-center gap-3 text-xs font-mono text-zinc-500 whitespace-nowrap">
-                <span className="flex items-center gap-1 whitespace-nowrap">
-                  <Route size={12} className="flex-shrink-0" />
-                  <span className="whitespace-nowrap">{formatDistance(group.totalDistance, 'km')}</span>
+              <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-mono text-zinc-500 whitespace-nowrap flex-shrink-0">
+                <span className="flex items-center gap-1">
+                  <Route size={12} />
+                  {formatDistance(group.totalDistance, 'km')}
                 </span>
-                <span className="flex items-center gap-1 whitespace-nowrap">
-                  <Clock size={12} className="flex-shrink-0" />
-                  <span className="whitespace-nowrap">{formatDuration(group.totalTime)}</span>
+                <span className="flex items-center gap-1">
+                  <Clock size={12} />
+                  {formatDuration(group.totalTime)}
                 </span>
-                <span className="text-zinc-400 whitespace-nowrap">
+                <span className="text-zinc-400">
                   {group.activities.length}{t('stats.runs', '')}
                 </span>
               </div>
@@ -184,7 +184,7 @@ function formatWeekLabel(start: Date, end: Date): string {
   const startStr = `${start.getMonth() + 1}/${start.getDate()}`;
   const endStr = `${end.getMonth() + 1}/${end.getDate()}`;
   const yearStr = start.getFullYear();
-  return `${yearStr}: ${startStr} - ${endStr}`;
+  return `${yearStr} ${startStr}-${endStr}`;
 }
 
 function formatMonthLabel(year: number, month: number, t: TFunction): string {
