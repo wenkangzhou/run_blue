@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { StravaActivity } from '@/types';
 import { RouteOnlyMap } from '@/components/map/RouteOnlyMap';
 import { formatDistance, formatDuration } from '@/lib/strava';
+import { getActivityDate } from '@/lib/dates';
 
 interface ActivityGridCardProps {
   activity: StravaActivity;
 }
 
 export function ActivityGridCard({ activity }: ActivityGridCardProps) {
-  const date = new Date(activity.start_date);
+  const date = getActivityDate(activity);
   
   // Format month manually to avoid SSR issues
   const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];

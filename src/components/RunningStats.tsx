@@ -5,6 +5,7 @@ import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getActivityDate, getISOWeek } from '@/lib/dates';
 
 type PeriodType = 'week' | 'month' | 'year' | 'all';
 
@@ -32,14 +33,15 @@ export function RunningStats({ activities }: ActivityStatsProps) {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
-    const currentWeek = getWeekNumber(now);
+    const currentWeek = getISOWeek(now);
 
     const result: PeriodStats[] = [
       {
         label: t('stats.thisWeek'),
         period: 'week',
         ...calculatePeriodStats(activities, (date) => {
-          return getWeekNumber(date) === currentWeek && date.getFullYear() === currentYear;
+          const week = getISOWeek(date);
+          return week.week === currentWeek.week && week.year === currentWeek.year;
         }),
       },
       {
@@ -199,7 +201,7 @@ function calculatePeriodStats(
   filterFn: (date: Date) => boolean
 ) {
   const filtered = activities.filter((a) => {
-    const date = new Date(a.start_date);
+    const date = getActivityDate(a);
     return filterFn(date);
   });
 
@@ -208,12 +210,4 @@ function calculatePeriodStats(
     time: filtered.reduce((sum, a) => sum + a.moving_time, 0),
     count: filtered.length,
   };
-}
-
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((Number(d) - Number(yearStart)) / 86400000 + 1) / 7);
 }

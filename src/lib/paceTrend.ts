@@ -1,4 +1,5 @@
 import { StravaActivity } from '@/types';
+import { getActivityDate } from './dates';
 
 export interface PaceTrendResult {
   currentPace: number; // sec/km
@@ -48,7 +49,7 @@ export function calculatePaceTrend(
   if (!target || !target.distance || !target.moving_time) return null;
 
   const currentPace = target.moving_time / (target.distance / 1000);
-  const targetDate = new Date(target.start_date);
+  const targetDate = getActivityDate(target);
 
   // Filter runs with valid pace
   const validRuns = allActivities.filter(
@@ -59,7 +60,7 @@ export function calculatePaceTrend(
   const days7Ago = new Date(targetDate);
   days7Ago.setDate(days7Ago.getDate() - 7);
   const days7Runs = validRuns.filter((a) => {
-    const d = new Date(a.start_date);
+    const d = getActivityDate(a);
     return d >= days7Ago && d <= targetDate && a.id !== targetActivityId;
   });
 
@@ -67,7 +68,7 @@ export function calculatePaceTrend(
   const days28Ago = new Date(targetDate);
   days28Ago.setDate(days28Ago.getDate() - 28);
   const days28Runs = validRuns.filter((a) => {
-    const d = new Date(a.start_date);
+    const d = getActivityDate(a);
     return d >= days28Ago && d <= targetDate && a.id !== targetActivityId;
   });
 
@@ -84,7 +85,7 @@ export function calculatePaceTrend(
   // Monthly grouping (all time)
   const monthMap = new Map<string, StravaActivity[]>();
   validRuns.forEach((a) => {
-    const d = new Date(a.start_date);
+    const d = getActivityDate(a);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     if (!monthMap.has(key)) monthMap.set(key, []);
     monthMap.get(key)!.push(a);

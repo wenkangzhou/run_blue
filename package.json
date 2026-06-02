@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint src",
-    "test:routes": "node --test tests/routeClustering.test.mjs"
+    "test:routes": "node --test tests/routeClustering.test.mjs tests/dates.test.mjs"
   },
   "dependencies": {
     "@serwist/next": "^9.5.11",

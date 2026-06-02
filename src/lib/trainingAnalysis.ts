@@ -1,4 +1,5 @@
 import { StravaActivity } from '@/types';
+import { formatLocalDateKey, getActivityDate, getActivityTimestamp, getISOWeek } from './dates';
 
 // Estimated Personal Bests from activity history
 export interface EstimatedPBs {
@@ -273,7 +274,7 @@ export function analyzeTrainingHistory(
 
   // Sort by date (newest first)
   const sortedRuns = [...runs].sort(
-    (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+    (a, b) => getActivityTimestamp(b) - getActivityTimestamp(a)
   );
 
   // Estimate PBs from best efforts and actual race results
@@ -749,8 +750,9 @@ function detectTrainingPatterns(runs: StravaActivity[]): TrainingPatterns {
   // Weekly volume (last 8 weeks)
   const weekBuckets = new Map<string, number>();
   for (const run of runs.slice(0, 56)) {
-    const date = new Date(run.start_date);
-    const weekKey = `${date.getFullYear()}-W${getWeekNumber(date)}`;
+    const date = getActivityDate(run);
+    const week = getISOWeek(date);
+    const weekKey = `${week.year}-W${week.week}`;
     weekBuckets.set(weekKey, (weekBuckets.get(weekKey) || 0) + run.distance);
   }
   const weekDistances = Array.from(weekBuckets.values());
@@ -831,14 +833,6 @@ function detectWorkoutTypes(runs: StravaActivity[]) {
   return { hasIntervalWorkouts, hasTempoWorkouts };
 }
 
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
 function calculateWeeklyLoad(runs: StravaActivity[], weeks: number): WeeklyLoad[] {
   const result: WeeklyLoad[] = [];
   const now = new Date();
@@ -848,7 +842,7 @@ function calculateWeeklyLoad(runs: StravaActivity[], weeks: number): WeeklyLoad[
     const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
     
     const weekRuns = runs.filter(r => {
-      const runDate = new Date(r.start_date);
+      const runDate = getActivityDate(r);
       return runDate >= weekStart && runDate < weekEnd;
     });
     
@@ -862,7 +856,7 @@ function calculateWeeklyLoad(runs: StravaActivity[], weeks: number): WeeklyLoad[
     }
     
     result.push({
-      week: weekStart.toISOString().split('T')[0],
+      week: formatLocalDateKey(weekStart),
       totalDistance,
       totalTime,
       runs: weekRuns.length,

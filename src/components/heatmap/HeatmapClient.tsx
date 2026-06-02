@@ -39,7 +39,7 @@ const ACTIVITIES_PER_PAGE = 200;
 const HAS_MORE_THRESHOLD = 195;
 
 function getYearColor(year: number): string {
-  const palette = ['#3b82f6','#22c55e','#ef4444','#f97316','#a855f7','#06b6d4','#ec4899','#eab308','#14b8a6','#f43f5e'];
+  const palette = ['#6aa5c8', '#7bb29a', '#d49a6a', '#a896c9', '#c98095', '#74aebc', '#b6a15a', '#8fa7bd', '#99b373', '#bd86a7'];
   return palette[Math.abs(year) % palette.length];
 }
 function formatDistance(meters: number): string {

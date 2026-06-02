@@ -13,6 +13,7 @@ import { RouteTrendChart } from '@/components/RouteTrendChart';
 import { PixelCard, PixelButton } from '@/components/ui';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getBestPaceActivity } from '@/lib/routeClustering';
+import { getActivityTimestamp } from '@/lib/dates';
 import {
   ChevronLeft,
   MapPin,
@@ -42,7 +43,7 @@ export default function RouteDetailPage() {
     if (!route) return [];
     return activities
       .filter((a) => route.activityIds.includes(a.id))
-      .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+      .sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a));
   }, [route, activities]);
 
   const [isEditingName, setIsEditingName] = useState(false);

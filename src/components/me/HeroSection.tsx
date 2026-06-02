@@ -5,6 +5,7 @@ import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { TrajectoryCanvas } from './TrajectoryCanvas';
 import { GlitchText } from './GlitchText';
+import { formatLocalDateKey, getActivityDate, parseStravaLocalDateParts } from '@/lib/dates';
 
 interface HeroSectionProps {
   activities: StravaActivity[];
@@ -63,6 +64,8 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
 
   const longestRun = activities.reduce((max, a) => (a.distance > max.distance ? a : max), activities[0]);
   const maxElevation = activities.reduce((max, a) => ((a.total_elevation_gain || 0) > (max.total_elevation_gain || 0) ? a : max), activities[0]);
+  const firstYear = getYearFromDateString(stats.firstRunDate);
+  const latestYear = getYearFromDateString(stats.latestRunDate);
 
   return (
     <section className="relative px-4 py-12 sm:py-20 overflow-hidden">
@@ -96,7 +99,7 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
             label="TOTAL RUNS"
             value={stats.totalRuns}
             suffix=""
-            sub={`Since ${new Date(stats.firstRunDate || '').getFullYear()}`}
+            sub={firstYear ? `Since ${firstYear}` : 'Since --'}
           />
           <BigStat
             label="TOTAL TIME"
@@ -118,24 +121,30 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
             label="LONGEST RUN"
             value={formatDistance(longestRun.distance)}
             sub={longestRun.name}
-            date={new Date(longestRun.start_date).toLocaleDateString('zh-CN')}
+            date={formatLocalDateKey(getActivityDate(longestRun))}
           />
           <InfoCard
             label="HIGHEST CLIMB"
             value={`${Math.round(maxElevation.total_elevation_gain || 0)}m`}
             sub={maxElevation.name}
-            date={new Date(maxElevation.start_date).toLocaleDateString('zh-CN')}
+            date={formatLocalDateKey(getActivityDate(maxElevation))}
           />
           <InfoCard
             label="ACTIVE YEARS"
             value={`${stats.yearCount}`}
-            sub={`${new Date(stats.firstRunDate || '').getFullYear()} — ${new Date(stats.latestRunDate || '').getFullYear()}`}
+            sub={firstYear && latestYear ? `${firstYear} — ${latestYear}` : '--'}
             date=""
           />
         </div>
       </div>
     </section>
   );
+}
+
+function getYearFromDateString(dateString?: string): number | null {
+  if (!dateString) return null;
+  const parts = parseStravaLocalDateParts(dateString);
+  return Number.isFinite(parts.year) ? parts.year : null;
 }
 
 function BigStat({ label, value, suffix, sub }: { label: string; value: number; suffix: string; sub: string }) {

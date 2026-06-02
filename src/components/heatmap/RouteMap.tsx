@@ -55,6 +55,14 @@ interface RouteMapProps {
   segments?: SegmentItem[];
 }
 
+const CLUSTER_DETAIL_ZOOM = 14;
+const ROUTE_OPACITY = 0.28;
+const ROUTE_DIMMED_OPACITY = 0.1;
+const ROUTE_SELECTED_OPACITY = 0.96;
+const ROUTE_WEIGHT = 1.9;
+const ROUTE_SELECTED_WEIGHT = 4.2;
+const HIGHLIGHT_COLOR = '#d97706';
+
 function addTileLayer(map: LeafletMap, layerKey: string, isDark: boolean, L: LeafletModule): TileLayer | null {
   const config = TILE_LAYERS[layerKey as keyof typeof TILE_LAYERS] || TILE_LAYERS.osm;
   if (!config.url) return null;
@@ -71,30 +79,57 @@ interface Cluster {
   lat: number;
   lng: number;
   count: number;
-  activityIds: number[];
+  anchorPoints: Array<[number, number]>;
 }
 
-function buildClusters(activities: MapActivity[], cellSizeDeg: number = 0.3): Cluster[] {
-  const cells = new Map<string, { latSum: number; lngSum: number; count: number; ids: number[] }>();
+type ClusterCell = { latSum: number; lngSum: number; count: number; anchorPoints: Array<[number, number]> };
+
+function getClusterCellSizePx(zoom: number): number {
+  if (zoom <= 9) return 64;
+  if (zoom <= 11) return 72;
+  return 84;
+}
+
+function getRouteAnchorPoint(points: Array<[number, number]>): [number, number] | null {
+  let latSum = 0;
+  let lngSum = 0;
+  let count = 0;
+
+  points.forEach(([lat, lng]) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    latSum += lat;
+    lngSum += lng;
+    count += 1;
+  });
+
+  return count > 0 ? [latSum / count, lngSum / count] : null;
+}
+
+function buildClusters(activities: MapActivity[], map: LeafletMap, L: LeafletModule): Cluster[] {
+  const cells = new Map<string, ClusterCell>();
+  const cellSizePx = getClusterCellSizePx(map.getZoom());
   activities.forEach(a => {
     if (!a.summary_polyline) return;
     const pts = decodePolyline(a.summary_polyline);
     if (pts.length === 0) return;
-    const [lat, lng] = pts[0];
+    const anchor = getRouteAnchorPoint(pts);
+    if (!anchor) return;
+    const [lat, lng] = anchor;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const key = `${Math.floor(lat / cellSizeDeg)},${Math.floor(lng / cellSizeDeg)}`;
-    const c = cells.get(key) || { latSum: 0, lngSum: 0, count: 0, ids: [] };
+    const point = map.latLngToLayerPoint(L.latLng(lat, lng));
+    const key = `${Math.floor(point.x / cellSizePx)},${Math.floor(point.y / cellSizePx)}`;
+    const c = cells.get(key) || { latSum: 0, lngSum: 0, count: 0, anchorPoints: [] };
     c.latSum += lat;
     c.lngSum += lng;
     c.count += 1;
-    c.ids.push(a.id);
+    c.anchorPoints.push([lat, lng]);
     cells.set(key, c);
   });
   return Array.from(cells.values()).map(c => ({
     lat: c.latSum / c.count,
     lng: c.lngSum / c.count,
     count: c.count,
-    activityIds: c.ids,
+    anchorPoints: c.anchorPoints,
   }));
 }
 
@@ -121,6 +156,21 @@ function computeSmartBounds(activities: MapActivity[], L: LeafletModule): LatLng
   const b50 = tryBounds(activities.slice(0, 50));
   if (b50) return b50;
   return tryBounds(activities);
+}
+
+function computeClusterAnchorBounds(cluster: Cluster, L: LeafletModule): LatLngBounds | null {
+  if (cluster.anchorPoints.length === 0) return null;
+  const bounds = L.latLngBounds([]);
+  cluster.anchorPoints.forEach(([lat, lng]) => {
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      bounds.extend(L.latLng(lat, lng));
+    }
+  });
+  return bounds.isValid() ? bounds : null;
+}
+
+function getBoundsSpanMeters(bounds: LatLngBounds): number {
+  return bounds.getNorthWest().distanceTo(bounds.getSouthEast());
 }
 
 export const RouteMap = React.forwardRef(function RouteMap(
@@ -177,28 +227,19 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
         // Zoom listener: toggle clusters + start/end markers
         map.on('zoomend', () => {
-          updateClusterVisibility(map);
+          if (map.getZoom() < CLUSTER_DETAIL_ZOOM) {
+            renderClusters(map, L, activitiesRef.current);
+          } else {
+            updateClusterVisibility(map);
+          }
           updateStartEndVisibility(map);
         });
 
-        // Try geolocation first; fallback to activity bounds
-        const doRender = () => {
+        // Prefer the athlete's route data for the heatmap viewport; browser geolocation can point elsewhere.
+        map.setView([31.2304, 121.4737], 10, { animate: false });
+        requestAnimationFrame(() => {
           if (!destroyed) renderAll(map, L, sidebarOpenRef.current);
-        };
-        if (typeof navigator !== 'undefined' && navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              doRender();
-              if (!destroyed) {
-                map.setView([pos.coords.latitude, pos.coords.longitude], 15);
-              }
-            },
-            () => { doRender(); },
-            { timeout: 5000, maximumAge: 600000, enableHighAccuracy: false }
-          );
-        } else {
-          doRender();
-        }
+        });
       } catch (err) {
         console.error('RouteMap init error:', err);
       }
@@ -259,17 +300,44 @@ export const RouteMap = React.forwardRef(function RouteMap(
     })();
   }, [segments]);
 
-  function getPadding(): [number, number] {
+  function getFitPadding(): { paddingTopLeft: [number, number]; paddingBottomRight: [number, number] } {
     const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
-    if (!isDesktop) return [40, 40];
-    return sidebarOpenRef.current ? [40, 220] : [40, 40];
+    if (!isDesktop) {
+      return {
+        paddingTopLeft: [24, 72],
+        paddingBottomRight: [24, 84],
+      };
+    }
+    return {
+      paddingTopLeft: [40, 68],
+      paddingBottomRight: [sidebarOpenRef.current ? 260 : 48, 68],
+    };
+  }
+
+  function fitBoundsToView(
+    map: LeafletMap,
+    bounds: LatLngBounds,
+    options: { maxZoom?: number; minZoom?: number; animate?: boolean } = {}
+  ) {
+    const { maxZoom = 16, minZoom, animate = false } = options;
+    try {
+      map.invalidateSize({ animate: false, pan: false });
+    } catch {}
+    map.fitBounds(bounds, {
+      ...getFitPadding(),
+      maxZoom,
+      animate,
+    });
+    if (minZoom !== undefined && map.getZoom() < minZoom) {
+      map.setZoom(minZoom, { animate });
+    }
   }
 
   function updateClusterVisibility(map: LeafletMap) {
     try {
       const zoom = map.getZoom();
       if (clusterLayerRef.current) {
-        if (zoom >= 13) {
+        if (zoom >= CLUSTER_DETAIL_ZOOM) {
           map.removeLayer(clusterLayerRef.current);
         } else if (!map.hasLayer(clusterLayerRef.current)) {
           map.addLayer(clusterLayerRef.current);
@@ -288,13 +356,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
       // 1. Set view first so layers are projected against correct viewport
       const bounds = computeSmartBounds(currentActs, L);
       if (bounds) {
-        const pad = getPadding();
         try {
-          map.fitBounds(bounds, {
-            padding: [pad[0], pad[1]],
-            maxZoom: 16,
-          });
-          if (map.getZoom() < 12) map.setZoom(12);
+          fitBoundsToView(map, bounds, { maxZoom: 16, minZoom: 12, animate: false });
         } catch (e) {
           console.warn('fitBounds failed, falling back to setView', e);
           const center = bounds.getCenter?.();
@@ -318,7 +381,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
       try { map.removeLayer(clusterLayerRef.current); } catch {}
       clusterLayerRef.current = null;
     }
-    const clusters = buildClusters(acts);
+    const clusters = buildClusters(acts, map, L);
     if (clusters.length === 0) return;
     const group = L.layerGroup().addTo(map);
     clusterLayerRef.current = group;
@@ -327,17 +390,41 @@ export const RouteMap = React.forwardRef(function RouteMap(
       const size = Math.max(32, Math.min(52, 18 + c.count * 1.2));
       const half = size / 2;
 
-      // Visible label marker (no events, just display)
+      const zoomToCluster = (e: LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        clusterClickLock.current = true;
+        const targetZoom = Math.min(16, Math.max(map.getZoom() + 1, 13));
+        const anchorBounds = computeClusterAnchorBounds(c, L);
+        const center = anchorBounds?.isValid()
+          ? anchorBounds.getCenter()
+          : L.latLng(c.lat, c.lng);
+
+        if (Number.isFinite(center.lat) && Number.isFinite(center.lng)) {
+          const span = anchorBounds ? getBoundsSpanMeters(anchorBounds) : 0;
+          if (anchorBounds && span > 1200 && span < 60000) {
+            try {
+              fitBoundsToView(map, anchorBounds, { maxZoom: targetZoom, minZoom: Math.min(targetZoom, 13), animate: true });
+            } catch {
+              map.flyTo(center, targetZoom, { duration: 0.35 });
+            }
+          } else {
+            map.flyTo(center, targetZoom, { duration: 0.35 });
+          }
+        }
+        window.setTimeout(() => { clusterClickLock.current = false; }, 250);
+      };
+
+      // Visible label marker is interactive so tapping the number itself works on mobile.
       const icon = L.divIcon({
         className: 'heatmap-cluster-marker',
         html: `<div style="
           width:${size}px;height:${size}px;border-radius:50%;
-          background:rgba(59,130,246,0.92);
+          background:linear-gradient(135deg, rgba(83,141,180,0.96), rgba(110,166,199,0.94));
           color:#fff;display:flex;align-items:center;justify-content:center;
           font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
           font-size:${Math.max(10, Math.min(15, 10 + c.count * 0.08))}px;
-          font-weight:bold;border:2px solid #fff;
-          box-shadow:0 2px 10px rgba(0,0,0,0.35);
+          font-weight:bold;border:2px solid rgba(255,255,255,0.92);
+          box-shadow:0 5px 14px rgba(46,75,96,0.22), inset 0 1px 0 rgba(255,255,255,0.26);
           cursor:pointer;user-select:none;
           outline:none;-webkit-tap-highlight-color:transparent;
         ">${c.count}</div>`,
@@ -345,48 +432,33 @@ export const RouteMap = React.forwardRef(function RouteMap(
         iconAnchor: [half, half],
       });
 
-      L.marker([c.lat, c.lng], {
+      const marker = L.marker([c.lat, c.lng], {
         icon,
         zIndexOffset: 2000,
-        interactive: false,
+        interactive: true,
+        keyboard: false,
       }).addTo(group);
+      marker.on('click', zoomToCluster);
 
-      // Invisible circleMarker as reliable hit area (SVG, native Leaflet events)
+      // Keep a larger transparent hit area around the marker for imprecise finger taps.
       const hitRadius = (size / 2) + 12;
       const hitLayer = L.circleMarker([c.lat, c.lng], {
         radius: hitRadius,
-        fillColor: '#3b82f6',
+        fillColor: '#6aa5c8',
         fillOpacity: 0.01,
         stroke: false,
         interactive: true,
       }).addTo(group);
-
-      hitLayer.on('click', (e: LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(e);
-        clusterClickLock.current = true;
-        const clusterActs = acts.filter(a => c.activityIds.includes(a.id));
-        const b = computeSmartBounds(clusterActs, L);
-        if (b) {
-          const span = b.getNorthWest().distanceTo(b.getSouthEast());
-          if (span < 50000) {
-            map.fitBounds(b, { padding: [60, 60], maxZoom: 16 });
-          } else {
-            map.setView(b.getCenter(), 14);
-          }
-        }
-        setTimeout(() => { clusterClickLock.current = false; }, 150);
-      });
+      hitLayer.on('click', zoomToCluster);
     });
 
     updateClusterVisibility(map);
   }
 
-  const HIGHLIGHT_COLOR = '#facc15';
-
   function updateStartEndVisibility(map: LeafletMap) {
     try {
       const zoom = map.getZoom();
-      const show = zoom >= 13;
+      const show = zoom >= CLUSTER_DETAIL_ZOOM;
       const group = startEndGroupRef.current;
       if (!group) return;
       if (show) {
@@ -415,9 +487,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
       if (pts.length < 2) return;
       const latLngs = pts.map((p: [number, number]) => L.latLng(p[0], p[1]));
       L.polyline(latLngs, {
-        color: '#f97316',
-        weight: 4,
-        opacity: 1,
+        color: '#b56f40',
+        weight: 3.2,
+        opacity: 0.86,
         dashArray: '6, 4',
         lineJoin: 'round',
         className: 'heatmap-segment-line',
@@ -430,10 +502,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
         className: 'heatmap-segment-label',
         html: `<div style="
           font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-          font-size:9px;font-weight:bold;color:#f97316;
-          background:rgba(255,255,255,0.9);padding:1px 4px;
+          font-size:9px;font-weight:bold;color:#9a5d35;
+          background:rgba(255,255,255,0.86);padding:1px 4px;
           border-radius:2px;white-space:nowrap;pointer-events:none;
-          box-shadow:0 1px 3px rgba(0,0,0,0.2);
+          box-shadow:0 1px 4px rgba(54,45,34,0.16);
         ">${escapeHtml(seg.name)}</div>`,
         iconSize: [120, 14],
         iconAnchor: [60, 7],
@@ -482,15 +554,15 @@ export const RouteMap = React.forwardRef(function RouteMap(
           if (polyLayer.getTooltip?.()) polyLayer.unbindTooltip();
           polyLayer.setStyle({
             color: isSelected ? HIGHLIGHT_COLOR : activity.color,
-            weight: isSelected ? 5 : 2.5,
-            opacity: isDimmed ? 0.25 : isSelected ? 1 : 0.55,
+            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
+            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
           });
           if (isSelected) polyLayer.bringToFront();
         } else {
           polyLayer = L.polyline(latLngs, {
             color: isSelected ? HIGHLIGHT_COLOR : activity.color,
-            weight: isSelected ? 5 : 2.5,
-            opacity: isDimmed ? 0.25 : isSelected ? 1 : 0.55,
+            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
+            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
             lineJoin: 'round',
             className: 'heatmap-polyline',
           }).addTo(map);
@@ -508,10 +580,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
           const endPt = points[points.length - 1];
           if (Number.isFinite(startPt[0]) && Number.isFinite(startPt[1]) && Number.isFinite(endPt[0]) && Number.isFinite(endPt[1])) {
             const startMarker = L.circleMarker(L.latLng(startPt[0], startPt[1]), {
-              radius: 3, fillColor: '#22c55e', fillOpacity: 0.9, color: '#fff', weight: 1.5, interactive: false,
+              radius: 2.8, fillColor: '#5d927c', fillOpacity: 0.82, color: '#fff', weight: 1.3, interactive: false,
             });
             const endMarker = L.circleMarker(L.latLng(endPt[0], endPt[1]), {
-              radius: 3, fillColor: '#ef4444', fillOpacity: 0.9, color: '#fff', weight: 1.5, interactive: false,
+              radius: 2.8, fillColor: '#b16578', fillOpacity: 0.82, color: '#fff', weight: 1.3, interactive: false,
             });
             seMarkers = { start: startMarker, end: endMarker };
           }
@@ -542,9 +614,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
           const isSelected = currentSelected === id;
           const isDimmed = currentSelected !== null && !isSelected;
           layer.setStyle({
-            color: isSelected ? HIGHLIGHT_COLOR : (activitiesRef.current.find(a => a.id === id)?.color || '#3b82f6'),
-            weight: isSelected ? 5 : 2.5,
-            opacity: isDimmed ? 0.25 : isSelected ? 1 : 0.55,
+            color: isSelected ? HIGHLIGHT_COLOR : (activitiesRef.current.find(a => a.id === id)?.color || '#6aa5c8'),
+            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
+            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
           });
           if (isSelected) layer.bringToFront();
         } catch (e) {
@@ -570,13 +642,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
         const validPts = pts.filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
         if (validPts.length < 2) return;
         const b = L.latLngBounds(validPts.map(p => L.latLng(p[0], p[1])));
-        const pad = getPadding();
         try {
-          map.fitBounds(b, {
-            paddingTopLeft: [pad[0], pad[0]],
-            paddingBottomRight: [pad[1], pad[0]],
-            maxZoom: 16,
-          });
+          fitBoundsToView(map, b, { maxZoom: 16, animate: true });
         } catch (e) {
           console.warn('fitBounds failed for activity', activityId, e);
         }
@@ -589,7 +656,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     },
   }));
 
-  return <div ref={containerRef} className="w-full h-full" style={{ minHeight: '100%' }} />;
+  return <div ref={containerRef} className="heatmap-map w-full h-full" style={{ minHeight: '100%' }} />;
 });
 
 function escapeHtml(str: string): string {

@@ -127,7 +127,6 @@ body {
 }
 
 /* Heatmap cluster marker: remove focus outline / border artifacts */
-/* Also pointer-events:none so clicks pass through to the underlying circleMarker hit-area */
 .heatmap-cluster-marker,
 .heatmap-cluster-marker:focus,
 .heatmap-cluster-marker:active {
@@ -135,7 +134,12 @@ body {
   border: none !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
+}
+
+.heatmap-cluster-marker > div {
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 
 /* Restore Leaflet internal pane stacking so markers sit above polylines/tooltips */
@@ -146,9 +150,9 @@ body {
   z-index: auto !important;
   pointer-events: auto !important;
 }
-/* Cluster label markers must NOT intercept clicks — let them pass to circleMarker hit-areas below */
+/* Cluster label markers are primary tap targets; circleMarker hit-areas remain as a fallback. */
 .leaflet-marker-icon.heatmap-cluster-marker {
-  pointer-events: none !important;
+  pointer-events: auto !important;
 }
 .leaflet-overlay-pane {
   z-index: 400 !important;
@@ -160,6 +164,22 @@ body {
 /* Map container isolation */
 .map-container {
   isolation: isolate;
+}
+
+.heatmap-map {
+  background: #eef3f4;
+}
+
+.heatmap-map .leaflet-tile {
+  filter: saturate(0.72) contrast(0.94) brightness(1.04);
+}
+
+.heatmap-map .heatmap-polyline {
+  stroke-linecap: round;
+}
+
+.heatmap-map .heatmap-segment-line {
+  stroke-linecap: round;
 }
 
 /* Animation utilities */

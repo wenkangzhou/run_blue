@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { persist, StorageValue } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { StravaActivity } from '@/types';
+import { createIndexedDBStorage } from '@/lib/indexedDbStorage';
 
 /**
- * Strip heavy fields from activity before persisting to localStorage.
+ * Strip heavy fields from activity before persisting to IndexedDB.
  * Strava list API returns huge objects; full polyline + metadata can exceed
- * browser localStorage quota (~5-10MB) after a few hundred activities.
+ * practical client storage budgets after a few thousand activities.
  */
 function toLightActivity(a: StravaActivity): StravaActivity {
   return {
@@ -39,58 +40,6 @@ function toLightActivity(a: StravaActivity): StravaActivity {
     workout_type: a.workout_type,
   } as StravaActivity;
 }
-
-/** Safe localStorage wrapper that catches QuotaExceededError. */
-const safeLocalStorage = {
-  getItem: (name: string) => {
-    if (typeof window === 'undefined') return null;
-    const str = localStorage.getItem(name);
-    return str ? JSON.parse(str) : null;
-  },
-  setItem: (name: string, value: StorageValue<Record<string, unknown>>) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(name, JSON.stringify(value));
-    } catch (e) {
-      if (
-        e instanceof DOMException &&
-        (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
-      ) {
-        // Attempt to halve activities and retry
-        const activities = value?.state?.activities;
-        if (Array.isArray(activities) && activities.length > 50) {
-          const halved = Math.floor(activities.length / 2);
-          const reduced = {
-            ...value,
-            state: {
-              ...value.state,
-              activities: activities.slice(0, halved),
-            },
-          };
-          try {
-            localStorage.setItem(name, JSON.stringify(reduced));
-            console.warn(
-              `[Persist] Quota exceeded for "${name}". Reduced activities from ${activities.length} to ${halved}.`
-            );
-            return;
-          } catch {
-            // Still failing after halving — fall through to error
-          }
-        }
-        console.error(
-          `[Persist] localStorage quota exceeded for "${name}". ` +
-            `Try clearing site data or reducing cached activities.`
-        );
-      } else {
-        throw e;
-      }
-    }
-  },
-  removeItem: (name: string) => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(name);
-  },
-};
 
 interface ActivitiesState {
   activities: StravaActivity[];
@@ -135,7 +84,27 @@ interface ActivitiesState {
   clearActivities: () => void;
 }
 
+type PersistedActivitiesState = Pick<
+  ActivitiesState,
+  'activities' | 'totalLoaded' | 'lastFetchedAt' | 'loadedPages' | 'latestActivityId'
+>;
+
 const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
+
+function normalizePersistedActivitiesState(persistedState: unknown): PersistedActivitiesState {
+  const state = persistedState as Partial<PersistedActivitiesState> | undefined;
+  const activities = Array.isArray(state?.activities)
+    ? state.activities.map(toLightActivity)
+    : [];
+
+  return {
+    activities,
+    totalLoaded: activities.length,
+    lastFetchedAt: state?.lastFetchedAt ?? null,
+    loadedPages: state?.loadedPages ?? Math.ceil(activities.length / 200),
+    latestActivityId: state?.latestActivityId ?? activities[0]?.id ?? null,
+  };
+}
 
 export const useActivitiesStore = create<ActivitiesState>()(
   persist(
@@ -227,23 +196,30 @@ export const useActivitiesStore = create<ActivitiesState>()(
     }),
     {
       name: 'activities-storage',
-      storage: safeLocalStorage,
+      version: 2,
+      storage: createIndexedDBStorage<PersistedActivitiesState>({
+        dbName: 'run_blue',
+        storeName: 'zustand',
+        migrateFromLocalStorage: true,
+      }),
       partialize: (state) => {
-        const activities = state.activities.slice(0, 250).map(toLightActivity);
-        // Sync loadedPages with the truncated activity count so it stays accurate
-        // after persist reload (prevents gear page from jumping to a wrong page).
-        const syncedLoadedPages = Math.min(
-          state.loadedPages,
-          Math.max(1, Math.ceil(activities.length / 200))
-        );
+        const activities = state.activities.map(toLightActivity);
+        // Sync loadedPages with the persisted activity count so it stays accurate
+        // after reload (prevents gear page from jumping to a wrong page).
+        const syncedLoadedPages = Math.max(state.loadedPages, Math.ceil(activities.length / 200));
         return {
           activities,
-          totalLoaded: Math.min(state.totalLoaded, 250),
+          totalLoaded: activities.length,
           lastFetchedAt: state.lastFetchedAt,
           loadedPages: syncedLoadedPages,
           latestActivityId: state.latestActivityId,
         };
       },
+      migrate: (persistedState) => normalizePersistedActivitiesState(persistedState),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...normalizePersistedActivitiesState(persistedState),
+      }),
     }
   )
 );

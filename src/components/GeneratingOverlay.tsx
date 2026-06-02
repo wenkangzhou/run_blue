@@ -134,7 +134,7 @@ export function GeneratingOverlay({ isOpen, onCancel }: GeneratingOverlayProps) 
 
         {/* Title */}
         <h2 className="font-pixel text-lg font-bold text-white text-center mb-6">
-          {isZh ? 'AI 正在制定训练计划' : 'AI is crafting your plan'}
+          {isZh ? '正在编排训练计划' : 'Building your training plan'}
         </h2>
 
         {/* Progress bar */}

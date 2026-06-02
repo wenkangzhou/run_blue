@@ -2,7 +2,7 @@
 
 > **基于 Strava 的跑步数据，按你的习惯重新呈现。**
 >
-> Strava 订阅才能看的高级分析、AI 训练建议、周期化课表——这里全部免费。
+> Strava 订阅才能看的高级分析、AI 训练建议、算法周期化课表——这里全部免费。
 
 ---
 
@@ -83,7 +83,7 @@
 
 配速自动基于你的 PB 计算，每一公里都有明确目标。
 
-![AI 训练计划](./public/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png)
+![算法训练计划](./public/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png)
 
 ---
 
@@ -130,7 +130,8 @@
 - **图表**: recharts
 - **AI**: Kimi API (Moonshot) — 仅用于活动分析，训练计划已切换为算法模板
 - **PWA**: Serwist (Service Worker + 离线缓存)
-- **状态**: Zustand + localStorage 持久化
+- **状态**: Zustand + IndexedDB / localStorage 持久化
+- **云同步**: Supabase server-only 预留，当前未接入主流程
 - **国际化**: i18next
 - **主题**: next-themes
 
@@ -238,6 +239,6 @@ vercel --prod
 
 **跑蓝的初心很简单：基于 Strava 的跑步数据，按跑者自己的习惯重新呈现。**
 
-Strava 擅长记录，但它不擅长"读懂"你的训练。跑蓝用 AI 补上这块：分析你的心率区间、配速模式、训练负荷，识别跑崩风险、给出恢复建议、生成周期化训练课表——所有这些，不需要 Strava 付费订阅。
+Strava 擅长记录，但它不擅长"读懂"你的训练。跑蓝用 AI 补上活动分析：分析心率区间、配速模式、训练负荷，识别跑崩风险、给出恢复建议；训练计划则用稳定算法模板生成周期化课表——所有这些，不需要 Strava 付费订阅。
 
 开源协议：MIT

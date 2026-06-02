@@ -3,6 +3,14 @@ import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { User } from '@/types';
 
+/**
+ * Reserved server-only Supabase integration.
+ *
+ * This module is intentionally not wired into auth/profile/plan flows yet.
+ * It stores Strava tokens with the service-role key when explicitly imported
+ * from server code, so never expose these env vars with a NEXT_PUBLIC_ prefix.
+ */
+
 type UserRow = Record<string, unknown> & {
   id: string;
   strava_id: number;

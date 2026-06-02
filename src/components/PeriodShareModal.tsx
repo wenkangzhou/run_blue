@@ -8,6 +8,7 @@ import { PixelButton, PixelCard } from '@/components/ui';
 import { drawMultiRouteToCanvas, downloadPNG } from '@/lib/multiRouteCanvas';
 import type { StravaActivity } from '@/types';
 import { X, Download, CheckCircle2, Calendar } from 'lucide-react';
+import { formatLocalDateKey, getActivityDate, getActivityTimestamp } from '@/lib/dates';
 
 type PeriodType = 'week' | 'month' | 'quarter' | 'halfYear';
 
@@ -54,10 +55,10 @@ export function PeriodShareModal({
     const runs = activities
       .filter((a) => {
         if (a.type !== 'Run') return false;
-        const date = new Date(a.start_date_local);
+        const date = getActivityDate(a);
         return date >= cutoff;
       })
-      .sort((a, b) => new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime())
+      .sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a))
       .slice(0, limits[period]);
 
     return runs;
@@ -99,7 +100,7 @@ export function PeriodShareModal({
       halfYear: '100days',
     };
     const prefix = prefixMap[period];
-    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const dateStr = formatLocalDateKey(new Date()).replace(/-/g, '');
     return `runblue_${prefix}_${dateStr}.png`;
   }, [period]);
 

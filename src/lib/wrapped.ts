@@ -1,4 +1,11 @@
 import type { StravaActivity } from '@/types';
+import {
+  getActivityDateKey,
+  getActivityDateParts,
+  getActivityHour,
+  getActivityMonth,
+  getActivityYear,
+} from './dates';
 
 export type WrappedPeriod = 'year' | 'quarter';
 
@@ -29,13 +36,13 @@ export interface WrappedData {
   longestRouteName: string;
 }
 
-function formatDate(iso: string, isZh: boolean): string {
-  const d = new Date(iso);
+function formatActivityDate(activity: StravaActivity, isZh: boolean): string {
+  const d = getActivityDateParts(activity);
   if (isZh) {
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
+    return `${d.month}月${d.day}日`;
   }
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${monthNames[d.getMonth()]} ${d.getDate()}`;
+  return `${monthNames[d.month - 1]} ${d.day}`;
 }
 
 function secToPaceSec(distanceM: number, movingTimeSec: number): number {
@@ -144,10 +151,9 @@ export function calculateWrapped(
 
   const runs = activities.filter((a) => {
     if (a.type !== 'Run') return false;
-    const date = new Date(a.start_date_local);
-    if (date.getFullYear() !== year) return false;
+    if (getActivityYear(a) !== year) return false;
     if (period === 'quarter' && quarter) {
-      const m = date.getMonth() + 1;
+      const m = getActivityMonth(a);
       const q = Math.ceil(m / 3);
       if (q !== quarter) return false;
     }
@@ -178,7 +184,7 @@ export function calculateWrapped(
 
     if (distKm > longestRun) {
       longestRun = distKm;
-      longestRunDate = formatDate(run.start_date_local, isZh);
+      longestRunDate = formatActivityDate(run, isZh);
       longestRouteName = run.name;
     }
 
@@ -187,21 +193,20 @@ export function calculateWrapped(
       paces.push(pace);
       if (pace < bestPace) {
         bestPace = pace;
-        bestPaceDate = formatDate(run.start_date_local, isZh);
+        bestPaceDate = formatActivityDate(run, isZh);
       }
     }
 
-    const date = new Date(run.start_date_local);
-    const month = date.getMonth() + 1;
+    const month = getActivityMonth(run);
     monthMap.set(month, (monthMap.get(month) || 0) + distKm);
 
-    const hour = date.getHours();
+    const hour = getActivityHour(run);
     if (hour >= 5 && hour < 11) timeOfDay.morning += distKm;
     else if (hour >= 11 && hour < 17) timeOfDay.afternoon += distKm;
     else if (hour >= 17 && hour < 22) timeOfDay.evening += distKm;
     else timeOfDay.night += distKm;
 
-    const dateKey = run.start_date_local.split('T')[0];
+    const dateKey = getActivityDateKey(run);
     dateSet.add(dateKey);
 
     // Favorite route clustering by start_latlng (1 decimal ~ 11km radius)
@@ -224,9 +229,7 @@ export function calculateWrapped(
   let longestStreak = 1;
   let currentStreak = 1;
   for (let i = 1; i < sortedDates.length; i++) {
-    const prev = new Date(sortedDates[i - 1]);
-    const curr = new Date(sortedDates[i]);
-    const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+    const diff = dateKeyToDayNumber(sortedDates[i]) - dateKeyToDayNumber(sortedDates[i - 1]);
     if (diff === 1) {
       currentStreak++;
       longestStreak = Math.max(longestStreak, currentStreak);
@@ -292,8 +295,13 @@ export function getAvailableWrappedYears(activities: StravaActivity[]): number[]
   const years = new Set<number>();
   activities.forEach((a) => {
     if (a.type === 'Run') {
-      years.add(new Date(a.start_date_local).getFullYear());
+      years.add(getActivityYear(a));
     }
   });
   return Array.from(years).sort((a, b) => b - a);
+}
+
+function dateKeyToDayNumber(key: string): number {
+  const [year, month, day] = key.split('-').map(Number);
+  return Date.UTC(year, month - 1, day) / 86400000;
 }

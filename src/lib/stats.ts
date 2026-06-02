@@ -1,5 +1,12 @@
 import { StravaActivity } from '@/types';
-import { getActivityDate } from './dates';
+import {
+  formatLocalDateKey,
+  getActivityDate,
+  getActivityYear,
+  getISOWeek,
+  getISOWeekNumber,
+  getISOWeekStart,
+} from './dates';
 
 export type PeriodType = 'week' | 'month' | 'year' | 'all';
 export type MetricType = 'distance' | 'duration' | 'count' | 'calories' | 'elevation' | 'pace';
@@ -71,17 +78,9 @@ function formatMetricDisplay(value: number, metric: MetricType): string {
   return unit ? `${num} ${unit}` : num;
 }
 
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((Number(d) - Number(yearStart)) / 86400000 + 1) / 7);
-}
-
 function getMaxWeekOfYear(year: number): number {
   const dec28 = new Date(year, 11, 28);
-  return getWeekNumber(dec28);
+  return getISOWeekNumber(dec28);
 }
 
 function isDateInCurrentPeriod(
@@ -91,9 +90,9 @@ function isDateInCurrentPeriod(
   const now = new Date();
   switch (periodType) {
     case 'week': {
-      const week = getWeekNumber(date);
-      const nowWeek = getWeekNumber(now);
-      return date.getFullYear() === now.getFullYear() && week === nowWeek;
+      const week = getISOWeek(date);
+      const nowWeek = getISOWeek(now);
+      return week.year === nowWeek.year && week.week === nowWeek.week;
     }
     case 'month': {
       return (
@@ -151,8 +150,7 @@ export function aggregateActivities(
 
       runs.forEach((a) => {
         const date = getActivityDate(a);
-        const year = date.getFullYear();
-        const week = getWeekNumber(date);
+        const { year, week } = getISOWeek(date);
         if (year === selectedYear && weekMap.has(week)) {
           weekMap.get(week)!.push(a);
         }
@@ -162,9 +160,7 @@ export function aggregateActivities(
         const value = metric === 'pace'
           ? (acts.reduce((sum, a) => sum + a.moving_time, 0) / (acts.reduce((sum, a) => sum + a.distance, 0) / 1000) || 0)
           : acts.reduce((sum, a) => sum + getMetricValue(a, metric), 0);
-        // Find a representative date in this week for isCurrent check
-        const weekStart = new Date(selectedYear, 0, 1);
-        weekStart.setDate(weekStart.getDate() + (week - 1) * 7);
+        const weekStart = getISOWeekStart(selectedYear, week);
         return {
           key: `${selectedYear}-W${week}`,
           label: locale.startsWith('zh') ? `${week}周` : `W${week}`,
@@ -210,8 +206,7 @@ export function aggregateActivities(
       const yearMap = new Map<number, StravaActivity[]>();
 
       runs.forEach((a) => {
-        const date = getActivityDate(a);
-        const year = date.getFullYear();
+        const year = getActivityYear(a);
         if (!yearMap.has(year)) yearMap.set(year, []);
         yearMap.get(year)!.push(a);
       });
@@ -272,7 +267,7 @@ export function getAvailableYears(activities: StravaActivity[]): number[] {
   activities
     .filter((a) => a.type === 'Run')
     .forEach((a) => {
-      years.add(getActivityDate(a).getFullYear());
+      years.add(getActivityYear(a));
     });
   return Array.from(years).sort();
 }
@@ -377,8 +372,8 @@ export function getDailyAggregates(
 
   runs.forEach((a) => {
     const date = getActivityDate(a);
-    if (date.getFullYear() !== year) return;
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    if (getActivityYear(a) !== year) return;
+    const key = formatLocalDateKey(date);
     const entry = map.get(key) || { value: 0, activities: [] };
     entry.activities.push(a);
     if (metric === 'pace') {
@@ -397,7 +392,7 @@ export function getDailyAggregates(
   const daysInYear = isLeap ? 366 : 365;
   for (let d = 0; d < daysInYear; d++) {
     const date = new Date(year, 0, 1 + d);
-    const key = `${year}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const key = formatLocalDateKey(date);
     const entry = map.get(key);
     result.push({
       date: key,

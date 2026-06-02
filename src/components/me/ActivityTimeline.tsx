@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain } from 'lucide-react';
+import { formatLocalDateKey, getActivityDate, getActivityYear } from '@/lib/dates';
 
 interface ActivityTimelineProps {
   activities: StravaActivity[];
@@ -17,7 +18,7 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
   const grouped = useMemo(() => {
     const map = new Map<number, StravaActivity[]>();
     activities.forEach((a) => {
-      const year = new Date(a.start_date).getFullYear();
+      const year = getActivityYear(a);
       if (!map.has(year)) map.set(year, []);
       map.get(year)!.push(a);
     });
@@ -108,7 +109,7 @@ function YearGroup({
 }
 
 function ActivityCard({ act }: { act: StravaActivity }) {
-  const date = new Date(act.start_date);
+  const date = getActivityDate(act);
   const pace = act.distance > 0 ? act.moving_time / (act.distance / 1000) : 0;
   const min = Math.floor(pace / 60);
   const sec = Math.floor(pace % 60);
@@ -121,7 +122,7 @@ function ActivityCard({ act }: { act: StravaActivity }) {
             {act.name}
           </div>
           <div className="text-[10px] text-zinc-600 mt-0.5">
-            {date.getFullYear()}-{String(date.getMonth() + 1).padStart(2, '0')}-{String(date.getDate()).padStart(2, '0')}
+            {formatLocalDateKey(date)}
           </div>
         </div>
       </div>

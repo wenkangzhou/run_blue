@@ -7,7 +7,7 @@ import { formatDistance, formatDuration } from '@/lib/strava';
 import { Clock, Route, Calendar, ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { getActivityDate } from '@/lib/dates';
+import { addLocalDays, getActivityDate, getISOWeek, getLocalWeekStart } from '@/lib/dates';
 
 type GroupBy = 'week' | 'month' | 'year';
 
@@ -129,14 +129,12 @@ function groupActivities(
     let endDate: Date;
 
     if (groupBy === 'week') {
-      const weekNum = getWeekNumber(date);
-      const year = date.getFullYear();
+      const { year, week: weekNum } = getISOWeek(date);
       key = `${year}-W${weekNum}`;
       
       // Calculate week start and end
-      const weekStart = getWeekStart(date);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
+      const weekStart = getLocalWeekStart(date);
+      const weekEnd = addLocalDays(weekStart, 6);
       
       startDate = weekStart;
       endDate = weekEnd;
@@ -180,21 +178,6 @@ function groupActivities(
   return Array.from(groups.values()).sort(
     (a, b) => b.startDate.getTime() - a.startDate.getTime()
   );
-}
-
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((Number(d) - Number(yearStart)) / 86400000 + 1) / 7);
-}
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
 }
 
 function formatWeekLabel(start: Date, end: Date): string {
