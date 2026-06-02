@@ -22,6 +22,7 @@ writeFileSync(compiledPath, compiled);
 
 const {
   areActivitiesSameRoute,
+  createActivityFromRouteReference,
   findActivitiesByRouteKey,
   findRouteActivities,
   getRouteKey,
@@ -120,6 +121,57 @@ test('matches the same route in reverse direction', () => {
   );
 });
 
+test('matches repeated track loops with small GPS drift', () => {
+  const trackLoop = [
+    [31.2000, 121.5000],
+    [31.2004, 121.5006],
+    [31.2000, 121.5012],
+    [31.1996, 121.5006],
+    [31.2000, 121.5000],
+    [31.2004, 121.5006],
+    [31.2000, 121.5012],
+    [31.1996, 121.5006],
+    [31.2000, 121.5000],
+  ];
+  const driftedTrackLoop = trackLoop.map(([lat, lng], index) => [
+    lat + (index % 2 === 0 ? 0.00002 : -0.00001),
+    lng + (index % 2 === 0 ? -0.00001 : 0.00002),
+  ]);
+
+  assert.equal(
+    areActivitiesSameRoute(
+      makeActivity(1, trackLoop, { distance: 5000, total_elevation_gain: 5 }),
+      makeActivity(2, driftedTrackLoop, { distance: 5020, total_elevation_gain: 4 }),
+    ),
+    true,
+  );
+});
+
+test('rejects a track loop and a nearby street loop with the same start/end', () => {
+  const trackLoop = [
+    [31.2000, 121.5000],
+    [31.2004, 121.5006],
+    [31.2000, 121.5012],
+    [31.1996, 121.5006],
+    [31.2000, 121.5000],
+  ];
+  const streetLoop = [
+    [31.2000, 121.5000],
+    [31.2070, 121.5000],
+    [31.2070, 121.5070],
+    [31.2000, 121.5070],
+    [31.2000, 121.5000],
+  ];
+
+  assert.equal(
+    areActivitiesSameRoute(
+      makeActivity(1, trackLoop, { distance: 5000, total_elevation_gain: 5 }),
+      makeActivity(2, streetLoop, { distance: 5000, total_elevation_gain: 5 }),
+    ),
+    false,
+  );
+});
+
 test('rejects a nearby route with a different path shape', () => {
   const differentShape = [
     [31.2000, 121.5000],
@@ -159,4 +211,23 @@ test('route lookup helpers use strict keys or flexible reference matching', () =
   assert.deepEqual(findRouteActivities(target, all).map((a) => a.id), [2]);
   assert.deepEqual(findActivitiesByRouteKey(getRouteKey(target), all).map((a) => a.id), [1, 2]);
   assert.deepEqual(findActivitiesByRouteKey(getRouteKey(target), all, target).map((a) => a.id), [2]);
+});
+
+test('builds a route reference from saved polyline for historical rematching', () => {
+  const reference = createActivityFromRouteReference({
+    key: '31.2,121.5',
+    name: 'Saved Route',
+    referenceActivityId: 999,
+    polyline: encodePolyline(baseRoute),
+    distance: 5000,
+    elevationGain: 30,
+  });
+
+  assert.ok(reference);
+  assert.deepEqual(reference.start_latlng, baseRoute[0]);
+  assert.deepEqual(reference.end_latlng, baseRoute[baseRoute.length - 1]);
+  assert.equal(
+    areActivitiesSameRoute(reference, makeActivity(2, baseRoute)),
+    true,
+  );
 });

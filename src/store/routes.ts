@@ -1,37 +1,13 @@
 import { create } from 'zustand';
-import { persist, StorageValue } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { StravaActivity } from '@/types';
-import { getRouteKey, getDefaultRouteName, areActivitiesSameRoute } from '@/lib/routeClustering';
-
-/** Safe localStorage wrapper that catches QuotaExceededError. */
-const safeLocalStorage = {
-  getItem: (name: string) => {
-    if (typeof window === 'undefined') return null;
-    const str = localStorage.getItem(name);
-    return str ? JSON.parse(str) : null;
-  },
-  setItem: (name: string, value: StorageValue<Record<string, unknown>>) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(name, JSON.stringify(value));
-    } catch (e) {
-      if (
-        e instanceof DOMException &&
-        (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
-      ) {
-        console.error(
-          `[Persist] localStorage quota exceeded for "${name}".`
-        );
-      } else {
-        throw e;
-      }
-    }
-  },
-  removeItem: (name: string) => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(name);
-  },
-};
+import {
+  getRouteKey,
+  getDefaultRouteName,
+  areActivitiesSameRoute,
+  createActivityFromRouteReference,
+} from '@/lib/routeClustering';
+import { createIndexedDBStorage } from '@/lib/indexedDbStorage';
 
 export interface SavedRoute {
   key: string;
@@ -58,6 +34,15 @@ interface RoutesState {
   getSavedRoute: (key: string) => SavedRoute | undefined;
 }
 
+type PersistedRoutesState = Pick<RoutesState, 'savedRoutes'>;
+
+function normalizePersistedRoutesState(persistedState: unknown): PersistedRoutesState {
+  const state = persistedState as Partial<PersistedRoutesState> | undefined;
+  return {
+    savedRoutes: Array.isArray(state?.savedRoutes) ? state.savedRoutes : [],
+  };
+}
+
 export const useRoutesStore = create<RoutesState>()(
   persist(
     (set, get) => ({
@@ -77,7 +62,9 @@ export const useRoutesStore = create<RoutesState>()(
         const sameKeyRoutes = get().savedRoutes.filter((r) => r.key === key || r.key.startsWith(`${key}#`));
         if (sameKeyRoutes.length > 0) {
           const compatibleRoute = sameKeyRoutes.find((r) => {
-            const refActivity = allActivities.find((a) => a.id === r.referenceActivityId);
+            const refActivity =
+              allActivities.find((a) => a.id === r.referenceActivityId) ??
+              createActivityFromRouteReference(r);
             if (!refActivity) return false;
             return areActivitiesSameRoute(activity, refActivity);
           });
@@ -201,6 +188,9 @@ export const useRoutesStore = create<RoutesState>()(
               );
             }
             if (!referenceActivity) {
+              referenceActivity = createActivityFromRouteReference(route) ?? undefined;
+            }
+            if (!referenceActivity) {
               return route;
             }
 
@@ -243,9 +233,18 @@ export const useRoutesStore = create<RoutesState>()(
     }),
     {
       name: 'routes-storage',
-      storage: safeLocalStorage,
+      storage: createIndexedDBStorage<PersistedRoutesState>({
+        dbName: 'run_blue',
+        storeName: 'zustand',
+        migrateFromLocalStorage: true,
+      }),
       partialize: (state) => ({
         savedRoutes: state.savedRoutes,
+      }),
+      migrate: (persistedState) => normalizePersistedRoutesState(persistedState),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...normalizePersistedRoutesState(persistedState),
       }),
     }
   )

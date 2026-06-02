@@ -9,7 +9,8 @@ import { PixelButton, PixelCard } from '@/components/ui';
 import { drawWrappedToCanvas } from '@/lib/wrappedCanvas';
 import { calculateWrapped, getAvailableWrappedYears, type WrappedPeriod } from '@/lib/wrapped';
 import { downloadPNG } from '@/lib/multiRouteCanvas';
-import { getActivities } from '@/lib/strava';
+import { loadNextActivitiesPage } from '@/lib/activitySync';
+import { useActivitiesStore } from '@/store/activities';
 import type { StravaActivity } from '@/types';
 import { X, Download, CheckCircle2, Calendar, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
@@ -26,6 +27,8 @@ export function WrappedShareModal({
 }: WrappedShareModalProps) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const cachedActivities = useActivitiesStore((state) => state.activities);
+  const hasMoreCachedActivities = useActivitiesStore((state) => state.hasMore);
   const locale = i18n.language;
 
   const [period, setPeriod] = useState<WrappedPeriod>('year');
@@ -39,8 +42,11 @@ export function WrappedShareModal({
   const [historyError, setHistoryError] = useState(false);
 
   useEffect(() => {
-    setAllActivities(activities);
-  }, [activities]);
+    const merged = new Map<number, StravaActivity>();
+    cachedActivities.forEach((activity) => merged.set(activity.id, activity));
+    activities.forEach((activity) => merged.set(activity.id, activity));
+    setAllActivities(Array.from(merged.values()));
+  }, [activities, cachedActivities]);
 
   useEffect(() => {
     if (!isOpen || !user?.accessToken) return;
@@ -49,28 +55,13 @@ export function WrappedShareModal({
     const loadAll = async () => {
       setLoadingHistory(true);
       setHistoryError(false);
-      let page = 1;
       const maxPages = 10;
-      let merged = [...activities];
+      let pagesLoaded = 0;
       try {
-        while (!cancelled && page <= maxPages) {
-          const res = await getActivities(user.accessToken, page, 200);
-          if (res.length === 0) break;
-          const existingIds = new Set(merged.map((a) => a.id));
-          const newOnes = res.filter((a) => !existingIds.has(a.id));
-          // If no new activities and we got a full page, keep going one more time to be safe,
-          // but if we get two empty pages in a row, break.
-          if (newOnes.length === 0) {
-            if (res.length < 200) break;
-            // Safety: if full page but all duplicates, try next page once
-            const nextRes = await getActivities(user.accessToken, page + 1, 200);
-            const nextNew = nextRes.filter((a) => !existingIds.has(a.id));
-            if (nextNew.length === 0) break;
-          }
-          merged = [...merged, ...newOnes];
-          setAllActivities(merged);
-          page++;
-          if (res.length < 200) break;
+        while (!cancelled && useActivitiesStore.getState().hasMore && pagesLoaded < maxPages) {
+          await loadNextActivitiesPage(user.accessToken);
+          setAllActivities(useActivitiesStore.getState().activities);
+          pagesLoaded += 1;
         }
       } catch (e) {
         console.error('Failed to load all activities for wrapped:', e);
@@ -84,7 +75,7 @@ export function WrappedShareModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, user?.accessToken, activities]);
+  }, [isOpen, user?.accessToken, hasMoreCachedActivities]);
 
   // Allow year navigation freely within a reasonable range regardless of loaded history
   const { minYear, maxYear } = useMemo(() => {

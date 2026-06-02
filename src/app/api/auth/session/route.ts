@@ -14,12 +14,9 @@ interface SessionData {
     name: string;
     email: string;
     image: string | null;
-    accessToken: string;
-    refreshToken: string | undefined;
   };
   stravaId: number;
   accessToken: string;
-  refreshToken: string | undefined;
 }
 
 // In-memory cache to reduce Strava API calls (30s TTL)
@@ -86,12 +83,9 @@ export async function GET(request: NextRequest) {
           name: `${athlete.firstname} ${athlete.lastname}`,
           email: '',
           image: athlete.profile,
-          accessToken,
-          refreshToken,
         },
         stravaId: athlete.id,
         accessToken,
-        refreshToken,
       };
 
       // Update cache with new token
@@ -129,12 +123,9 @@ export async function GET(request: NextRequest) {
       name: `${athlete.firstname} ${athlete.lastname}`,
       email: '',
       image: athlete.profile,
-      accessToken,
-      refreshToken,
     },
     stravaId: athlete.id,
     accessToken,
-    refreshToken,
   };
 
   sessionCache.set(cacheKey, { data: sessionData, timestamp: Date.now() });

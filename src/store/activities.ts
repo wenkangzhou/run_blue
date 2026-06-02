@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { StravaActivity } from '@/types';
 import { createIndexedDBStorage } from '@/lib/indexedDbStorage';
+import { getActivityTimestamp } from '@/lib/dates';
 
 /**
  * Strip heavy fields from activity before persisting to IndexedDB.
@@ -41,6 +42,32 @@ function toLightActivity(a: StravaActivity): StravaActivity {
   } as StravaActivity;
 }
 
+function mergeActivity(existing: StravaActivity | undefined, incoming: StravaActivity): StravaActivity {
+  if (!existing) return incoming;
+  return {
+    ...existing,
+    ...incoming,
+    map: {
+      id: incoming.map?.id || existing.map?.id || '',
+      polyline: incoming.map?.polyline ?? existing.map?.polyline ?? null,
+      summary_polyline: incoming.map?.summary_polyline ?? existing.map?.summary_polyline ?? null,
+    },
+    gear_id: incoming.gear_id ?? existing.gear_id,
+    gear: incoming.gear ?? existing.gear,
+  };
+}
+
+function sortActivitiesNewestFirst(activities: StravaActivity[]): StravaActivity[] {
+  return [...activities].sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a));
+}
+
+function mergeActivitiesById(existing: StravaActivity[], incoming: StravaActivity[]): StravaActivity[] {
+  const map = new Map<number, StravaActivity>();
+  existing.forEach((activity) => map.set(activity.id, activity));
+  incoming.forEach((activity) => map.set(activity.id, mergeActivity(map.get(activity.id), activity)));
+  return sortActivitiesNewestFirst(Array.from(map.values()));
+}
+
 interface ActivitiesState {
   activities: StravaActivity[];
   selectedActivity: StravaActivity | null;
@@ -67,11 +94,19 @@ interface ActivitiesState {
     hasMore: boolean,
     lastFetchedAt: number
   ) => void;
+  mergeActivitiesBatch: (
+    activities: StravaActivity[],
+    loadedPages: number,
+    hasMore: boolean,
+    lastFetchedAt: number,
+    latestActivityId?: number | null
+  ) => void;
   prependActivitiesBatch: (
     activities: StravaActivity[],
     lastFetchedAt: number,
     latestActivityId?: number | null
   ) => void;
+  updateActivity: (activity: StravaActivity) => void;
   selectActivity: (activity: StravaActivity | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -118,7 +153,14 @@ export const useActivitiesStore = create<ActivitiesState>()(
       lastFetchedAt: null,
       loadedPages: 0, // 初始为0，表示还没加载任何页
       latestActivityId: null, // 初始无最新活动
-      setActivities: (activities) => set({ activities, totalLoaded: activities.length }),
+      setActivities: (activities) => {
+        const sorted = sortActivitiesNewestFirst(activities);
+        set({
+          activities: sorted,
+          totalLoaded: sorted.length,
+          latestActivityId: sorted[0]?.id ?? null,
+        });
+      },
       appendActivities: (activities) =>
         set((state) => {
           const existingIds = new Set(state.activities.map(a => a.id));
@@ -161,6 +203,19 @@ export const useActivitiesStore = create<ActivitiesState>()(
             latestActivityId: state.latestActivityId ?? newActivities[0]?.id ?? null,
           };
         }),
+      /** Merge recent pages into the cache without dropping older history. */
+      mergeActivitiesBatch: (activities, loadedPages, hasMore, lastFetchedAt, latestActivityId) =>
+        set((state) => {
+          const merged = mergeActivitiesById(state.activities, activities);
+          return {
+            activities: merged,
+            totalLoaded: merged.length,
+            loadedPages: Math.max(state.loadedPages, loadedPages),
+            hasMore: state.hasMore && hasMore,
+            lastFetchedAt,
+            latestActivityId: latestActivityId ?? merged[0]?.id ?? state.latestActivityId,
+          };
+        }),
       /** Batch prepend + meta update in a single persist write (saves quota). */
       prependActivitiesBatch: (activities, lastFetchedAt, latestActivityId) =>
         set((state) => {
@@ -171,6 +226,15 @@ export const useActivitiesStore = create<ActivitiesState>()(
             totalLoaded: state.totalLoaded + newActivities.length,
             lastFetchedAt,
             latestActivityId: latestActivityId ?? newActivities[0]?.id ?? state.latestActivityId,
+          };
+        }),
+      updateActivity: (activity) =>
+        set((state) => {
+          const merged = mergeActivitiesById(state.activities, [activity]);
+          return {
+            activities: merged,
+            totalLoaded: merged.length,
+            latestActivityId: merged[0]?.id ?? state.latestActivityId,
           };
         }),
       selectActivity: (activity) => set({ selectedActivity: activity }),

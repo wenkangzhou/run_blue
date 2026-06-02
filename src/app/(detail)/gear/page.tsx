@@ -6,15 +6,14 @@ import { useTranslation } from 'react-i18next';
 import { useActivitiesStore } from '@/store/activities';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity } from '@/types';
-import { getActivities } from '@/lib/strava';
 import {
-  getGearCache,
   mergeIntoGearCache,
   getGearCacheActivities,
   setGearCache,
   clearGearCache,
   LightGearActivity,
 } from '@/lib/gearCache';
+import { loadRemainingActivities } from '@/lib/activitySync';
 import {
   ChevronLeft,
   Footprints,
@@ -54,9 +53,6 @@ interface CachedActivityEntry {
 }
 
 const CACHE_PREFIX = 'run_blue_cache_activity_';
-const LOAD_DELAY_MS = 300; // delay between pages to avoid rate limiting
-const ACTIVITIES_PER_PAGE = 200;
-const HAS_MORE_THRESHOLD = 195;
 
 /** Scan localStorage for activity caches that contain gear data. */
 function scanActivityCaches(): StravaActivity[] {
@@ -139,21 +135,33 @@ export default function GearPage() {
   const { user } = useAuth();
   const activities = useActivitiesStore((s) => s.activities);
   const hasMore = useActivitiesStore((s) => s.hasMore);
-  const loadedPages = useActivitiesStore((s) => s.loadedPages);
 
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoadingAll, setIsLoadingAll] = React.useState(false);
   const [loadProgress, setLoadProgress] = React.useState<{ current: number } | null>(null);
+  const [gearCacheActivities, setGearCacheActivities] = React.useState<LightGearActivity[]>([]);
   const [resetCounter, setResetCounter] = React.useState(0); // force re-render after cache clear
+
+  React.useEffect(() => {
+    let cancelled = false;
+    getGearCacheActivities()
+      .then((cachedActivities) => {
+        if (!cancelled) setGearCacheActivities(cachedActivities);
+      })
+      .catch(() => {
+        if (!cancelled) setGearCacheActivities([]);
+      });
+    return () => { cancelled = true; };
+  }, [resetCounter]);
 
   // Merge all data sources: gear cache > activity caches > activities store
   const allActivities = React.useMemo((): UnifiedActivity[] => {
     const merged = new Map<number, UnifiedActivity>();
 
     // 1. Gear cache (lightweight, can hold 1000+ activities)
-    for (const a of getGearCacheActivities()) {
+    for (const a of gearCacheActivities) {
       merged.set(a.id, toUnified(a));
     }
 
@@ -175,7 +183,7 @@ export default function GearPage() {
 
     return Array.from(merged.values());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activities, resetCounter]);
+  }, [activities, gearCacheActivities, resetCounter]);
 
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -246,60 +254,22 @@ export default function GearPage() {
     setIsLoadingAll(true);
     setError(null);
 
-    // Determine starting page.
-    const gearCache = getGearCache();
-    let currentPage: number;
-    if (gearCache && gearCache.loadedPages > 0) {
-      currentPage = gearCache.loadedPages + 1;
-    } else if (loadedPages > 0) {
-      currentPage = loadedPages + 1;
-    } else if (activities.length > 0) {
-      currentPage = Math.ceil(activities.length / ACTIVITIES_PER_PAGE) + 1;
-    } else {
-      currentPage = 1;
-    }
-
-    // Sanity check: if loadedPages looks way off compared to actual activity count,
-    // start from page 1 to avoid skipping data due to stale cache.
-    const estimatedPages = Math.max(1, Math.ceil(activities.length / ACTIVITIES_PER_PAGE));
-    if (currentPage > estimatedPages + 2) {
-      console.warn(`[Gear] loadedPages (${currentPage - 1}) seems off for ${activities.length} activities. Starting from page 1.`);
-      currentPage = 1;
-    }
-
-    let localHasMore = hasMore;
-    let pagesLoaded = 0;
-
     try {
-      while (localHasMore) {
-        pagesLoaded++;
-        setLoadProgress({ current: pagesLoaded });
-        const newActivities = await getActivities(user.accessToken, currentPage, ACTIVITIES_PER_PAGE);
+      await mergeIntoGearCache(useActivitiesStore.getState().activities);
 
-        if (newActivities.length === 0) {
-          localHasMore = false;
-          useActivitiesStore.getState().batchUpdate({ hasMore: false, loadedPages: currentPage - 1 });
-          setGearCache({ loadedPages: currentPage - 1, hasMore: false, lastFetchedAt: Date.now() });
-          break;
-        }
+      await loadRemainingActivities(user.accessToken, {
+        onProgress: ({ pagesLoaded }) => setLoadProgress({ current: pagesLoaded }),
+        onPageLoaded: async ({ activities: pageActivities }) => {
+          if (pageActivities.length > 0) {
+            await mergeIntoGearCache(pageActivities);
+            setGearCacheActivities(await getGearCacheActivities());
+          }
+        },
+      });
 
-        // Update store and gear cache
-        useActivitiesStore.getState().appendActivitiesBatch(
-          newActivities,
-          currentPage,
-          newActivities.length >= HAS_MORE_THRESHOLD,
-          Date.now()
-        );
-        mergeIntoGearCache(newActivities);
-
-        localHasMore = newActivities.length >= HAS_MORE_THRESHOLD;
-        currentPage++;
-
-        if (localHasMore) {
-          await new Promise((r) => setTimeout(r, LOAD_DELAY_MS));
-        }
-      }
-      setGearCache({ loadedPages: currentPage - 1, hasMore: localHasMore, lastFetchedAt: Date.now() });
+      const store = useActivitiesStore.getState();
+      await setGearCache({ loadedPages: store.loadedPages, hasMore: store.hasMore, lastFetchedAt: Date.now() });
+      setGearCacheActivities(await getGearCacheActivities());
     } catch (err) {
       console.error('[Gear] Load failed:', err);
       const msg = err instanceof Error ? err.message : '';
@@ -310,7 +280,7 @@ export default function GearPage() {
       setIsLoadingAll(false);
       setLoadProgress(null);
     }
-  }, [user?.accessToken, isLoadingAll, loadedPages, hasMore, activities.length]);
+  }, [user?.accessToken, isLoadingAll]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
@@ -377,8 +347,9 @@ export default function GearPage() {
                 {t('gear.loadAll', '加载全部')}
               </button>
               <button
-                onClick={() => {
-                  clearGearCache();
+                onClick={async () => {
+                  await clearGearCache();
+                  setGearCacheActivities([]);
                   useActivitiesStore.getState().batchUpdate({ loadedPages: 0, hasMore: true });
                   setResetCounter((c) => c + 1);
                 }}

@@ -44,7 +44,7 @@ export function useAuth() {
               name: session.user.name || '',
               image: session.user.image || null,
               accessToken: session.accessToken || '',
-              refreshToken: session.refreshToken || '',
+              refreshToken: '',
               expiresAt: session.expiresAt || 0,
             });
           } else if (session.error === 'token_expired') {
@@ -82,7 +82,7 @@ export function useAuth() {
             name: session.user.name || '',
             image: session.user.image || null,
             accessToken: session.accessToken || '',
-            refreshToken: session.refreshToken || '',
+            refreshToken: '',
             expiresAt: session.expiresAt || 0,
           });
           return true;

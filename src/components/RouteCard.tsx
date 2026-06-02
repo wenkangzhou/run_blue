@@ -37,7 +37,7 @@ export function RouteCard({ route, activities }: RouteCardProps) {
     ? formatPace(bestPaceActivity.distance, bestPaceActivity.moving_time, 'min/km')
     : '--';
 
-  const polyline = latest?.map?.summary_polyline || null;
+  const polyline = latest?.map?.summary_polyline || route.polyline || null;
 
   return (
     <Link href={`/routes/${encodeURIComponent(route.key)}`}>

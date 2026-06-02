@@ -7,7 +7,7 @@ import { RouteMap } from './RouteMap';
 import type { RouteMapHandle, SegmentItem } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
-import { getActivities } from '@/lib/strava';
+import { loadNextActivitiesPage } from '@/lib/activitySync';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
 
@@ -35,9 +35,6 @@ const TYPE_LABELS: Record<string, string> = {
   Run: 'activity.run', Ride: 'activity.bike', Walk: 'activity.walk',
   Hike: 'activity.hike', Swim: 'activity.swim',
 };
-const ACTIVITIES_PER_PAGE = 200;
-const HAS_MORE_THRESHOLD = 195;
-
 function getYearColor(year: number): string {
   const palette = ['#6aa5c8', '#7bb29a', '#d49a6a', '#a896c9', '#c98095', '#74aebc', '#b6a15a', '#8fa7bd', '#99b373', '#bd86a7'];
   return palette[Math.abs(year) % palette.length];
@@ -49,7 +46,7 @@ function formatDistance(meters: number): string {
 
 export function HeatmapClient() {
   const { t } = useTranslation();
-  const { activities, hasMore, loadedPages, appendActivitiesBatch, batchUpdate } = useActivitiesStore();
+  const { activities, hasMore } = useActivitiesStore();
   const { language } = useSettingsStore();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [popupActivity, setPopupActivity] = useState<PopupActivity | null>(null);
@@ -136,21 +133,13 @@ export function HeatmapClient() {
     if (loadingMore || !accessToken) return;
     setLoadingMore(true);
     try {
-      const nextPage = loadedPages > 0
-        ? loadedPages + 1
-        : Math.ceil(activities.length / ACTIVITIES_PER_PAGE) + 1;
-      const newActivities = await getActivities(accessToken, nextPage, ACTIVITIES_PER_PAGE);
-      if (newActivities.length > 0) {
-        appendActivitiesBatch(newActivities, nextPage, newActivities.length >= HAS_MORE_THRESHOLD, Date.now());
-      } else {
-        batchUpdate({ hasMore: false, loadedPages: Math.max(0, nextPage - 1), lastFetchedAt: Date.now() });
-      }
+      await loadNextActivitiesPage(accessToken);
     } catch (err) {
       console.error('Load more failed:', err);
     } finally {
       setLoadingMore(false);
     }
-  }, [accessToken, activities.length, appendActivitiesBatch, batchUpdate, loadedPages, loadingMore]);
+  }, [accessToken, loadingMore]);
 
   const loadSegments = useCallback(async () => {
     if (loadingSegments) return;

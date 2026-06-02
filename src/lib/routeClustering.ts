@@ -85,7 +85,7 @@ function getPathRadius(activity: StravaActivity): number | null {
   return avgRadius;
 }
 
-function decodePolyline(encoded: string): [number, number][] {
+export function decodePolyline(encoded: string): [number, number][] {
   const points: [number, number][] = [];
   let index = 0;
   let lat = 0;
@@ -113,6 +113,69 @@ function decodePolyline(encoded: string): [number, number][] {
     points.push([lat / 1e5, lng / 1e5]);
   }
   return points;
+}
+
+interface RouteReference {
+  key: string;
+  name: string;
+  referenceActivityId: number;
+  polyline?: string;
+  distance: number;
+  elevationGain: number;
+}
+
+export function createActivityFromRouteReference(route: RouteReference): StravaActivity | null {
+  const coords = route.polyline ? decodePolyline(route.polyline) : [];
+  if (coords.length < 2) return null;
+
+  return {
+    id: route.referenceActivityId,
+    name: route.name,
+    type: 'Run',
+    sport_type: 'Run',
+    distance: route.distance,
+    total_elevation_gain: route.elevationGain,
+    start_latlng: coords[0],
+    end_latlng: coords[coords.length - 1],
+    map: {
+      id: route.key,
+      polyline: null,
+      summary_polyline: route.polyline ?? null,
+    },
+    moving_time: 0,
+    elapsed_time: 0,
+    start_date: '',
+    start_date_local: '',
+    timezone: '',
+    utc_offset: 0,
+    location_city: null,
+    location_state: null,
+    location_country: null,
+    achievement_count: 0,
+    kudos_count: 0,
+    comment_count: 0,
+    athlete_count: 0,
+    photo_count: 0,
+    trainer: false,
+    commute: false,
+    manual: false,
+    private: false,
+    visibility: '',
+    flagged: false,
+    gear_id: null,
+    average_speed: 0,
+    max_speed: 0,
+    has_heartrate: false,
+    heartrate_opt_out: false,
+    display_hide_heartrate_option: false,
+    upload_id: 0,
+    upload_id_str: '',
+    external_id: null,
+    from_accepted_tag: false,
+    pr_count: 0,
+    total_photo_count: 0,
+    has_kudoed: false,
+  };
 }
 
 export function areActivitiesSameRoute(

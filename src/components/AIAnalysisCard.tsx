@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { getUserProfile, getMergedPBsForAnalysis } from '@/lib/userProfile';
 import { useActivitiesStore } from '@/store/activities';
+import { clearCachedAIAnalysis, getCachedAIAnalysis, setCachedAIAnalysis } from '@/lib/aiAnalysisCache';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -173,16 +174,12 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       setTrainingStats(data.trainingProfile);
       setClassification(data.classification);
 
-      try {
-        localStorage.setItem(cachedKey, JSON.stringify({
-          analysis: data.analysis,
-          streamAnalysis: data.streamAnalysis,
-          trainingStats: data.trainingProfile,
-          classification: data.classification,
-        }));
-      } catch {
-        // localStorage quota exceeded — skip caching, analysis still works
-      }
+      await setCachedAIAnalysis(cachedKey, {
+        analysis: data.analysis,
+        streamAnalysis: data.streamAnalysis,
+        trainingStats: data.trainingProfile,
+        classification: data.classification,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
       setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
@@ -192,14 +189,19 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   }, [activity, streams, activities, i18n.language, t]);
 
   useEffect(() => {
+    let cancelled = false;
     const cachedKey = getAIAnalysisCacheKey(activity, streams, activities, i18n.language);
-    const cached = localStorage.getItem(cachedKey);
 
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached) as CachedAIAnalysis;
+    async function loadCachedAnalysis() {
+      const parsed = await getCachedAIAnalysis<CachedAIAnalysis>(cachedKey);
+
+      if (cancelled) return;
+
+      if (parsed) {
         const maxAge = parsed.isQuotaExceeded ? AI_ANALYSIS_QUOTA_TTL : AI_ANALYSIS_CACHE_TTL;
-        if (Date.now() - parsed.analysis?.generatedAt < maxAge) {
+        const generatedAt = parsed.analysis?.generatedAt ?? 0;
+        if (generatedAt && Date.now() - generatedAt < maxAge) {
+          if (cancelled) return;
           setAnalysis(parsed.analysis);
           setStreamAnalysis(parsed.streamAnalysis);
           setTrainingStats(parsed.trainingStats);
@@ -209,12 +211,24 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
           }
           return;
         }
-      } catch {
-        // Invalid cache
+
+        await clearCachedAIAnalysis(cachedKey);
+      }
+
+      if (!cancelled) {
+        fetchAnalysis();
       }
     }
 
-    fetchAnalysis();
+    loadCachedAnalysis().catch(() => {
+      if (!cancelled) {
+        fetchAnalysis();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activity, streams, activities, i18n.language, fetchAnalysis]);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');

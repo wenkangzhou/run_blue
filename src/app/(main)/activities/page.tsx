@@ -5,9 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
-import { useRoutesStore } from '@/store/routes';
 import { StravaActivity } from '@/types';
-import { getActivities } from '@/lib/strava';
+import { getNextActivitiesPage, loadNextActivitiesPage, syncRecentActivities } from '@/lib/activitySync';
 import { getActivityDate } from '@/lib/dates';
 import { Loader2, RefreshCw, ChevronUp, Search, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
@@ -16,19 +15,6 @@ import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
 
 const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const ACTIVITIES_PER_PAGE = 200;
-const HAS_MORE_THRESHOLD = 195;
-
-function getNextPage(loadedPages: number, activityCount: number) {
-  if (loadedPages > 0) return loadedPages + 1;
-  if (activityCount === 0) return 1;
-  return Math.ceil(activityCount / ACTIVITIES_PER_PAGE) + 1;
-}
-
-function syncSavedRoutes() {
-  useRoutesStore.getState().syncRoutes(useActivitiesStore.getState().activities);
-}
-
 function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'generic' {
   const message = error instanceof Error ? error.message : '';
   if (message.includes('401') || message.includes('Unauthorized')) return 'auth';
@@ -49,12 +35,8 @@ export default function ActivitiesPage() {
     lastFetchedAt,
     loadedPages,
     latestActivityId,
-    replaceActivitiesBatch,
-    appendActivitiesBatch,
-    prependActivitiesBatch,
     setLoading,
     setError,
-    batchUpdate,
   } = useActivitiesStore();
 
   const [initialLoading, setInitialLoading] = useState(true);
@@ -125,19 +107,6 @@ export default function ActivitiesPage() {
   const loadActivities = useCallback(async (type: 'initial' | 'refresh' | 'more') => {
     if (!user?.accessToken) return;
 
-    // 确定当前要加载的 page
-    let currentPage: number;
-    if (type === 'refresh') {
-      currentPage = 1;
-      nextPageRef.current = 1;
-    } else if (type === 'initial') {
-      currentPage = 1;
-      nextPageRef.current = 1;
-    } else {
-      // more
-      currentPage = nextPageRef.current;
-    }
-    
     if (type === 'refresh') {
       setRefreshing(true);
     } else if (type === 'more') {
@@ -146,7 +115,7 @@ export default function ActivitiesPage() {
       // initial
       if (activities.length > 0) {
         // 已有缓存，从缓存推算下一页
-        nextPageRef.current = getNextPage(loadedPages, activities.length);
+        nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
         setInitialLoading(false);
         return;
       }
@@ -155,34 +124,17 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      const newActivities = await getActivities(user.accessToken, currentPage, ACTIVITIES_PER_PAGE);
-      const now = Date.now();
-      const hasMoreData = newActivities.length >= HAS_MORE_THRESHOLD;
-      
-      if (type === 'refresh') {
-        replaceActivitiesBatch(newActivities, 1, hasMoreData, now);
-        nextPageRef.current = 2;
-      } else if (type === 'more') {
-        if (newActivities.length === 0) {
-          batchUpdate({
-            hasMore: false,
-            loadedPages: Math.max(0, currentPage - 1),
-            lastFetchedAt: now,
-          });
-        } else {
-          appendActivitiesBatch(newActivities, currentPage, hasMoreData, now);
-          nextPageRef.current = currentPage + 1;
-        }
+      if (type === 'more') {
+        const result = await loadNextActivitiesPage(user.accessToken);
+        nextPageRef.current = result.page + 1;
       } else {
-        // initial
-        replaceActivitiesBatch(newActivities, 1, hasMoreData, now);
-        nextPageRef.current = 2;
+        await syncRecentActivities(user.accessToken, { force: true });
+        const state = useActivitiesStore.getState();
+        nextPageRef.current = getNextActivitiesPage(state.loadedPages, state.activities.length);
       }
 
       setNeedsReauth(false);
       setRateLimited(false);
-
-      syncSavedRoutes();
     } catch (err) {
       const errorKind = getActivityLoadErrorKind(err);
 
@@ -210,11 +162,8 @@ export default function ActivitiesPage() {
     user?.accessToken,
     activities.length,
     loadedPages,
-    replaceActivitiesBatch,
-    appendActivitiesBatch,
     setLoading,
     setError,
-    batchUpdate,
     t,
   ]);
 
@@ -245,47 +194,15 @@ export default function ActivitiesPage() {
     lastCheckRef.current = now;
 
     try {
-      // 获取 page 1 的前 200 条
-      const page1Activities = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
-      
-      if (page1Activities.length === 0) return;
-      
-      // 找出所有新活动（ID不在缓存中的）
-      const existingIds = new Set(activities.map(a => a.id));
-      const newActivities = page1Activities.filter(a => !existingIds.has(a.id));
-      
-      if (newActivities.length === 0) {
-        // 没有新数据，更新 lastFetchedAt
-        batchUpdate({ lastFetchedAt: Date.now() });
-        return;
-      }
-      
-      if (newActivities.length < ACTIVITIES_PER_PAGE) {
-        // 新数据少于200条，prepend 到缓存
-        prependActivitiesBatch(newActivities, Date.now(), page1Activities[0]?.id || null);
-        syncSavedRoutes();
-      } else {
-        // 新数据>=200条，可能错过数据，需要完全刷新
-        replaceActivitiesBatch(
-          page1Activities,
-          1,
-          page1Activities.length >= HAS_MORE_THRESHOLD,
-          Date.now(),
-          page1Activities[0]?.id || null
-        );
-        nextPageRef.current = 2;
-        syncSavedRoutes();
-      }
+      await syncRecentActivities(user.accessToken, { force: true });
+      const state = useActivitiesStore.getState();
+      nextPageRef.current = getNextActivitiesPage(state.loadedPages, state.activities.length);
     } catch (err) {
       console.error('[CheckNew] failed:', err);
     }
   }, [
     user?.accessToken,
-    activities,
     latestActivityId,
-    prependActivitiesBatch,
-    replaceActivitiesBatch,
-    batchUpdate,
   ]);
 
   // Initial load
@@ -300,19 +217,17 @@ export default function ActivitiesPage() {
       loadActivities('initial');
     } else if (isActivitiesCacheStale(lastFetchedAt)) {
       setInitialLoading(false);
-      nextPageRef.current = getNextPage(loadedPages, activities.length);
+      nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
       loadActivities('refresh');
     } else {
       // 缓存未过期，恢复 nextPageRef 并静默检查新数据
       setInitialLoading(false);
-      nextPageRef.current = getNextPage(loadedPages, activities.length);
+      nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
       checkForNewActivities();
     }
   }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
-    nextPageRef.current = 1;
-    batchUpdate({ loadedPages: 0, latestActivityId: null });
     loadActivities('refresh');
   };
   const handleReauth = () => {

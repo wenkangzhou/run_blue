@@ -90,8 +90,8 @@ async function getValidAccessToken(): Promise<string | null> {
     const sessionRes = await fetch('/api/auth/session');
     if (sessionRes.ok) {
       const session = await sessionRes.json();
-      if (session.user?.accessToken) {
-        return session.user.accessToken;
+      if (session.accessToken) {
+        return session.accessToken;
       }
     }
   } catch (e) {

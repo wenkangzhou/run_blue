@@ -39,15 +39,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Activity data required' }, { status: 400 });
     }
 
-    // Fetch full activity details (includes splits_metric and best_efforts)
+    // Fetch full activity details only when the client sent a lightweight list item.
     let currentActivity = activity;
-    try {
-      const fullActivity = await fetchActivityDetails(accessToken, activity.id);
-      if (fullActivity) {
-        currentActivity = fullActivity;
+    if (!hasActivityDetailFields(activity)) {
+      try {
+        const fullActivity = await fetchActivityDetails(accessToken, activity.id);
+        if (fullActivity) {
+          currentActivity = fullActivity;
+        }
+      } catch {
+        // Continue with the provided activity when optional detail enrichment fails.
       }
-    } catch {
-      // Continue with the provided activity when optional detail enrichment fails.
     }
 
     // Extract PBs from current activity's best_efforts if available
@@ -112,6 +114,15 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function hasActivityDetailFields(activity: StravaActivity): boolean {
+  return (
+    activity.splits_metric !== undefined ||
+    activity.laps !== undefined ||
+    activity.best_efforts !== undefined ||
+    activity.segment_efforts !== undefined
+  );
 }
 
 /**

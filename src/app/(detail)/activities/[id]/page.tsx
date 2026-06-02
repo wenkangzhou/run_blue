@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatPace } from '@/lib/strava';
-import { getCachedActivity, setCachedActivity } from '@/lib/cache';
+import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
 import { useActivitiesStore } from '@/store/activities';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
@@ -28,7 +28,7 @@ const LAP_DISTANCE_THRESHOLD = 20; // km
 export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const { resolvedTheme } = useTheme();
   const { t } = useTranslation();
   const isDark = resolvedTheme === 'dark';
@@ -114,12 +114,16 @@ export default function ActivityDetailPage() {
 
     // If not refreshing, try cache first
     if (!isRefresh) {
-      const cached = getCachedActivity(activityId);
+      const cached = await getCachedActivity(activityId);
       if (cached) {
         setActivity(cached.activity);
         setStreams(cached.streams);
         setIsFromCache(true);
         setLoading(false);
+
+        if (!shouldRefreshCachedActivity(cached)) {
+          return;
+        }
       }
     }
 
@@ -143,21 +147,10 @@ export default function ActivityDetailPage() {
       setRateLimited(false);
       
       // Cache the fresh data
-      setCachedActivity(activityId, activityData, streamsData);
+      await setCachedActivity(activityId, activityData, streamsData);
       
-      // Sync gear data back to activities store so /gear page can use it
-      const store = useActivitiesStore.getState();
-      const storeActivities = store.activities;
-      const idx = storeActivities.findIndex((a) => a.id === activityId);
-      if (idx >= 0) {
-        const updated = [...storeActivities];
-        updated[idx] = {
-          ...updated[idx],
-          gear_id: activityData.gear_id,
-          gear: activityData.gear,
-        };
-        store.setActivities(updated);
-      }
+      // Sync the refreshed detail back to the global activity cache.
+      useActivitiesStore.getState().updateActivity(activityData);
     } catch (err) {
       console.error('Failed to refresh activity:', err);
       
@@ -199,13 +192,36 @@ export default function ActivityDetailPage() {
   }, [user?.accessToken, activityId, handleAuthError]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      // Check if we have cached data to show
-      const cached = getCachedActivity(activityId);
-      if (!cached) {
-        router.push('/');
-      }
+    if (authLoading) return;
+    if (!activityId) {
+      router.push('/');
       return;
+    }
+
+    if (!isAuthenticated) {
+      let cancelled = false;
+
+      // Check if we have cached data to show.
+      getCachedActivity(activityId)
+        .then((cached) => {
+          if (cancelled) return;
+          if (!cached) {
+            router.push('/');
+            return;
+          }
+
+          setActivity(cached.activity);
+          setStreams(cached.streams);
+          setIsFromCache(true);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (!cancelled) router.push('/');
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (!user?.accessToken || !activityId) return;
@@ -215,7 +231,7 @@ export default function ActivityDetailPage() {
       hasLoadedRef.current = true;
       loadData(false);
     }
-  }, [isAuthenticated, user?.accessToken, activityId, router, loadData]);
+  }, [authLoading, isAuthenticated, user?.accessToken, activityId, router, loadData]);
 
   // Split data into visible and hidden based on 20km threshold
   const { visibleSplits, hiddenSplits, hasHiddenSplits } = useMemo(() => {

@@ -91,7 +91,7 @@ export default function RouteDetailPage() {
     : '--';
 
   const latestActivity = routeActivities[0];
-  const polyline = latestActivity?.map?.summary_polyline || null;
+  const polyline = latestActivity?.map?.summary_polyline || route.polyline || null;
 
   const handleRename = () => {
     if (editName.trim()) {

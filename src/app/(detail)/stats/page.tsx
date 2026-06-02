@@ -6,14 +6,11 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
-import { getActivities } from '@/lib/strava';
+import { loadRemainingActivities, syncRecentActivities } from '@/lib/activitySync';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
-import { useRoutesStore } from '@/store/routes';
 import { Loader2, ChevronLeft } from 'lucide-react';
 
-const MAX_LOAD_PAGES = 10; // Safety limit: 2000 activities max
-const ACTIVITIES_PER_PAGE = 200;
-const HAS_MORE_THRESHOLD = 195;
+const MAX_LOAD_PAGES = 10; // Safety limit for one automatic catch-up pass.
 
 export default function StatsPage() {
   const { t } = useTranslation();
@@ -24,11 +21,9 @@ export default function StatsPage() {
     isLoading: storeLoading,
     loadedPages,
     lastFetchedAt,
-    replaceActivitiesBatch,
-    appendActivitiesBatch,
+    hasMore,
     setLoading,
     setError,
-    batchUpdate,
   } = useActivitiesStore();
   const [localLoading, setLocalLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState('');
@@ -43,17 +38,14 @@ export default function StatsPage() {
     hasInitiatedRef.current = true;
 
     const loadAll = async () => {
-      // Case 1: Store is empty — load page 1
+      // Case 1: Store is empty — load recent activities first
       if (activities.length === 0) {
         setLocalLoading(true);
         setLoading(true);
         try {
-          const data = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
-          const hasMoreData = data.length >= HAS_MORE_THRESHOLD;
-          replaceActivitiesBatch(data, 1, hasMoreData, Date.now());
-
-          if (hasMoreData) {
-            await loadRemaining(2);
+          await syncRecentActivities(user.accessToken, { force: true });
+          if (useActivitiesStore.getState().hasMore) {
+            await loadRemaining();
           }
         } catch (err) {
           console.error('Failed to load activities:', err);
@@ -65,17 +57,14 @@ export default function StatsPage() {
         return;
       }
 
-      // Case 2: Cache is stale — reload from page 1
+      // Case 2: Cache is stale — merge recent changes, keep historical cache
       if (isActivitiesCacheStale(lastFetchedAt)) {
         setLocalLoading(true);
         setLoading(true);
         try {
-          const data = await getActivities(user.accessToken, 1, ACTIVITIES_PER_PAGE);
-          const hasMoreData = data.length >= HAS_MORE_THRESHOLD;
-          replaceActivitiesBatch(data, 1, hasMoreData, Date.now());
-
-          if (hasMoreData) {
-            await loadRemaining(2);
+          await syncRecentActivities(user.accessToken, { force: true });
+          if (useActivitiesStore.getState().hasMore) {
+            await loadRemaining();
           }
         } catch (err) {
           console.error('Failed to reload activities:', err);
@@ -87,11 +76,11 @@ export default function StatsPage() {
       }
 
       // Case 3: Store has data and cache is fresh — continue loading remaining pages only
-      if (loadedPages > 0) {
+      if (loadedPages > 0 && hasMore) {
         setLocalLoading(true);
         setLoading(true);
         try {
-          await loadRemaining(loadedPages + 1);
+          await loadRemaining();
         } catch (err) {
           console.error('Failed to load more activities:', err);
         } finally {
@@ -101,34 +90,14 @@ export default function StatsPage() {
       }
     };
 
-    const loadRemaining = async (startPage: number) => {
-      let page = startPage;
-      let hasMoreData = true;
-
-      while (hasMoreData && page <= MAX_LOAD_PAGES) {
-        setLoadProgress(t('common.loading') + ` (${page} ${t('stats.pages', '页')})`);
-        const data = await getActivities(user.accessToken, page, ACTIVITIES_PER_PAGE);
-
-        if (data.length === 0) {
-          hasMoreData = false;
-          batchUpdate({
-            hasMore: false,
-            loadedPages: Math.max(0, page - 1),
-            lastFetchedAt: Date.now(),
-          });
-          break;
-        }
-
-        hasMoreData = data.length >= HAS_MORE_THRESHOLD;
-        appendActivitiesBatch(data, page, hasMoreData, Date.now());
-        page++;
-      }
-
+    const loadRemaining = async () => {
+      await loadRemainingActivities(user.accessToken, {
+        maxPages: MAX_LOAD_PAGES,
+        onProgress: ({ page }) => {
+          setLoadProgress(t('common.loading') + ` (${page} ${t('stats.pages', '页')})`);
+        },
+      });
       setLoadProgress('');
-
-      // Sync saved routes with all loaded activities
-      const allActivities = useActivitiesStore.getState().activities;
-      useRoutesStore.getState().syncRoutes(allActivities);
     };
 
     loadAll();
