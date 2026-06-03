@@ -7,7 +7,7 @@ import { RouteMap } from './RouteMap';
 import type { RouteMapHandle, SegmentItem } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
-import { loadNextActivitiesPage } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
 
@@ -53,13 +53,13 @@ export function HeatmapClient() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>({ years: [], types: ['Run'] });
-  const [loadingMore, setLoadingMore] = useState(false);
   const [segments, setSegments] = useState<SegmentItem[]>([]);
   const [showSegments, setShowSegments] = useState(false);
   const [loadingSegments, setLoadingSegments] = useState(false);
   const mapRef = useRef<RouteMapHandle | null>(null);
   const { user } = useAuth();
   const accessToken = user?.accessToken;
+  const { isSyncing: loadingMore, syncHistory } = useActivityHistorySync(accessToken);
 
   const allYears = useMemo(() => {
     const years = new Set<number>();
@@ -131,15 +131,12 @@ export function HeatmapClient() {
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !accessToken) return;
-    setLoadingMore(true);
     try {
-      await loadNextActivitiesPage(accessToken);
+      await syncHistory({ maxPages: 1, syncRecent: false });
     } catch (err) {
       console.error('Load more failed:', err);
-    } finally {
-      setLoadingMore(false);
     }
-  }, [accessToken, loadingMore]);
+  }, [accessToken, loadingMore, syncHistory]);
 
   const loadSegments = useCallback(async () => {
     if (loadingSegments) return;

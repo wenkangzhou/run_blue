@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatPace } from '@/lib/strava';
 import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
+import { getActivityDateKey } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
@@ -792,7 +793,7 @@ export default function ActivityDetailPage() {
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
         activityName={activity?.name || ''}
-        activityDate={activity?.start_date_local?.split('T')[0]?.replace(/-/g, '') || ''}
+        activityDate={activity ? getActivityDateKey(activity).replace(/-/g, '') : ''}
         polyline={activity?.map?.polyline || null}
         stats={activity ? {
           distance: formatDistance(activity.distance, 'km'),

@@ -27,6 +27,11 @@ interface LoadRemainingOptions {
   }) => void | Promise<void>;
 }
 
+interface EnsureActivityHistoryOptions extends LoadRemainingOptions {
+  forceRecent?: boolean;
+  syncRecent?: boolean;
+}
+
 export function getNextActivitiesPage(loadedPages: number, activityCount: number) {
   if (loadedPages > 0) return loadedPages + 1;
   if (activityCount === 0) return 1;
@@ -62,11 +67,13 @@ export async function syncRecentActivities(
   const fetched: StravaActivity[] = [];
   const windowStart = Date.now() - windowDays * 24 * 60 * 60 * 1000;
   let page = 1;
+  let pagesFetched = 0;
   let hasMoreData = true;
 
   while (page <= maxPages) {
     const pageActivities = await getActivities(accessToken, page, ACTIVITIES_PER_PAGE);
     fetched.push(...pageActivities);
+    pagesFetched += 1;
 
     hasMoreData = pageActivities.length >= HAS_MORE_THRESHOLD;
     if (!hasMoreData || pageReachesRecentWindow(pageActivities, windowStart)) {
@@ -78,15 +85,15 @@ export async function syncRecentActivities(
 
   const now = Date.now();
   if (store.activities.length === 0) {
-    store.replaceActivitiesBatch(fetched, page, hasMoreData, now, fetched[0]?.id ?? null);
+    store.replaceActivitiesBatch(fetched, pagesFetched, hasMoreData, now, fetched[0]?.id ?? null);
   } else if (fetched.length > 0) {
-    store.mergeActivitiesBatch(fetched, page, hasMoreData, now, fetched[0]?.id ?? null);
+    store.mergeActivitiesBatch(fetched, pagesFetched, hasMoreData, now, fetched[0]?.id ?? null);
   } else {
     store.batchUpdate({ lastFetchedAt: now, hasMore: false });
   }
 
   syncSavedRoutes();
-  return { skipped: false, pagesFetched: page, activitiesFetched: fetched.length };
+  return { skipped: false, pagesFetched, activitiesFetched: fetched.length };
 }
 
 export async function loadNextActivitiesPage(accessToken: string) {
@@ -140,4 +147,29 @@ export async function loadRemainingActivities(
   }
 
   return { pagesLoaded, activitiesFetched, hasMore: hasMoreData };
+}
+
+export async function ensureActivityHistory(
+  accessToken: string,
+  {
+    forceRecent = false,
+    syncRecent = true,
+    ...remainingOptions
+  }: EnsureActivityHistoryOptions = {}
+) {
+  const store = useActivitiesStore.getState();
+  const shouldSyncRecent =
+    syncRecent &&
+    (forceRecent || store.activities.length === 0 || isActivitiesCacheStale(store.lastFetchedAt));
+
+  const recent = shouldSyncRecent
+    ? await syncRecentActivities(accessToken, { force: true })
+    : { skipped: true, pagesFetched: 0, activitiesFetched: 0 };
+
+  const latestStore = useActivitiesStore.getState();
+  const remaining = latestStore.hasMore
+    ? await loadRemainingActivities(accessToken, remainingOptions)
+    : { pagesLoaded: 0, activitiesFetched: 0, hasMore: false };
+
+  return { recent, remaining };
 }

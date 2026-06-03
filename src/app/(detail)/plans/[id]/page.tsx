@@ -13,27 +13,49 @@ import Link from 'next/link';
 export default function TrainingPlanDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { t } = useTranslation();
 
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (authLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!isAuthenticated) {
       router.push('/');
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    const id = params.id as string;
-    const found = getStoredTrainingPlan(id);
-    if (found) {
-      setPlan(found);
-    } else {
-      setNotFound(true);
-    }
-  }, [isAuthenticated, router, params.id]);
 
-  if (!isAuthenticated) return null;
+    const id = params.id as string;
+    setNotFound(false);
+    getStoredTrainingPlan(id)
+      .then((found) => {
+        if (cancelled) return;
+        if (found) {
+          setPlan(found);
+        } else {
+          setNotFound(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setNotFound(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, router, params.id]);
+
+  if (authLoading || !isAuthenticated) return null;
 
   if (notFound) {
     return (
@@ -64,9 +86,9 @@ export default function TrainingPlanDetailPage() {
     );
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      deleteTrainingPlan(plan.id);
+      await deleteTrainingPlan(plan.id);
       router.push('/plans');
     }
   };

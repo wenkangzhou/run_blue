@@ -22,7 +22,7 @@ import Link from 'next/link';
 
 export default function TrainingPlansListPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activities } = useActivitiesStore();
   const { t, i18n } = useTranslation();
 
@@ -35,11 +35,29 @@ export default function TrainingPlansListPage() {
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (authLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!isAuthenticated) {
       router.push('/');
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    setPlans(getStoredTrainingPlans());
+
+    getStoredTrainingPlans()
+      .then((storedPlans) => {
+        if (!cancelled) setPlans(storedPlans);
+      })
+      .catch(() => {
+        if (!cancelled) setPlans([]);
+      });
+
     const profile = getUserProfile();
     setHasPB(!!profile?.pbs?.['5k'] && profile.pbs['5k'] > 0);
 
@@ -52,9 +70,13 @@ export default function TrainingPlansListPage() {
       const totalDist = recentRuns.reduce((sum, a) => sum + a.distance, 0);
       setWeeklyVolume(Math.round(totalDist / 4000));
     }
-  }, [isAuthenticated, router, activities]);
 
-  if (!isAuthenticated) return null;
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, router, activities]);
+
+  if (authLoading || !isAuthenticated) return null;
 
   const isZh = i18n.language === 'zh';
 
@@ -93,7 +115,7 @@ export default function TrainingPlansListPage() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const res = await fetch('/api/ai/plan', {
+      const res = await fetch('/api/training-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abortControllerRef.current.signal,
@@ -105,6 +127,7 @@ export default function TrainingPlansListPage() {
           weeklyVolume,
           raceDate: data.raceDate,
           locale: i18n.language,
+          lthr: profile?.lthr,
         }),
       });
 
@@ -114,8 +137,8 @@ export default function TrainingPlansListPage() {
       }
 
       const json = (await res.json()) as { plan: TrainingPlan };
-      saveTrainingPlan(json.plan);
-      setPlans(getStoredTrainingPlans());
+      await saveTrainingPlan(json.plan);
+      setPlans(await getStoredTrainingPlans());
       setShowForm(false);
       // Navigate to detail page
       router.push(`/plans/${json.plan.id}`);
@@ -137,10 +160,10 @@ export default function TrainingPlansListPage() {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      deleteTrainingPlan(id);
-      setPlans(getStoredTrainingPlans());
+      await deleteTrainingPlan(id);
+      setPlans(await getStoredTrainingPlans());
     }
   };
 

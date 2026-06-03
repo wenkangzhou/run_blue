@@ -13,7 +13,7 @@ import {
   clearGearCache,
   LightGearActivity,
 } from '@/lib/gearCache';
-import { loadRemainingActivities } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import {
   ChevronLeft,
   Footprints,
@@ -135,12 +135,16 @@ export default function GearPage() {
   const { user } = useAuth();
   const activities = useActivitiesStore((s) => s.activities);
   const hasMore = useActivitiesStore((s) => s.hasMore);
+  const {
+    isSyncing: isLoadingAll,
+    progress: loadProgress,
+    syncHistory,
+    reset: resetHistorySync,
+  } = useActivityHistorySync(user?.accessToken);
 
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [isLoadingAll, setIsLoadingAll] = React.useState(false);
-  const [loadProgress, setLoadProgress] = React.useState<{ current: number } | null>(null);
   const [gearCacheActivities, setGearCacheActivities] = React.useState<LightGearActivity[]>([]);
   const [resetCounter, setResetCounter] = React.useState(0); // force re-render after cache clear
 
@@ -248,17 +252,16 @@ export default function GearPage() {
     return () => { cancelled = true; };
   }, [gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load ALL remaining activities (no page limit)
+  // Load all remaining activities and keep the lightweight gear cache aligned.
   const handleLoadAll = React.useCallback(async () => {
     if (!user?.accessToken || isLoadingAll) return;
-    setIsLoadingAll(true);
+    resetHistorySync();
     setError(null);
 
     try {
       await mergeIntoGearCache(useActivitiesStore.getState().activities);
 
-      await loadRemainingActivities(user.accessToken, {
-        onProgress: ({ pagesLoaded }) => setLoadProgress({ current: pagesLoaded }),
+      await syncHistory({
         onPageLoaded: async ({ activities: pageActivities }) => {
           if (pageActivities.length > 0) {
             await mergeIntoGearCache(pageActivities);
@@ -268,6 +271,7 @@ export default function GearPage() {
       });
 
       const store = useActivitiesStore.getState();
+      await mergeIntoGearCache(store.activities);
       await setGearCache({ loadedPages: store.loadedPages, hasMore: store.hasMore, lastFetchedAt: Date.now() });
       setGearCacheActivities(await getGearCacheActivities());
     } catch (err) {
@@ -276,11 +280,8 @@ export default function GearPage() {
       if (msg.includes('429')) setError('rate_limited');
       else if (msg.includes('401')) setError('token_expired');
       else setError('load_failed');
-    } finally {
-      setIsLoadingAll(false);
-      setLoadProgress(null);
     }
-  }, [user?.accessToken, isLoadingAll]);
+  }, [user?.accessToken, isLoadingAll, resetHistorySync, syncHistory]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {
@@ -364,7 +365,7 @@ export default function GearPage() {
             <div className="flex items-center gap-2 shrink-0">
               <Loader2 size={14} className="animate-spin text-blue-500" />
               <span className="font-mono text-xs text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                {t('gear.loadingProgress', '已加载 {{current}} 页', { current: loadProgress.current })}
+                {t('gear.loadingProgress', '已加载 {{current}} 页', { current: loadProgress.pagesLoaded })}
               </span>
             </div>
           )}

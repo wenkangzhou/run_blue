@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAccessToken } from '@/lib/strava';
+import { getAuthCookieOptions, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
 
 interface StravaAthleteResponse {
   id: number;
@@ -22,7 +23,6 @@ interface SessionData {
 // In-memory cache to reduce Strava API calls (30s TTL)
 const sessionCache = new Map<string, { data: SessionData; timestamp: number }>();
 const SESSION_CACHE_TTL = 30 * 1000; // 30 seconds
-
 export async function GET(request: NextRequest) {
   // Get cookies from request headers
   const cookieHeader = request.headers.get('cookie') || '';
@@ -57,13 +57,6 @@ export async function GET(request: NextRequest) {
       accessToken = tokenData.access_token;
       refreshToken = tokenData.refresh_token;
       
-      // Update cookies with new tokens
-      const cookieOptions = `; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
-      const headers = new Headers();
-      
-      headers.append('Set-Cookie', `access_token=${accessToken}${cookieOptions}`);
-      headers.append('Set-Cookie', `refresh_token=${refreshToken}${cookieOptions}`);
-      
       // Retry request with new token
       response = await fetch('https://www.strava.com/api/v3/athlete', {
         headers: {
@@ -93,9 +86,8 @@ export async function GET(request: NextRequest) {
       sessionCache.set(newCacheKey, { data: sessionData, timestamp: Date.now() });
 
       const res = NextResponse.json(sessionData);
-      
-      res.headers.set('Set-Cookie', `access_token=${accessToken}${cookieOptions}`);
-      res.headers.append('Set-Cookie', `refresh_token=${refreshToken}${cookieOptions}`);
+      res.cookies.set('access_token', accessToken, getAuthCookieOptions(tokenData.expires_in));
+      res.cookies.set('refresh_token', refreshToken, getAuthCookieOptions(THIRTY_DAYS_SECONDS));
       
       return res;
     } catch (error) {

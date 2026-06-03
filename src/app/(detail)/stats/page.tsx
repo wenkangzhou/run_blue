@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
-import { loadRemainingActivities, syncRecentActivities } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { Loader2, ChevronLeft } from 'lucide-react';
 
@@ -15,21 +15,24 @@ const MAX_LOAD_PAGES = 10; // Safety limit for one automatic catch-up pass.
 export default function StatsPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const {
     activities,
     isLoading: storeLoading,
-    loadedPages,
     lastFetchedAt,
     hasMore,
     setLoading,
     setError,
   } = useActivitiesStore();
-  const [localLoading, setLocalLoading] = useState(false);
-  const [loadProgress, setLoadProgress] = useState('');
+  const {
+    isSyncing: historySyncing,
+    progress: historyProgress,
+    syncHistory,
+  } = useActivityHistorySync(user?.accessToken);
   const hasInitiatedRef = useRef(false);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated || !user?.accessToken || hasInitiatedRef.current) {
       if (!isAuthenticated) router.push('/');
       return;
@@ -38,74 +41,33 @@ export default function StatsPage() {
     hasInitiatedRef.current = true;
 
     const loadAll = async () => {
-      // Case 1: Store is empty — load recent activities first
-      if (activities.length === 0) {
-        setLocalLoading(true);
-        setLoading(true);
-        try {
-          await syncRecentActivities(user.accessToken, { force: true });
-          if (useActivitiesStore.getState().hasMore) {
-            await loadRemaining();
-          }
-        } catch (err) {
-          console.error('Failed to load activities:', err);
+      const shouldLoad = activities.length === 0 || isActivitiesCacheStale(lastFetchedAt) || hasMore;
+      if (!shouldLoad) {
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await syncHistory({ maxPages: MAX_LOAD_PAGES });
+      } catch (err) {
+        console.error('Failed to load stats history:', err);
+        if (activities.length === 0) {
           setError(t('errors.generic'));
-        } finally {
-          setLoading(false);
-          setLocalLoading(false);
         }
-        return;
+      } finally {
+        setLoading(false);
       }
-
-      // Case 2: Cache is stale — merge recent changes, keep historical cache
-      if (isActivitiesCacheStale(lastFetchedAt)) {
-        setLocalLoading(true);
-        setLoading(true);
-        try {
-          await syncRecentActivities(user.accessToken, { force: true });
-          if (useActivitiesStore.getState().hasMore) {
-            await loadRemaining();
-          }
-        } catch (err) {
-          console.error('Failed to reload activities:', err);
-        } finally {
-          setLoading(false);
-          setLocalLoading(false);
-        }
-        return;
-      }
-
-      // Case 3: Store has data and cache is fresh — continue loading remaining pages only
-      if (loadedPages > 0 && hasMore) {
-        setLocalLoading(true);
-        setLoading(true);
-        try {
-          await loadRemaining();
-        } catch (err) {
-          console.error('Failed to load more activities:', err);
-        } finally {
-          setLoading(false);
-          setLocalLoading(false);
-        }
-      }
-    };
-
-    const loadRemaining = async () => {
-      await loadRemainingActivities(user.accessToken, {
-        maxPages: MAX_LOAD_PAGES,
-        onProgress: ({ page }) => {
-          setLoadProgress(t('common.loading') + ` (${page} ${t('stats.pages', '页')})`);
-        },
-      });
-      setLoadProgress('');
     };
 
     loadAll();
-  }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) return null;
 
-  const isLoading = storeLoading || localLoading;
+  const isLoading = storeLoading || historySyncing;
+  const progressText = historyProgress?.phase === 'history' && historyProgress.page
+    ? t('common.loading') + ` (${historyProgress.page} ${t('stats.pages', '页')})`
+    : t('common.loading');
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -133,7 +95,7 @@ export default function StatsPage() {
           <div className="flex items-center justify-center h-64">
             <div className="animate-pulse font-mono text-xl flex items-center gap-2">
               <Loader2 className="animate-spin" />
-              {loadProgress || t('common.loading')}
+              {progressText}
             </div>
           </div>
         ) : activities.length === 0 ? (
@@ -148,7 +110,7 @@ export default function StatsPage() {
         {isLoading && activities.length > 0 && (
           <div className="mt-4 flex items-center justify-center gap-2 text-zinc-500 font-mono text-xs">
             <Loader2 size={14} className="animate-spin" />
-            {loadProgress || t('common.loading')}
+            {progressText}
           </div>
         )}
       </div>

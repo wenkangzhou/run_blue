@@ -9,7 +9,7 @@ import { PixelButton, PixelCard } from '@/components/ui';
 import { drawWrappedToCanvas } from '@/lib/wrappedCanvas';
 import { calculateWrapped, getAvailableWrappedYears, type WrappedPeriod } from '@/lib/wrapped';
 import { downloadPNG } from '@/lib/multiRouteCanvas';
-import { loadNextActivitiesPage } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { useActivitiesStore } from '@/store/activities';
 import type { StravaActivity } from '@/types';
 import { X, Download, CheckCircle2, Calendar, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -28,7 +28,12 @@ export function WrappedShareModal({
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const cachedActivities = useActivitiesStore((state) => state.activities);
-  const hasMoreCachedActivities = useActivitiesStore((state) => state.hasMore);
+  const {
+    isSyncing: loadingHistory,
+    error: historySyncError,
+    syncHistory,
+    reset: resetHistorySync,
+  } = useActivityHistorySync(user?.accessToken);
   const locale = i18n.language;
 
   const [period, setPeriod] = useState<WrappedPeriod>('year');
@@ -38,8 +43,7 @@ export function WrappedShareModal({
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
   const [allActivities, setAllActivities] = useState<StravaActivity[]>(activities);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyError, setHistoryError] = useState(false);
+  const historyError = !!historySyncError;
 
   useEffect(() => {
     const merged = new Map<number, StravaActivity>();
@@ -53,21 +57,17 @@ export function WrappedShareModal({
     let cancelled = false;
 
     const loadAll = async () => {
-      setLoadingHistory(true);
-      setHistoryError(false);
-      const maxPages = 10;
-      let pagesLoaded = 0;
+      resetHistorySync();
       try {
-        while (!cancelled && useActivitiesStore.getState().hasMore && pagesLoaded < maxPages) {
-          await loadNextActivitiesPage(user.accessToken);
-          setAllActivities(useActivitiesStore.getState().activities);
-          pagesLoaded += 1;
-        }
+        await syncHistory({
+          maxPages: 10,
+          onPageLoaded: () => {
+            if (!cancelled) setAllActivities(useActivitiesStore.getState().activities);
+          },
+        });
+        if (!cancelled) setAllActivities(useActivitiesStore.getState().activities);
       } catch (e) {
         console.error('Failed to load all activities for wrapped:', e);
-        if (!cancelled) setHistoryError(true);
-      } finally {
-        if (!cancelled) setLoadingHistory(false);
       }
     };
 
@@ -75,7 +75,7 @@ export function WrappedShareModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, user?.accessToken, hasMoreCachedActivities]);
+  }, [isOpen, user?.accessToken, resetHistorySync, syncHistory]);
 
   // Allow year navigation freely within a reasonable range regardless of loaded history
   const { minYear, maxYear } = useMemo(() => {

@@ -8,24 +8,29 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
 import { RouteCard } from '@/components/RouteCard';
-import { loadRemainingActivities } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { MapPinOff, ChevronLeft, RefreshCw, Database, AlertCircle } from 'lucide-react';
 
 export default function RoutesPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { activities, hasMore, loadedPages } = useActivitiesStore();
   const { savedRoutes, syncRoutes } = useRoutesStore();
-  const [syncing, setSyncing] = React.useState(false);
-  const [syncProgress, setSyncProgress] = React.useState('');
-  const [syncError, setSyncError] = React.useState('');
+  const {
+    isSyncing,
+    progress: syncProgress,
+    error: syncError,
+    syncHistory,
+    reset: resetSyncState,
+  } = useActivityHistorySync(user?.accessToken);
 
   React.useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router]);
 
   React.useEffect(() => {
     if (isAuthenticated && savedRoutes.length > 0 && activities.length > 0) {
@@ -33,45 +38,47 @@ export default function RoutesPage() {
     }
   }, [isAuthenticated, activities, savedRoutes.length, syncRoutes]);
 
-  if (!isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) return null;
 
   const totalMatchedActivities = savedRoutes.reduce((sum, route) => sum + route.activityIds.length, 0);
 
   const handleSyncHistory = async () => {
-    if (syncing) return;
+    if (isSyncing) return;
 
-    setSyncing(true);
-    setSyncError('');
-    setSyncProgress('');
-
+    resetSyncState();
     try {
-      if (hasMore) {
-        if (!user?.accessToken) {
-          throw new Error(t('auth.unauthorized', '请先连接 Strava 账号'));
-        }
-
-        await loadRemainingActivities(user.accessToken, {
-          onProgress: ({ pagesLoaded, page }) => {
-            setSyncProgress(
-              t('routes.syncProgress', '同步第 {{page}} 页 · 已加载 {{count}} 页', {
-                page,
-                count: pagesLoaded,
-              })
-            );
-          },
-        });
+      if (user?.accessToken) {
+        await syncHistory();
+      } else if (hasMore) {
+        await syncHistory();
       }
 
       syncRoutes(useActivitiesStore.getState().activities);
-      setSyncProgress(t('routes.syncDone', '历史匹配已更新'));
-      setTimeout(() => setSyncProgress(''), 1600);
     } catch (error) {
       console.error('[Routes] Failed to sync historical routes:', error);
-      setSyncError(error instanceof Error ? error.message : t('routes.syncFailed', '历史同步失败，请稍后重试'));
-    } finally {
-      setSyncing(false);
     }
   };
+
+  const syncStatusText = (() => {
+    if (syncError) {
+      if (syncError.kind === 'auth') return t('auth.unauthorized', '请先连接 Strava 账号');
+      if (syncError.kind === 'rateLimit') return t('errors.rateLimitedDesc');
+      return syncError.message === 'activity_history_sync_failed'
+        ? t('routes.syncFailed', '历史同步失败，请稍后重试')
+        : syncError.message;
+    }
+
+    if (!syncProgress) return '';
+    if (syncProgress.phase === 'recent') return t('routes.syncingRecent', '正在检查近期活动');
+    if (syncProgress.phase === 'history' && syncProgress.page) {
+      return t('routes.syncProgress', '同步第 {{page}} 页 · 已加载 {{count}} 页', {
+        page: syncProgress.page,
+        count: syncProgress.pagesLoaded,
+      });
+    }
+    if (syncProgress.phase === 'complete') return t('routes.syncDone', '历史匹配已更新');
+    return '';
+  })();
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -89,11 +96,11 @@ export default function RoutesPage() {
           {savedRoutes.length > 0 && (
             <button
               onClick={handleSyncHistory}
-              disabled={syncing}
+              disabled={isSyncing}
               className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40 transition-colors shrink-0"
               title={t('routes.syncHistoryHint', '加载剩余历史活动，并重新匹配到已收藏路线')}
             >
-              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
               {hasMore ? t('routes.syncHistory', '同步历史') : t('routes.rematchLoaded', '重新匹配')}
             </button>
           )}
@@ -137,12 +144,12 @@ export default function RoutesPage() {
                     </span>
                   )}
                 </p>
-                {(syncProgress || syncError) && (
+                {syncStatusText && (
                   <p className={[
                     'font-mono text-[11px] mt-2',
                     syncError ? 'text-red-500' : 'text-blue-600 dark:text-blue-400',
                   ].join(' ')}>
-                    {syncError || syncProgress}
+                    {syncStatusText}
                   </p>
                 )}
               </div>

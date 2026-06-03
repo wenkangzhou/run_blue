@@ -1,5 +1,5 @@
 import { getHRZones } from './heartRateZones';
-import { getUserProfile } from './userProfile';
+import { formatSecondsToTime, getUserProfile } from './userProfile';
 
 export type RaceDistance = '5k' | '10k' | '21k' | '42k';
 
@@ -35,65 +35,223 @@ export interface TrainingPlan {
     pb21k?: number;
     pb42k?: number;
     weeklyVolume: number;
+    lthr?: number;
   };
   weeks: WeeklyPlan[];
 }
 
-const STORAGE_KEY = 'runblue_training_plans';
+export class TrainingPlanInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TrainingPlanInputError';
+  }
+}
 
-function getStoredPlans(): TrainingPlan[] {
-  if (typeof window === 'undefined') return [];
+const STORAGE_KEY = 'runblue_training_plans';
+const TRAINING_PLAN_DB = 'run_blue_training_plan_cache';
+const TRAINING_PLAN_STORE = 'training_plans';
+const TRAINING_PLAN_DB_VERSION = 1;
+
+function isBrowser() {
+  return typeof window !== 'undefined';
+}
+
+function hasIndexedDb() {
+  return isBrowser() && typeof window.indexedDB !== 'undefined';
+}
+
+function normalizeStoredPlans(value: unknown): TrainingPlan[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readLegacyStoredPlans(): TrainingPlan[] {
+  if (!isBrowser()) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeStoredPlans(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
-function setStoredPlans(plans: TrainingPlan[]): void {
-  if (typeof window !== 'undefined') {
+function writeLegacyStoredPlans(plans: TrainingPlan[]): void {
+  if (!isBrowser()) return;
+  try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
+  } catch {
+    // Plan generation still succeeds when caching cannot be written.
   }
 }
 
-export function getStoredTrainingPlans(): TrainingPlan[] {
+function removeLegacyStoredPlans() {
+  if (!isBrowser()) return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
+}
+
+function openTrainingPlanDatabase(): Promise<IDBDatabase | null> {
+  if (!hasIndexedDb()) return Promise.resolve(null);
+
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(TRAINING_PLAN_DB, TRAINING_PLAN_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(TRAINING_PLAN_STORE)) {
+        db.createObjectStore(TRAINING_PLAN_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error(`IndexedDB "${TRAINING_PLAN_DB}" upgrade is blocked`));
+  });
+}
+
+async function runTrainingPlanOperation<T>(
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest<T>
+): Promise<T | null> {
+  const db = await openTrainingPlanDatabase();
+  if (!db) return null;
+
+  return new Promise<T | null>((resolve, reject) => {
+    const transaction = db.transaction(TRAINING_PLAN_STORE, mode);
+    const store = transaction.objectStore(TRAINING_PLAN_STORE);
+    let result: T | null = null;
+
+    try {
+      const request = operation(store);
+      request.onsuccess = () => {
+        result = request.result;
+      };
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      db.close();
+      reject(error);
+      return;
+    }
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve(result);
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(transaction.error);
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function getIndexedStoredPlans(): Promise<TrainingPlan[] | null> {
+  const indexedValue = await runTrainingPlanOperation<TrainingPlan[]>(
+    'readonly',
+    (store) => store.get(STORAGE_KEY)
+  );
+  return indexedValue ? normalizeStoredPlans(indexedValue) : null;
+}
+
+async function writeIndexedStoredPlans(plans: TrainingPlan[]): Promise<void> {
+  await runTrainingPlanOperation<IDBValidKey>(
+    'readwrite',
+    (store) => store.put(plans, STORAGE_KEY)
+  );
+}
+
+async function deleteIndexedStoredPlans(): Promise<void> {
+  await runTrainingPlanOperation<undefined>(
+    'readwrite',
+    (store) => store.delete(STORAGE_KEY)
+  );
+}
+
+async function getStoredPlans(): Promise<TrainingPlan[]> {
+  if (!isBrowser()) return [];
+
+  try {
+    const indexedPlans = await getIndexedStoredPlans();
+    if (indexedPlans) return indexedPlans;
+  } catch {
+    // Fall back to legacy localStorage below.
+  }
+
+  const legacyPlans = readLegacyStoredPlans();
+  if (legacyPlans.length > 0 && hasIndexedDb()) {
+    try {
+      await writeIndexedStoredPlans(legacyPlans);
+      removeLegacyStoredPlans();
+    } catch {
+      // Keep localStorage data if migration fails.
+    }
+  }
+  return legacyPlans;
+}
+
+async function setStoredPlans(plans: TrainingPlan[]): Promise<void> {
+  if (!isBrowser()) return;
+
+  if (hasIndexedDb()) {
+    try {
+      await writeIndexedStoredPlans(plans);
+      removeLegacyStoredPlans();
+      return;
+    } catch {
+      // Fall through to legacy localStorage.
+    }
+  }
+
+  writeLegacyStoredPlans(plans);
+}
+
+export function getStoredTrainingPlans(): Promise<TrainingPlan[]> {
   return getStoredPlans();
 }
 
-export function getStoredTrainingPlan(id?: string): TrainingPlan | null {
-  const plans = getStoredPlans();
+export async function getStoredTrainingPlan(id?: string): Promise<TrainingPlan | null> {
+  const plans = await getStoredPlans();
   const found = id ? plans.find((p) => p.id === id) : plans[0] || null;
   return found || null;
 }
 
-export function saveTrainingPlan(plan: TrainingPlan): void {
-  const plans = getStoredPlans();
+export async function saveTrainingPlan(plan: TrainingPlan): Promise<void> {
+  const plans = await getStoredPlans();
   const existingIndex = plans.findIndex((p) => p.id === plan.id);
   if (existingIndex >= 0) {
     plans[existingIndex] = plan;
   } else {
     plans.unshift(plan);
   }
-  setStoredPlans(plans);
+  await setStoredPlans(plans);
 }
 
-export function deleteTrainingPlan(id: string): void {
-  const plans = getStoredPlans().filter((p) => p.id !== id);
-  setStoredPlans(plans);
+export async function deleteTrainingPlan(id: string): Promise<void> {
+  const plans = (await getStoredPlans()).filter((p) => p.id !== id);
+  await setStoredPlans(plans);
 }
 
-export function clearTrainingPlans(): void {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(STORAGE_KEY);
+export async function clearTrainingPlans(): Promise<void> {
+  if (!isBrowser()) return;
+
+  try {
+    await deleteIndexedStoredPlans();
+  } catch {
+    // Ignore IndexedDB cleanup failures.
   }
+
+  removeLegacyStoredPlans();
 }
 
 // Backward compat aliases
-export function clearTrainingPlan(): void {
-  clearTrainingPlans();
+export function clearTrainingPlan(): Promise<void> {
+  return clearTrainingPlans();
 }
 
 export function estimatePlanWeeks(distance: RaceDistance): number {
@@ -134,6 +292,103 @@ export function calculatePaceZones(pb5kSec: number) {
     T: { min: pbPace * 0.93, max: pbPace * 0.97, desc: '乳酸阈值' },
     I: { min: pbPace * 0.88, max: pbPace * 0.92, desc: '间歇跑' },
     R: { min: pbPace * 0.82, max: pbPace * 0.87, desc: '重复跑' },
+  };
+}
+
+/**
+ * Riegel formula: predict equivalent performance at another distance.
+ * T2 = T1 * (D2/D1)^1.06
+ */
+function predictTimeFrom5K(pb5kSec: number, targetDistanceKm: number): number {
+  const ratio = targetDistanceKm / 5;
+  return pb5kSec * Math.pow(ratio, 1.06);
+}
+
+interface GoalAssessment {
+  realistic: boolean;
+  profile: 'elite' | 'maintain' | 'breakthrough' | 'mass_completion' | 'too_conservative';
+  profileLabel: string;
+  equivalentTime: number;
+  gapPercent: number;
+  message: string;
+}
+
+function getRaceDistanceKm(distance: RaceDistance): number {
+  return distance === '5k' ? 5 : distance === '10k' ? 10 : distance === '21k' ? 21.0975 : 42.195;
+}
+
+function getRaceDistanceName(distance: RaceDistance, en: boolean): string {
+  if (en) {
+    return distance === '42k'
+      ? 'marathon'
+      : distance === '21k'
+        ? 'half marathon'
+        : distance === '10k'
+          ? '10K'
+          : '5K';
+  }
+  return distance === '42k'
+    ? '全马'
+    : distance === '21k'
+      ? '半马'
+      : distance === '10k'
+        ? '10公里'
+        : '5公里';
+}
+
+function assessGoal(
+  distance: RaceDistance,
+  targetTimeSeconds: number,
+  pb5kSec: number,
+  locale: string = 'zh'
+): GoalAssessment {
+  const en = locale.startsWith('en');
+  const equiv = predictTimeFrom5K(pb5kSec, getRaceDistanceKm(distance));
+  const gap = ((targetTimeSeconds - equiv) / equiv) * 100;
+
+  let profile: GoalAssessment['profile'];
+  let label: string;
+  let msg: string;
+
+  if (gap < -5) {
+    profile = 'elite';
+    label = en ? 'Elite-level goal' : '精英级目标';
+    msg = en
+      ? 'Your goal is faster than your 5K PB equivalency. This is extremely ambitious and likely unrealistic unless your 5K PB is outdated.'
+      : '你的目标比 5K PB 推算的等效成绩还快，这个目标极具挑战性。除非你的 5K PB 已经过时，否则不太现实。';
+  } else if (gap <= 5) {
+    profile = 'maintain';
+    label = en ? 'Maintain / sharpen' : '维持/精进型';
+    msg = en
+      ? 'Your goal is close to your 5K PB equivalency. Focus on pace familiarity, race-specific workouts, and fine-tuning.'
+      : '你的目标接近 5K PB 推算的等效成绩，课表侧重配速熟练度、比赛模拟和细节调整。';
+  } else if (gap <= 15) {
+    profile = 'breakthrough';
+    label = en ? 'Breakthrough' : '突破型';
+    msg = en
+      ? 'Your goal is 5-15% slower than equivalency — a solid, achievable target.'
+      : '你的目标比等效成绩慢 5-15%，是一个合理且有挑战的目标。';
+  } else if (gap <= 30) {
+    profile = 'mass_completion';
+    label = en ? 'Completion focused' : '完赛型';
+    msg = en
+      ? 'Your goal is 15-30% slower than equivalency — a conservative, completion-focused target.'
+      : '你的目标比等效成绩慢 15-30%，是一个偏保守、以完赛为导向的目标。';
+  } else {
+    profile = 'too_conservative';
+    label = en ? 'Very conservative' : '过于保守';
+    msg = en
+      ? 'Your goal is more than 30% slower than equivalency. Consider setting a more challenging goal.'
+      : '你的目标比等效成绩慢超过 30%，你完全有能力跑得更快。建议设定一个更有挑战性的目标。';
+  }
+
+  return {
+    realistic: gap < 30 && gap > -10,
+    profile,
+    profileLabel: label,
+    equivalentTime: Math.round(equiv),
+    gapPercent: Math.round(gap * 10) / 10,
+    message: msg,
   };
 }
 
@@ -495,23 +750,68 @@ function getEasyRunDuration(phase: WeeklyPlan['phase'], w: number, weeks: number
 
 /* ── Main generation function ── */
 
+/**
+ * Generate a deterministic, algorithmic training plan.
+ * AI copy can be layered on later, but the schedule itself stays predictable.
+ */
+export async function generateTrainingPlan(
+  distance: RaceDistance,
+  targetTimeSeconds: number,
+  weeks: number,
+  pb5kSec: number,
+  weeklyVolume: number,
+  raceDate?: string,
+  locale: string = 'zh',
+  lthr?: number | null
+): Promise<TrainingPlan> {
+  const assessment = assessGoal(distance, targetTimeSeconds, pb5kSec, locale);
+  if (!assessment.realistic) {
+    const en = locale.startsWith('en');
+    const raceName = getRaceDistanceName(distance, en);
+    const equivalentTime = formatSecondsToTime(assessment.equivalentTime);
+    const targetTime = formatSecondsToTime(targetTimeSeconds);
+    const pb5kTime = formatSecondsToTime(pb5kSec);
+    throw new TrainingPlanInputError(
+      en
+        ? `Goal seems unrealistic. Your 5K PB (${pb5kTime}) suggests an equivalent ${raceName} time of ~${equivalentTime}, but your target is ${targetTime} (${assessment.gapPercent > 0 ? '+' : ''}${assessment.gapPercent}%). Consider adjusting your goal or updating your PB in profile.`
+        : `目标不太现实。你的 5K PB（${pb5kTime}）推算的等效${raceName}成绩约为 ${equivalentTime}，但你的目标是 ${targetTime}（${assessment.gapPercent > 0 ? '+' : ''}${assessment.gapPercent}%）。建议调整目标或在跑者档案中更新 PB。`
+    );
+  }
+
+  const plan = generateFallbackTrainingPlan(
+    distance,
+    targetTimeSeconds,
+    weeks,
+    pb5kSec,
+    weeklyVolume,
+    locale,
+    lthr
+  );
+  if (raceDate) {
+    plan.goal.raceDate = raceDate;
+  }
+  return plan;
+}
+
 export function generateFallbackTrainingPlan(
   distance: RaceDistance,
   targetTimeSeconds: number,
   weeks: number,
   pb5kSec: number,
   weeklyVolume: number,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  lthr?: number | null
 ): TrainingPlan {
   const en = locale.startsWith('en');
 
-  // Get user's LTHR, default 170
-  const userProfile = getUserProfile();
-  const lthr = userProfile?.lthr || 170;
+  // Use request-provided LTHR first. Browser profile lookup stays as a
+  // compatibility fallback for direct client-side callers.
+  const userProfile = lthr ? null : getUserProfile();
+  const effectiveLthr = lthr && lthr > 0 ? lthr : userProfile?.lthr || 170;
 
   // Calculate zones
   const zones = calculatePaceZones(pb5kSec);
-  const hrZones = getHRZones(lthr);
+  const hrZones = getHRZones(effectiveLthr);
 
   // Target M pace
   const targetDistKm = distance === '5k' ? 5 : distance === '10k' ? 10 : distance === '21k' ? 21.0975 : 42.195;
@@ -617,7 +917,7 @@ export function generateFallbackTrainingPlan(
     id: `plan_${Date.now()}`,
     createdAt: new Date().toISOString(),
     goal: { distance, targetTimeSeconds },
-    currentAbility: { pb5k: pb5kSec, weeklyVolume },
+    currentAbility: { pb5k: pb5kSec, weeklyVolume, lthr: effectiveLthr },
     weeks: weeksList,
   };
 }

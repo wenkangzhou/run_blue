@@ -121,7 +121,7 @@ interface ActivitiesState {
 
 type PersistedActivitiesState = Pick<
   ActivitiesState,
-  'activities' | 'totalLoaded' | 'lastFetchedAt' | 'loadedPages' | 'latestActivityId'
+  'activities' | 'totalLoaded' | 'lastFetchedAt' | 'loadedPages' | 'latestActivityId' | 'hasMore'
 >;
 
 const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
@@ -138,6 +138,7 @@ function normalizePersistedActivitiesState(persistedState: unknown): PersistedAc
     lastFetchedAt: state?.lastFetchedAt ?? null,
     loadedPages: state?.loadedPages ?? Math.ceil(activities.length / 200),
     latestActivityId: state?.latestActivityId ?? activities[0]?.id ?? null,
+    hasMore: state?.hasMore ?? true,
   };
 }
 
@@ -277,6 +278,7 @@ export const useActivitiesStore = create<ActivitiesState>()(
           lastFetchedAt: state.lastFetchedAt,
           loadedPages: syncedLoadedPages,
           latestActivityId: state.latestActivityId,
+          hasMore: state.hasMore,
         };
       },
       migrate: (persistedState) => normalizePersistedActivitiesState(persistedState),

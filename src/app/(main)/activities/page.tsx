@@ -25,7 +25,7 @@ function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'gener
 export default function ActivitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const { t } = useTranslation();
   const {
     activities,
@@ -207,6 +207,7 @@ export default function ActivitiesPage() {
 
   // Initial load
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/');
       return;
@@ -225,7 +226,7 @@ export default function ActivitiesPage() {
       nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
       checkForNewActivities();
     }
-  }, [isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
     loadActivities('refresh');
@@ -237,7 +238,7 @@ export default function ActivitiesPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  if (!isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) return null;
 
   if (initialLoading && activities.length === 0) {
     return (

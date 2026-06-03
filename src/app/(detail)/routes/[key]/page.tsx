@@ -27,7 +27,7 @@ export default function RouteDetailPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activities } = useActivitiesStore();
   const { savedRoutes, renameRoute, unsaveRoute } = useRoutesStore();
 
@@ -50,12 +50,13 @@ export default function RouteDetailPage() {
   const [editName, setEditName] = useState('');
 
   React.useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router]);
 
-  if (!isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) return null;
 
   if (!route) {
     return (

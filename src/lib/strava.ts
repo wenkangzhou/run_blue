@@ -3,6 +3,10 @@ import { parseStravaLocalDate } from './dates';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
+function getTokenError(operation: 'exchange' | 'refresh', status: number): Error {
+  return new Error(`Failed to ${operation} Strava token: ${status}`);
+}
+
 export function getStravaAuthUrl(clientId: string, redirectUri: string): string {
   const scope = 'read,activity:read';
   
@@ -35,9 +39,8 @@ export async function exchangeToken(code: string, redirectUri?: string): Promise
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Strava token exchange error:', errorText);
-    throw new Error(`Failed to exchange token: ${errorText}`);
+    console.error('[Strava] Token exchange failed:', response.status);
+    throw getTokenError('exchange', response.status);
   }
 
   return response.json();
@@ -61,9 +64,8 @@ export async function refreshAccessToken(refreshToken: string): Promise<StravaTo
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Strava refresh token error:', errorText);
-    throw new Error(`Failed to refresh token: ${errorText}`);
+    console.error('[Strava] Token refresh failed:', response.status);
+    throw getTokenError('refresh', response.status);
   }
 
   return response.json();

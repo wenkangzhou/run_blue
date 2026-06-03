@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
+import {
+  AUTH_COOKIE_NAMES,
+  LEGACY_AUTH_COOKIE_NAMES,
+  getExpiredAuthCookieOptions,
+} from '@/lib/authCookies';
 
 export async function POST() {
   const response = NextResponse.json({ success: true });
-  
-  response.cookies.delete('access_token');
-  response.cookies.delete('refresh_token');
-  response.cookies.delete('user_id');
-  response.cookies.delete('next-auth.session-token');
-  response.cookies.delete('next-auth.callback-url');
-  response.cookies.delete('next-auth.csrf-token');
+
+  const expiredOptions = getExpiredAuthCookieOptions();
+  for (const name of [...AUTH_COOKIE_NAMES, ...LEGACY_AUTH_COOKIE_NAMES]) {
+    response.cookies.set(name, '', expiredOptions);
+  }
   
   return response;
 }

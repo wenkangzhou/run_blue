@@ -6,11 +6,29 @@ import { ActivityStream, StravaActivity } from '@/types';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
+type AnalysisHistoryActivity = Pick<
+  StravaActivity,
+  | 'id'
+  | 'name'
+  | 'distance'
+  | 'moving_time'
+  | 'elapsed_time'
+  | 'total_elevation_gain'
+  | 'type'
+  | 'sport_type'
+  | 'start_date'
+  | 'start_date_local'
+  | 'average_speed'
+  | 'max_speed'
+  | 'has_heartrate'
+> &
+  Partial<StravaActivity>;
+
 interface AnalyzeRequestBody {
   activity: StravaActivity;
   streams: Record<string, ActivityStream> | null;
   userProfilePBs?: Record<string, number> | null;
-  recentActivities?: StravaActivity[];
+  recentActivities?: AnalysisHistoryActivity[];
   locale?: string;
   physique?: { height?: number | null; weight?: number | null };
   lthr?: number | null;
@@ -58,11 +76,9 @@ export async function POST(request: NextRequest) {
     // Merge priority: user profile PBs > activity PBs
     const mergedPBs = { ...activityPBs, ...userProfilePBs };
     
-    // Use frontend-provided activities to avoid extra Strava API calls
-    // Fallback to fetching from API if not provided (shouldn't happen in normal flow)
-    const historyActivities = recentActivities && recentActivities.length > 0
-      ? recentActivities
-      : await fetchRecentActivities(accessToken, 200);
+    // Use frontend-provided cached history only. The analysis route should not
+    // quietly fetch activity pages because that bypasses the app-level sync cache.
+    const historyActivities = normalizeHistoryActivities(recentActivities);
 
     // Build training profile from history (using merged PBs)
     const trainingProfile = analyzeTrainingHistory(
@@ -125,6 +141,22 @@ function hasActivityDetailFields(activity: StravaActivity): boolean {
   );
 }
 
+function normalizeHistoryActivities(activities?: AnalysisHistoryActivity[]): StravaActivity[] {
+  if (!Array.isArray(activities)) return [];
+
+  return activities.filter((activity): activity is AnalysisHistoryActivity => {
+    return (
+      typeof activity?.id === 'number' &&
+      typeof activity.name === 'string' &&
+      typeof activity.distance === 'number' &&
+      typeof activity.moving_time === 'number' &&
+      typeof activity.type === 'string' &&
+      typeof activity.sport_type === 'string' &&
+      typeof activity.start_date === 'string'
+    );
+  }) as StravaActivity[];
+}
+
 /**
  * Extract PBs from activity's best_efforts
  * This is more reliable than athlete stats API which requires special permissions
@@ -184,64 +216,6 @@ async function fetchActivityDetails(
   } catch {
     return null;
   }
-}
-
-/**
- * Fetch recent activities from Strava API
- */
-async function fetchRecentActivities(
-  accessToken: string,
-  maxActivities: number = 200
-): Promise<StravaActivity[]> {
-  const activities: StravaActivity[] = [];
-  const perPage = 100;
-  const maxPages = Math.ceil(maxActivities / perPage);
-  
-  try {
-    for (let page = 1; page <= maxPages; page++) {
-      const response = await fetch(
-        `${STRAVA_API_BASE}/athlete/activities?page=${page}&per_page=${perPage}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          console.warn('Strava rate limited during AI analysis');
-          break;
-        }
-        throw new Error(`Failed to fetch activities: ${response.status}`);
-      }
-
-      const pageActivities = (await response.json()) as unknown;
-      
-      if (!Array.isArray(pageActivities) || pageActivities.length === 0) {
-        break;
-      }
-
-      // Filter to runs only
-      const runs = pageActivities.filter(
-        (a): a is StravaActivity =>
-          typeof a === 'object' &&
-          a !== null &&
-          ('type' in a || 'sport_type' in a) &&
-          ((a as Partial<StravaActivity>).type === 'Run' || (a as Partial<StravaActivity>).type === 'TrailRun')
-      );
-      
-      activities.push(...runs);
-
-      if (pageActivities.length < perPage) {
-        break;
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching activities for AI analysis:', error);
-  }
-
-  return activities;
 }
 
 function parseCookies(cookieHeader: string): Record<string, string> {
