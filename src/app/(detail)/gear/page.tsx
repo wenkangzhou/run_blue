@@ -10,7 +10,6 @@ import {
   mergeIntoGearCache,
   getGearCacheActivities,
   setGearCache,
-  clearGearCache,
   LightGearActivity,
 } from '@/lib/gearCache';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
@@ -21,8 +20,6 @@ import {
   Route,
   TrendingUp,
   Zap,
-  Loader2,
-  Download,
 } from 'lucide-react';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
@@ -134,10 +131,8 @@ export default function GearPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const activities = useActivitiesStore((s) => s.activities);
-  const hasMore = useActivitiesStore((s) => s.hasMore);
   const {
     isSyncing: isLoadingAll,
-    progress: loadProgress,
     syncHistory,
     reset: resetHistorySync,
   } = useActivityHistorySync(user?.accessToken);
@@ -146,7 +141,7 @@ export default function GearPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [gearCacheActivities, setGearCacheActivities] = React.useState<LightGearActivity[]>([]);
-  const [resetCounter, setResetCounter] = React.useState(0); // force re-render after cache clear
+  const backgroundSyncStartedRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -158,7 +153,7 @@ export default function GearPage() {
         if (!cancelled) setGearCacheActivities([]);
       });
     return () => { cancelled = true; };
-  }, [resetCounter]);
+  }, []);
 
   // Merge all data sources: gear cache > activity caches > activities store
   const allActivities = React.useMemo((): UnifiedActivity[] => {
@@ -186,8 +181,7 @@ export default function GearPage() {
     }
 
     return Array.from(merged.values());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activities, gearCacheActivities, resetCounter]);
+  }, [activities, gearCacheActivities]);
 
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -252,35 +246,73 @@ export default function GearPage() {
     return () => { cancelled = true; };
   }, [gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load all remaining activities and keep the lightweight gear cache aligned.
-  const handleLoadAll = React.useCallback(async () => {
-    if (!user?.accessToken || isLoadingAll) return;
-    resetHistorySync();
-    setError(null);
+  // Keep the lightweight gear cache aligned without exposing sync mechanics in the UI.
+  React.useEffect(() => {
+    if (!user?.accessToken || backgroundSyncStartedRef.current) return;
+    backgroundSyncStartedRef.current = true;
 
-    try {
-      await mergeIntoGearCache(useActivitiesStore.getState().activities);
+    let cancelled = false;
 
-      await syncHistory({
-        onPageLoaded: async ({ activities: pageActivities }) => {
-          if (pageActivities.length > 0) {
-            await mergeIntoGearCache(pageActivities);
-            setGearCacheActivities(await getGearCacheActivities());
-          }
-        },
-      });
+    async function syncGearHistory() {
+      const initialStore = useActivitiesStore.getState();
+      if (initialStore.activities.length === 0 && !initialStore.hasMore) return;
 
-      const store = useActivitiesStore.getState();
-      await mergeIntoGearCache(store.activities);
-      await setGearCache({ loadedPages: store.loadedPages, hasMore: store.hasMore, lastFetchedAt: Date.now() });
-      setGearCacheActivities(await getGearCacheActivities());
-    } catch (err) {
-      console.error('[Gear] Load failed:', err);
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('429')) setError('rate_limited');
-      else if (msg.includes('401')) setError('token_expired');
-      else setError('load_failed');
+      await mergeIntoGearCache(initialStore.activities);
+      if (!cancelled) {
+        setGearCacheActivities(await getGearCacheActivities());
+      }
+
+      if (!initialStore.hasMore) {
+        await setGearCache({
+          loadedPages: initialStore.loadedPages,
+          hasMore: false,
+          lastFetchedAt: Date.now(),
+        });
+        return;
+      }
+
+      if (isLoadingAll) return;
+
+      resetHistorySync();
+      setError(null);
+
+      try {
+        await syncHistory({
+          onPageLoaded: async ({ activities: pageActivities }) => {
+            if (pageActivities.length > 0) {
+              await mergeIntoGearCache(pageActivities);
+              if (!cancelled) {
+                setGearCacheActivities(await getGearCacheActivities());
+              }
+            }
+          },
+        });
+
+        const store = useActivitiesStore.getState();
+        await mergeIntoGearCache(store.activities);
+        await setGearCache({ loadedPages: store.loadedPages, hasMore: store.hasMore, lastFetchedAt: Date.now() });
+        if (!cancelled) {
+          setGearCacheActivities(await getGearCacheActivities());
+        }
+      } catch (err) {
+        console.error('[Gear] Background sync failed:', err);
+        const msg = err instanceof Error ? err.message : '';
+        if (!cancelled) {
+          if (msg.includes('429')) setError('rate_limited');
+          else if (msg.includes('401')) setError('token_expired');
+          else setError('load_failed');
+        }
+      }
     }
+
+    syncGearHistory().catch((err) => {
+      console.error('[Gear] Background sync failed:', err);
+      if (!cancelled) setError('load_failed');
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.accessToken, isLoadingAll, resetHistorySync, syncHistory]);
 
   // Build final gear stats list (filter out retired)
@@ -332,43 +364,7 @@ export default function GearPage() {
         <div className="mb-4 flex flex-wrap items-center gap-2 justify-between bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 px-4 py-3">
           <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
             {t('gear.basedOnActivities', '基于 {{count}} 条跑步记录', { count: totalRunningActivities })}
-            {hasMore && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                ({t('gear.hasMore', '还有更多')})
-              </span>
-            )}
           </div>
-          {hasMore && !isLoadingAll && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleLoadAll}
-                className="inline-flex items-center gap-1 font-mono text-xs font-bold uppercase px-3 py-1.5 bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 transition-colors shrink-0"
-              >
-                <Download size={12} />
-                {t('gear.loadAll', '加载全部')}
-              </button>
-              <button
-                onClick={async () => {
-                  await clearGearCache();
-                  setGearCacheActivities([]);
-                  useActivitiesStore.getState().batchUpdate({ loadedPages: 0, hasMore: true });
-                  setResetCounter((c) => c + 1);
-                }}
-                className="font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline shrink-0"
-                title={t('gear.resetCache', '清除缓存后重新加载')}
-              >
-                {t('gear.resetCache', '重置')}
-              </button>
-            </div>
-          )}
-          {isLoadingAll && loadProgress && (
-            <div className="flex items-center gap-2 shrink-0">
-              <Loader2 size={14} className="animate-spin text-blue-500" />
-              <span className="font-mono text-xs text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                {t('gear.loadingProgress', '已加载 {{current}} 页', { current: loadProgress.pagesLoaded })}
-              </span>
-            </div>
-          )}
         </div>
 
         {error && (

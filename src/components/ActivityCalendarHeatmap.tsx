@@ -34,7 +34,7 @@ const REVERSE_COLOR_CLASSES = [
 
 export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses }: ActivityCalendarHeatmapProps) {
 
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const isZh = locale.startsWith('zh');
   const [hovered, setHovered] = useState<{ date: string; value: number; x: number; y: number } | null>(null);
@@ -43,10 +43,10 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
     return getDailyAggregates(activities, year, metric);
   }, [activities, year, metric]);
 
-  const { weeks, maxValue, totalRuns } = useMemo(() => {
+  const { weeks, maxValue, totalRuns, valueMap } = useMemo(() => {
     // Build date → value map
-    const valueMap = new Map<string, number>();
-    dailyData.forEach((d) => valueMap.set(d.date, d.value));
+    const byDate = new Map<string, number>();
+    dailyData.forEach((d) => byDate.set(d.date, d.value));
 
     // Find max value for color scaling
     const max = Math.max(...dailyData.map((d) => d.value), 1);
@@ -74,11 +74,11 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
       w.push(week);
     }
 
-    return { weeks: w, maxValue: max, totalRuns: runs };
+    return { weeks: w, maxValue: max, totalRuns: runs, valueMap: byDate };
   }, [dailyData, year]);
 
   const isReverseMetric = metric === 'pace';
-  const COLOR_CLASSES = isReverseMetric ? REVERSE_COLOR_CLASSES : (colorClasses || DEFAULT_COLOR_CLASSES);
+  const COLOR_CLASSES = colorClasses || (isReverseMetric ? REVERSE_COLOR_CLASSES : DEFAULT_COLOR_CLASSES);
 
   const getLevel = (value: number) => {
     if (value <= 0) return 0;
@@ -118,7 +118,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-300">
-          {isZh ? `今年共跑步 ${totalRuns} 次` : `${totalRuns} runs this year`}
+          {t('stats.yearRunCount', '{{year}} · {{count}} 次跑步', { year, count: totalRuns })}
         </span>
       </div>
 
@@ -162,7 +162,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
             <div key={wi} className="flex flex-col gap-[3px] flex-shrink-0">
               {week.map((date, di) => {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                const value = dailyData.find((d) => d.date === key)?.value || 0;
+                const value = valueMap.get(key) || 0;
                 const level = getLevel(value);
                 const isInYear = date.getFullYear() === year;
                 return (
