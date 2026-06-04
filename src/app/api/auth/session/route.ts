@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAccessToken } from '@/lib/strava';
-import { getAuthCookieOptions, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
+import { getAuthCookieOptions, parseCookieHeader, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
 
 interface StravaAthleteResponse {
   id: number;
@@ -26,7 +26,7 @@ const SESSION_CACHE_TTL = 30 * 1000; // 30 seconds
 export async function GET(request: NextRequest) {
   // Get cookies from request headers
   const cookieHeader = request.headers.get('cookie') || '';
-  const cookies = parseCookies(cookieHeader);
+  const cookies = parseCookieHeader(cookieHeader);
   
   let accessToken = cookies['access_token'];
   const userId = cookies['user_id'];
@@ -122,18 +122,4 @@ export async function GET(request: NextRequest) {
 
   sessionCache.set(cacheKey, { data: sessionData, timestamp: Date.now() });
   return NextResponse.json(sessionData);
-}
-
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  if (!cookieHeader) return cookies;
-  
-  cookieHeader.split(';').forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split('=');
-    if (name) {
-      cookies[name] = decodeURIComponent(rest.join('='));
-    }
-  });
-  
-  return cookies;
 }

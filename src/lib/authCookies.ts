@@ -23,3 +23,25 @@ export function getExpiredAuthCookieOptions() {
     expires: new Date(0),
   };
 }
+
+function safeDecodeCookieValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function parseCookieHeader(cookieHeader: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+
+  cookieHeader.split(';').forEach((cookie) => {
+    const [rawName, ...rest] = cookie.trim().split('=');
+    const name = rawName.trim();
+    if (!name) return;
+    cookies[name] = safeDecodeCookieValue(rest.join('='));
+  });
+
+  return cookies;
+}

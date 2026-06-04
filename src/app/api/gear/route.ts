@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseCookieHeader } from '@/lib/authCookies';
 
 interface StravaGear {
   id: string;
@@ -11,21 +12,9 @@ interface StravaGear {
   retired: boolean;
 }
 
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  if (!cookieHeader) return cookies;
-  cookieHeader.split(';').forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split('=');
-    if (name) {
-      cookies[name] = decodeURIComponent(rest.join('='));
-    }
-  });
-  return cookies;
-}
-
 export async function POST(request: NextRequest) {
   const cookieHeader = request.headers.get('cookie') || '';
-  const cookies = parseCookies(cookieHeader);
+  const cookies = parseCookieHeader(cookieHeader);
   const accessToken = cookies['access_token'];
 
   if (!accessToken) {

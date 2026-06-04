@@ -31,7 +31,11 @@ interface GearCacheData {
 }
 
 function isBrowser() {
-  return typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
+  return typeof window !== 'undefined';
+}
+
+function hasIndexedDb() {
+  return isBrowser() && typeof indexedDB !== 'undefined';
 }
 
 function getEmptyGearCache(): GearCacheData {
@@ -73,8 +77,17 @@ function removeLegacyGearCache() {
   }
 }
 
+function writeLegacyGearCache(data: GearCacheData) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(GEAR_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Gear stats still work when the cache cannot be written.
+  }
+}
+
 function openGearCacheDatabase(): Promise<IDBDatabase | null> {
-  if (!isBrowser()) return Promise.resolve(null);
+  if (!hasIndexedDb()) return Promise.resolve(null);
 
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(GEAR_CACHE_DB, GEAR_CACHE_DB_VERSION);
@@ -155,11 +168,15 @@ function toLightGearActivity(a: StravaActivity): LightGearActivity {
 
 export async function getGearCache(): Promise<GearCacheData | null> {
   if (!isBrowser()) return null;
+
+  const legacy = readLegacyGearCache();
+
+  if (!hasIndexedDb()) return legacy;
+
   try {
     const normalized = await getIndexedGearCache();
     if (normalized) return normalized;
 
-    const legacy = readLegacyGearCache();
     if (!legacy) return null;
 
     await writeIndexedGearCache(legacy);
@@ -172,18 +189,25 @@ export async function getGearCache(): Promise<GearCacheData | null> {
 
 export async function setGearCache(data: Partial<GearCacheData>): Promise<void> {
   if (!isBrowser()) return;
+
+  const existing = await getGearCache();
+  const merged: GearCacheData = {
+    ...getEmptyGearCache(),
+    ...existing,
+    ...data,
+    version: GEAR_CACHE_VERSION,
+  };
+
+  if (!hasIndexedDb()) {
+    writeLegacyGearCache(merged);
+    return;
+  }
+
   try {
-    const existing = await getIndexedGearCache() ?? readLegacyGearCache();
-    const merged: GearCacheData = {
-      ...getEmptyGearCache(),
-      ...existing,
-      ...data,
-      version: GEAR_CACHE_VERSION,
-    };
     await writeIndexedGearCache(merged);
     removeLegacyGearCache();
-  } catch (error) {
-    console.warn('[GearCache] Failed to persist IndexedDB cache:', error);
+  } catch {
+    writeLegacyGearCache(merged);
   }
 }
 
@@ -207,10 +231,12 @@ export async function getGearCacheActivities(): Promise<LightGearActivity[]> {
 
 export async function clearGearCache(): Promise<void> {
   if (!isBrowser()) return;
-  try {
-    await runGearCacheOperation<undefined>('readwrite', (store) => store.delete(GEAR_CACHE_KEY));
-  } catch {
-    // Ignore cache clear failures.
+  if (hasIndexedDb()) {
+    try {
+      await runGearCacheOperation<undefined>('readwrite', (store) => store.delete(GEAR_CACHE_KEY));
+    } catch {
+      // Ignore cache clear failures.
+    }
   }
   removeLegacyGearCache();
 }

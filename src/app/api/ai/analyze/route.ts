@@ -3,6 +3,7 @@ import { analyzeActivity } from '@/lib/ai';
 import { analyzeTrainingHistory, classifyActivity } from '@/lib/trainingAnalysis';
 import { analyzeActivityStreams, formatStreamAnalysisForPrompt } from '@/lib/streamAnalysis';
 import { ActivityStream, StravaActivity } from '@/types';
+import { parseCookieHeader } from '@/lib/authCookies';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const cookieHeader = request.headers.get('cookie') || '';
-    const cookies = parseCookies(cookieHeader);
+    const cookies = parseCookieHeader(cookieHeader);
     const accessToken = cookies['access_token'];
     
     if (!accessToken) {
@@ -216,18 +217,4 @@ async function fetchActivityDetails(
   } catch {
     return null;
   }
-}
-
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  if (!cookieHeader) return cookies;
-  
-  cookieHeader.split(';').forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split('=');
-    if (name) {
-      cookies[name] = decodeURIComponent(rest.join('='));
-    }
-  });
-  
-  return cookies;
 }

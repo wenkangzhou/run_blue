@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseCookieHeader } from '@/lib/authCookies';
+import { normalizeSegmentExploreBounds } from '@/lib/segmentBounds';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -6,20 +8,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  if (!cookieHeader) return cookies;
-  cookieHeader.split(';').forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split('=');
-    if (name) cookies[name] = decodeURIComponent(rest.join('='));
-  });
-  return cookies;
-}
-
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    const cookies = parseCookies(cookieHeader);
+    const cookies = parseCookieHeader(cookieHeader);
     const accessToken = cookies['access_token'];
 
     if (!accessToken) {
@@ -27,10 +19,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const bounds = searchParams.get('bounds'); // sw_lat,sw_lng,ne_lat,ne_lng
+    const bounds = normalizeSegmentExploreBounds(searchParams.get('bounds')); // sw_lat,sw_lng,ne_lat,ne_lng
 
     if (!bounds) {
-      return NextResponse.json({ error: 'bounds required' }, { status: 400 });
+      return NextResponse.json({ error: 'valid bounds required' }, { status: 400 });
     }
 
     const response = await fetch(

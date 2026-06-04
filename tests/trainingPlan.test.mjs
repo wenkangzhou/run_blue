@@ -5,6 +5,7 @@ import path from 'node:path';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { cleanupBrowserStorage, createFakeIndexedDB, installBrowserStorage } from './helpers/browserStorage.mjs';
 
 const require = createRequire(import.meta.url);
 const tempDir = path.join(os.tmpdir(), 'runblue-trainingPlan-test');
@@ -29,10 +30,17 @@ compileLibFile('src/lib/userProfile.ts', 'userProfile.js');
 compileLibFile('src/lib/trainingPlan.ts', 'trainingPlan.js');
 
 const {
+  clearTrainingPlans,
+  deleteTrainingPlan,
   generateTrainingPlan,
+  getStoredTrainingPlan,
+  getStoredTrainingPlans,
   estimatePlanWeeks,
+  saveTrainingPlan,
   TrainingPlanInputError,
 } = require(path.join(tempDir, 'trainingPlan.js'));
+
+test.afterEach(cleanupBrowserStorage);
 
 test('generates a periodized training plan with seven sessions per week', async () => {
   const plan = await generateTrainingPlan('21k', 7200, 12, 1500, 35, '2026-10-18', 'zh', 180);
@@ -77,4 +85,41 @@ test('estimates default plan weeks by race distance', () => {
   assert.equal(estimatePlanWeeks('10k'), 10);
   assert.equal(estimatePlanWeeks('21k'), 12);
   assert.equal(estimatePlanWeeks('42k'), 16);
+});
+
+test('stores training plans through localStorage when IndexedDB is unavailable', async () => {
+  const localStorage = installBrowserStorage();
+  const plan = await generateTrainingPlan('10k', 3000, 10, 1500, 30, undefined, 'zh', 175);
+
+  await saveTrainingPlan(plan);
+
+  assert.equal(localStorage.data.has('runblue_training_plans'), true);
+  assert.equal((await getStoredTrainingPlans()).length, 1);
+  assert.equal((await getStoredTrainingPlan(plan.id)).id, plan.id);
+
+  await deleteTrainingPlan(plan.id);
+  assert.deepEqual(await getStoredTrainingPlans(), []);
+});
+
+test('migrates legacy localStorage training plans into IndexedDB', async () => {
+  const plan = await generateTrainingPlan('5k', 1500, 8, 1500, 25, undefined, 'en', 172);
+  const fakeIndexedDB = createFakeIndexedDB();
+  const localStorage = installBrowserStorage({
+    indexedDB: fakeIndexedDB.api,
+    local: {
+      runblue_training_plans: JSON.stringify([plan]),
+    },
+  });
+
+  const plans = await getStoredTrainingPlans();
+
+  assert.equal(plans.length, 1);
+  assert.equal(plans[0].id, plan.id);
+  assert.equal(localStorage.data.has('runblue_training_plans'), false);
+
+  const indexedStore = fakeIndexedDB.stores.get('training_plans');
+  assert.deepEqual(indexedStore.get('runblue_training_plans'), [plan]);
+
+  await clearTrainingPlans();
+  assert.equal(indexedStore.has('runblue_training_plans'), false);
 });

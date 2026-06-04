@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint src",
-    "test:core": "node --test tests/routeClustering.test.mjs tests/dates.test.mjs tests/trainingPlan.test.mjs tests/activitySync.test.mjs tests/aiAnalysisCacheKey.test.mjs tests/aiAnalysis.test.mjs tests/authCookies.test.mjs",
+    "test:core": "node --test tests/routeClustering.test.mjs tests/dates.test.mjs tests/userProfile.test.mjs tests/trainingPlanRequest.test.mjs tests/trainingPlan.test.mjs tests/activitySync.test.mjs tests/activityDetailCache.test.mjs tests/gearCache.test.mjs tests/segmentBounds.test.mjs tests/aiAnalysisCacheKey.test.mjs tests/aiAnalysisCache.test.mjs tests/aiAnalysis.test.mjs tests/authCookies.test.mjs tests/authPersistence.test.mjs",
     "test:routes": "npm run test:core"
   },
   "dependencies": {

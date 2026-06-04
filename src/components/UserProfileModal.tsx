@@ -8,6 +8,8 @@ import {
   saveUserProfile,
   parseTimeToSeconds,
   formatSecondsToTime,
+  isUserProfileRangeValue,
+  USER_PROFILE_LIMITS,
   type UserProfilePBs,
 } from '@/lib/userProfile';
 import { X, Trophy, Clock, AlertCircle, HeartPulse } from 'lucide-react';
@@ -73,6 +75,23 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   };
 
+  const clearFieldError = (key: string) => {
+    if (errors[key]) {
+      setErrors(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const getOptionalNumber = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  };
+
+  const heightRange = `${USER_PROFILE_LIMITS.height.min}-${USER_PROFILE_LIMITS.height.max} cm`;
+  const weightRange = `${USER_PROFILE_LIMITS.weight.min}-${USER_PROFILE_LIMITS.weight.max} kg`;
+  const lthrRange = `${USER_PROFILE_LIMITS.lthr.min}-${USER_PROFILE_LIMITS.lthr.max} bpm`;
+
   const handleSave = () => {
     const newErrors: Record<string, boolean> = {};
     const pbs: UserProfilePBs = {
@@ -95,15 +114,21 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       }
     }
 
+    const h = getOptionalNumber(height);
+    const w = getOptionalNumber(weight);
+    const lt = getOptionalNumber(lthr);
+
+    if (!isUserProfileRangeValue('height', h)) newErrors.height = true;
+    if (!isUserProfileRangeValue('weight', w)) newErrors.weight = true;
+    if (!Number.isInteger(lt) || !isUserProfileRangeValue('lthr', lt)) {
+      if (lt !== null) newErrors.lthr = true;
+    }
+
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    const h = height.trim() ? parseFloat(height.trim()) : null;
-    const w = weight.trim() ? parseFloat(weight.trim()) : null;
-    const lt = lthr.trim() ? parseInt(lthr.trim(), 10) : null;
-
     saveUserProfile({ pbs, height: h, weight: w, lthr: lt });
-    setHasProfile(hasAny || !!h || !!w);
+    setHasProfile(hasAny || !!h || !!w || !!lt);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
   };
@@ -206,11 +231,24 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     inputMode="decimal"
                     placeholder="170"
                     value={height}
-                    onChange={e => setHeight(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400"
+                    onChange={e => {
+                      setHeight(e.target.value);
+                      clearFieldError('height');
+                    }}
+                    className={[
+                      'w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
+                      errors.height
+                        ? 'border-red-500 focus:border-red-600'
+                        : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400',
+                    ].join(' ')}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-zinc-400 pointer-events-none">cm</span>
                 </div>
+                {errors.height && (
+                  <p className="mt-1 font-mono text-xs text-red-600">
+                    {t('common.error')} — {heightRange}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block font-mono text-xs font-bold uppercase mb-1.5">
@@ -222,11 +260,24 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     inputMode="decimal"
                     placeholder="65"
                     value={weight}
-                    onChange={e => setWeight(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400"
+                    onChange={e => {
+                      setWeight(e.target.value);
+                      clearFieldError('weight');
+                    }}
+                    className={[
+                      'w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
+                      errors.weight
+                        ? 'border-red-500 focus:border-red-600'
+                        : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400',
+                    ].join(' ')}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-zinc-400 pointer-events-none">kg</span>
                 </div>
+                {errors.weight && (
+                  <p className="mt-1 font-mono text-xs text-red-600">
+                    {t('common.error')} — {weightRange}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block font-mono text-xs font-bold uppercase mb-1.5">
@@ -238,11 +289,24 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     inputMode="numeric"
                     placeholder="165"
                     value={lthr}
-                    onChange={e => setLthr(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400"
+                    onChange={e => {
+                      setLthr(e.target.value);
+                      clearFieldError('lthr');
+                    }}
+                    className={[
+                      'w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
+                      errors.lthr
+                        ? 'border-red-500 focus:border-red-600'
+                        : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400',
+                    ].join(' ')}
                   />
                   <HeartPulse size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                 </div>
+                {errors.lthr && (
+                  <p className="mt-1 font-mono text-xs text-red-600">
+                    {t('common.error')} — {lthrRange}
+                  </p>
+                )}
               </div>
             </div>
           </div>

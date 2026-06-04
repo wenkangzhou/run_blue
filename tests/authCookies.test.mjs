@@ -29,6 +29,7 @@ const {
   THIRTY_DAYS_SECONDS,
   getAuthCookieOptions,
   getExpiredAuthCookieOptions,
+  parseCookieHeader,
 } = require(compiledPath);
 
 test('auth cookie options are scoped to the whole app and HttpOnly', () => {
@@ -53,4 +54,17 @@ test('auth cookie name lists include current and legacy session cookies', () => 
   assert.deepEqual(AUTH_COOKIE_NAMES, ['access_token', 'refresh_token', 'user_id']);
   assert.ok(LEGACY_AUTH_COOKIE_NAMES.includes('next-auth.session-token'));
   assert.equal(THIRTY_DAYS_SECONDS, 30 * 24 * 60 * 60);
+});
+
+test('parseCookieHeader decodes cookie values and tolerates malformed encoding', () => {
+  assert.deepEqual(
+    parseCookieHeader('access_token=abc%20123; empty=; bad=%E0%A4%A; refresh_token=a=b=c'),
+    {
+      access_token: 'abc 123',
+      empty: '',
+      bad: '%E0%A4%A',
+      refresh_token: 'a=b=c',
+    }
+  );
+  assert.deepEqual(parseCookieHeader(''), {});
 });

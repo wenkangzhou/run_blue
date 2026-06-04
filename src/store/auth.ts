@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '@/types';
+import { stripAuthTokens } from '@/lib/authPersistence';
 
 interface AuthState {
   user: User | null;
@@ -9,16 +10,6 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => void;
-}
-
-function stripAuthTokens(user: User | null): User | null {
-  if (!user) return null;
-  return {
-    ...user,
-    accessToken: '',
-    refreshToken: '',
-    expiresAt: 0,
-  };
 }
 
 export const useAuthStore = create<AuthState>()(

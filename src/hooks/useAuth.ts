@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
 import { useTranslation } from 'react-i18next';
+import {
+  shouldClearAuthStateForSessionError,
+  shouldPromptReauthForSessionError,
+} from '@/lib/authPersistence';
 
 export function useAuth() {
   const router = useRouter();
@@ -47,9 +51,10 @@ export function useAuth() {
               refreshToken: '',
               expiresAt: session.expiresAt || 0,
             });
-          } else if (session.error === 'token_expired') {
-            // Token expired, need to re-login
-            setNeedsReauth(true);
+          } else if (shouldClearAuthStateForSessionError(session.error)) {
+            if (shouldPromptReauthForSessionError(session.error)) {
+              setNeedsReauth(true);
+            }
             logout();
           } else {
             // No session, set loading to false

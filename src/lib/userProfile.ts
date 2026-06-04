@@ -14,28 +14,76 @@ export interface UserProfile {
 }
 
 const STORAGE_KEY = 'runblue_user_profile';
+const PB_KEYS: Array<keyof UserProfilePBs> = ['5k', '10k', '21k', '42k'];
+export const USER_PROFILE_LIMITS = {
+  height: { min: 50, max: 250 },
+  weight: { min: 20, max: 300 },
+  lthr: { min: 80, max: 240 },
+} as const;
+
+function normalizePositiveNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+function normalizeRangeNumber(
+  value: unknown,
+  { min, max, integer = false }: { min: number; max: number; integer?: boolean }
+): number | null {
+  const numberValue = normalizePositiveNumber(value);
+  if (numberValue === null || numberValue < min || numberValue > max) return null;
+  if (integer && !Number.isInteger(numberValue)) return null;
+  return numberValue;
+}
+
+function normalizeUserProfile(value: unknown): UserProfile | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const parsed = value as Partial<UserProfile>;
+  const sourcePBs = parsed.pbs && typeof parsed.pbs === 'object'
+    ? parsed.pbs as Partial<UserProfilePBs>
+    : {};
+
+  const pbs = PB_KEYS.reduce((acc, key) => {
+    acc[key] = normalizePositiveNumber(sourcePBs[key]);
+    return acc;
+  }, {} as UserProfilePBs);
+
+  return {
+    pbs,
+    height: normalizeRangeNumber(parsed.height, USER_PROFILE_LIMITS.height),
+    weight: normalizeRangeNumber(parsed.weight, USER_PROFILE_LIMITS.weight),
+    lthr: normalizeRangeNumber(parsed.lthr, { ...USER_PROFILE_LIMITS.lthr, integer: true }),
+    updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
+  };
+}
+
+export function isUserProfileRangeValue(
+  field: keyof typeof USER_PROFILE_LIMITS,
+  value: number | null
+): boolean {
+  if (value === null) return true;
+  const { min, max } = USER_PROFILE_LIMITS[field];
+  return Number.isFinite(value) && value >= min && value <= max && (field !== 'lthr' || Number.isInteger(value));
+}
 
 export function getUserProfile(): UserProfile | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as UserProfile;
-    // Backward compatibility: old profiles may not have new fields
-    if (parsed.height === undefined) parsed.height = null;
-    if (parsed.weight === undefined) parsed.weight = null;
-    if (parsed.lthr === undefined) parsed.lthr = null;
-    return parsed;
+    return normalizeUserProfile(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
 export function saveUserProfile(profile: Omit<UserProfile, 'updatedAt'>): UserProfile {
-  const fullProfile: UserProfile = {
+  const fullProfile = normalizeUserProfile({
     ...profile,
     updatedAt: new Date().toISOString(),
-  };
+  }) as UserProfile;
+
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fullProfile));
   }
@@ -55,19 +103,23 @@ export function parseTimeToSeconds(input: string): number | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  const parts = trimmed.split(':').map(p => parseInt(p, 10));
-  if (parts.some(isNaN)) return null;
+  const rawParts = trimmed.split(':');
+  if (rawParts.length !== 2 && rawParts.length !== 3) return null;
+  if (rawParts.some(part => !/^\d+$/.test(part))) return null;
+
+  const parts = rawParts.map(p => Number.parseInt(p, 10));
 
   if (parts.length === 2) {
     // mm:ss
     const [mm, ss] = parts;
+    if (ss >= 60) return null;
     return mm * 60 + ss;
-  } else if (parts.length === 3) {
-    // hh:mm:ss
-    const [hh, mm, ss] = parts;
-    return hh * 3600 + mm * 60 + ss;
   }
-  return null;
+
+  // hh:mm:ss
+  const [hh, mm, ss] = parts;
+  if (mm >= 60 || ss >= 60) return null;
+  return hh * 3600 + mm * 60 + ss;
 }
 
 /**
@@ -98,7 +150,7 @@ export function getMergedPBsForAnalysis(
 
   const merged: Record<string, number> = { ...fallbackPBs };
 
-  (Object.keys(profile.pbs) as Array<keyof UserProfilePBs>).forEach(key => {
+  PB_KEYS.forEach(key => {
     const val = profile.pbs[key];
     if (val && val > 0) {
       merged[key] = val;
