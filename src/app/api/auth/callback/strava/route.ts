@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeToken } from '@/lib/strava';
 import { getAuthCookieOptions, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
+import { getAuthErrorRedirectPath } from '@/lib/authRedirect';
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -12,11 +13,11 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL(`/?error=${error}`, request.url));
+    return NextResponse.redirect(new URL(getAuthErrorRedirectPath(error), request.url));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/?error=no_code', request.url));
+    return NextResponse.redirect(new URL(getAuthErrorRedirectPath('no_code'), request.url));
   }
 
   try {
@@ -39,7 +40,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (err) {
     console.error('Strava callback error:', err);
-    const errorMessage = encodeURIComponent(getErrorMessage(err, 'auth_failed'));
-    return NextResponse.redirect(new URL(`/?error=${errorMessage}`, request.url));
+    return NextResponse.redirect(new URL(getAuthErrorRedirectPath(getErrorMessage(err, 'auth_failed')), request.url));
   }
 }

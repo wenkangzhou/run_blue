@@ -27,6 +27,7 @@ export default function StatsPage() {
   const {
     isSyncing: historySyncing,
     progress: historyProgress,
+    error: historySyncError,
     syncHistory,
   } = useActivityHistorySync(user?.accessToken);
   const hasInitiatedRef = useRef(false);
@@ -68,6 +69,14 @@ export default function StatsPage() {
   const progressText = historyProgress?.phase === 'history' && historyProgress.page
     ? t('common.loading') + ` (${historyProgress.page} ${t('stats.pages', '页')})`
     : t('common.loading');
+  const syncErrorText = (() => {
+    if (historySyncError) {
+      if (historySyncError.kind === 'auth') return t('auth.unauthorized', '请先连接 Strava 账号');
+      if (historySyncError.kind === 'rateLimit') return t('errors.rateLimitedDesc', 'Strava API 限流中，请稍后再试');
+      return t('stats.syncFailed', '历史同步失败，请稍后重试');
+    }
+    return '';
+  })();
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -91,6 +100,14 @@ export default function StatsPage() {
           {t('stats.volumeComparisonDesc', '追踪你的跑步数据，按时间维度对比分析')}
         </p>
 
+        {syncErrorText && activities.length > 0 && (
+          <div className="mb-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-3 rounded">
+            <p className="font-mono text-xs text-red-600 dark:text-red-400">
+              {syncErrorText}
+            </p>
+          </div>
+        )}
+
         {isLoading && activities.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-pulse font-mono text-xl flex items-center gap-2">
@@ -106,13 +123,6 @@ export default function StatsPage() {
           <VolumeDashboard activities={activities} />
         )}
 
-        {/* Loading more indicator */}
-        {isLoading && activities.length > 0 && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-zinc-500 font-mono text-xs">
-            <Loader2 size={14} className="animate-spin" />
-            {progressText}
-          </div>
-        )}
       </div>
     </div>
   );

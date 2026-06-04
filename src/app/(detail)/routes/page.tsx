@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
+import type { RouteSyncStats } from '@/lib/routeSync';
 import { RouteCard } from '@/components/RouteCard';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { MapPinOff, ChevronLeft, RefreshCw, Database, AlertCircle } from 'lucide-react';
@@ -24,6 +25,7 @@ export default function RoutesPage() {
     syncHistory,
     reset: resetSyncState,
   } = useActivityHistorySync(user?.accessToken);
+  const [lastSyncStats, setLastSyncStats] = React.useState<RouteSyncStats | null>(null);
 
   React.useEffect(() => {
     if (authLoading) return;
@@ -46,6 +48,7 @@ export default function RoutesPage() {
     if (isSyncing) return;
 
     resetSyncState();
+    setLastSyncStats(null);
     try {
       if (user?.accessToken) {
         await syncHistory();
@@ -53,7 +56,9 @@ export default function RoutesPage() {
         await syncHistory();
       }
 
-      syncRoutes(useActivitiesStore.getState().activities);
+      const state = useActivitiesStore.getState();
+      const stats = syncRoutes(state.activities, { pruneMissing: !state.hasMore });
+      setLastSyncStats(stats);
     } catch (error) {
       console.error('[Routes] Failed to sync historical routes:', error);
     }
@@ -76,9 +81,22 @@ export default function RoutesPage() {
         count: syncProgress.pagesLoaded,
       });
     }
-    if (syncProgress.phase === 'complete') return t('routes.syncDone', '历史匹配已更新');
+    if (syncProgress.phase === 'complete') {
+      if (lastSyncStats) {
+        return t(
+          'routes.syncDoneWithStats',
+          '历史匹配已更新 · 新增 {{added}} 条匹配 · 更新 {{routes}} 条路线',
+          {
+            added: lastSyncStats.matchesAdded,
+            routes: lastSyncStats.routesUpdated,
+          }
+        );
+      }
+      return t('routes.syncDone', '历史匹配已更新');
+    }
     return '';
   })();
+  const shouldShowSyncPanel = savedRoutes.length > 0 && Boolean(hasMore || isSyncing || syncError || lastSyncStats);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -113,10 +131,10 @@ export default function RoutesPage() {
           {t('routes.description', '收藏常跑路线，追踪每次表现变化')}
         </p>
 
-        {savedRoutes.length > 0 && (
+        {shouldShowSyncPanel && (
           <div className={[
             'mb-4 border-2 px-3 py-3 bg-white dark:bg-zinc-900',
-            hasMore
+            hasMore || syncError
               ? 'border-amber-200 dark:border-amber-800'
               : 'border-zinc-200 dark:border-zinc-700',
           ].join(' ')}>
@@ -133,17 +151,22 @@ export default function RoutesPage() {
                     : t('routes.historyComplete', '历史活动已加载完整')}
                 </p>
                 <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                  {t('routes.syncSummary', '当前缓存 {{activities}} 条活动，{{routes}} 条收藏路线已匹配 {{matches}} 次记录。', {
+                  {t('routes.syncSummary', '已扫描 {{activities}} 条活动，{{routes}} 条收藏路线已匹配 {{matches}} 次记录。', {
                     activities: activities.length,
                     routes: savedRoutes.length,
                     matches: totalMatchedActivities,
                   })}
-                  {loadedPages > 0 && (
+                  {hasMore && loadedPages > 0 && (
                     <span className="ml-1">
                       {t('routes.loadedPages', '已加载 {{pages}} 页。', { pages: loadedPages })}
                     </span>
                   )}
                 </p>
+                {hasMore && (
+                  <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                    {t('routes.partialHistoryPreserve', '历史未完整时会保留已有匹配，只增量补充新识别到的活动。')}
+                  </p>
+                )}
                 {syncStatusText && (
                   <p className={[
                     'font-mono text-[11px] mt-2',

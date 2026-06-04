@@ -2,38 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { analyzeActivity } from '@/lib/ai';
 import { analyzeTrainingHistory, classifyActivity } from '@/lib/trainingAnalysis';
 import { analyzeActivityStreams, formatStreamAnalysisForPrompt } from '@/lib/streamAnalysis';
-import { ActivityStream, StravaActivity } from '@/types';
+import { StravaActivity } from '@/types';
 import { parseCookieHeader } from '@/lib/authCookies';
+import { parseAIAnalyzeRequest, type AnalysisHistoryActivity } from '@/lib/aiAnalyzeRequest';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
-
-type AnalysisHistoryActivity = Pick<
-  StravaActivity,
-  | 'id'
-  | 'name'
-  | 'distance'
-  | 'moving_time'
-  | 'elapsed_time'
-  | 'total_elevation_gain'
-  | 'type'
-  | 'sport_type'
-  | 'start_date'
-  | 'start_date_local'
-  | 'average_speed'
-  | 'max_speed'
-  | 'has_heartrate'
-> &
-  Partial<StravaActivity>;
-
-interface AnalyzeRequestBody {
-  activity: StravaActivity;
-  streams: Record<string, ActivityStream> | null;
-  userProfilePBs?: Record<string, number> | null;
-  recentActivities?: AnalysisHistoryActivity[];
-  locale?: string;
-  physique?: { height?: number | null; weight?: number | null };
-  lthr?: number | null;
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -50,13 +23,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    const body = (await request.json()) as AnalyzeRequestBody;
-    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = body;
-
-    if (!activity) {
-      return NextResponse.json({ error: 'Activity data required' }, { status: 400 });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
+
+    const parsed = parseAIAnalyzeRequest(body);
+    if ('error' in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = parsed.payload;
 
     // Fetch full activity details only when the client sent a lightweight list item.
     let currentActivity = activity;

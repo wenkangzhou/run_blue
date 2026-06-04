@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
 import { StravaActivity } from '@/types';
-import { getNextActivitiesPage, loadNextActivitiesPage, syncRecentActivities } from '@/lib/activitySync';
+import { getNextActivitiesPage, syncRecentActivities } from '@/lib/activitySync';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate } from '@/lib/dates';
 import { Loader2, RefreshCw, ChevronUp, Search, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
@@ -38,6 +39,10 @@ export default function ActivitiesPage() {
     setLoading,
     setError,
   } = useActivitiesStore();
+  const {
+    syncHistory,
+    reset: resetHistorySync,
+  } = useActivityHistorySync(user?.accessToken);
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,6 +73,7 @@ export default function ActivitiesPage() {
 
   // 直接记录下一页要加载的页码
   const nextPageRef = useRef(1);
+  const backgroundHistorySyncStartedRef = useRef(false);
 
   // Filter running activities with valid route data + user filters
   const runningActivities = React.useMemo(() => {
@@ -104,13 +110,11 @@ export default function ActivitiesPage() {
   }, [activities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
 
   // Load activities
-  const loadActivities = useCallback(async (type: 'initial' | 'refresh' | 'more') => {
+  const loadActivities = useCallback(async (type: 'initial' | 'refresh') => {
     if (!user?.accessToken) return;
 
     if (type === 'refresh') {
       setRefreshing(true);
-    } else if (type === 'more') {
-      setLoading(true);
     } else {
       // initial
       if (activities.length > 0) {
@@ -124,14 +128,9 @@ export default function ActivitiesPage() {
     setError(null);
 
     try {
-      if (type === 'more') {
-        const result = await loadNextActivitiesPage(user.accessToken);
-        nextPageRef.current = result.page + 1;
-      } else {
-        await syncRecentActivities(user.accessToken, { force: true });
-        const state = useActivitiesStore.getState();
-        nextPageRef.current = getNextActivitiesPage(state.loadedPages, state.activities.length);
-      }
+      await syncRecentActivities(user.accessToken, { force: true });
+      const state = useActivitiesStore.getState();
+      nextPageRef.current = getNextActivitiesPage(state.loadedPages, state.activities.length);
 
       setNeedsReauth(false);
       setRateLimited(false);
@@ -174,11 +173,44 @@ export default function ActivitiesPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
-      loadActivities('more');
+  const startBackgroundHistorySync = useCallback(async () => {
+    if (!user?.accessToken || backgroundHistorySyncStartedRef.current) return;
+    if (refreshing) return;
+    if (!hasMore && !isActivitiesCacheStale(lastFetchedAt)) return;
+
+    backgroundHistorySyncStartedRef.current = true;
+    resetHistorySync();
+    setError(null);
+    setNeedsReauth(false);
+    setRateLimited(false);
+
+    try {
+      await syncHistory();
+      const state = useActivitiesStore.getState();
+      nextPageRef.current = getNextActivitiesPage(state.loadedPages, state.activities.length);
+      setNeedsReauth(false);
+      setRateLimited(false);
+    } catch (err) {
+      const errorKind = getActivityLoadErrorKind(err);
+      if (errorKind === 'auth') setNeedsReauth(true);
+      if (errorKind === 'rateLimit') setRateLimited(true);
+      if (errorKind === 'generic') {
+        setError(t('activity.syncFailed', '同步失败，请稍后重试'));
+      } else if (activities.length === 0) {
+        setError(errorKind === 'rateLimit' ? t('errors.rateLimited') : t('auth.sessionExpired'));
+      }
     }
-  };
+  }, [
+    user?.accessToken,
+    refreshing,
+    hasMore,
+    lastFetchedAt,
+    resetHistorySync,
+    syncHistory,
+    setError,
+    activities.length,
+    t,
+  ]);
 
   // 限制 checkForNewActivities 调用频率：最少间隔 5 分钟
   const lastCheckRef = useRef<number>(0);
@@ -227,6 +259,17 @@ export default function ActivitiesPage() {
       checkForNewActivities();
     }
   }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || !user?.accessToken || activities.length === 0) return;
+    startBackgroundHistorySync();
+  }, [
+    authLoading,
+    isAuthenticated,
+    user?.accessToken,
+    activities.length,
+    startBackgroundHistorySync,
+  ]);
 
   const handleRefresh = () => {
     loadActivities('refresh');
@@ -306,7 +349,6 @@ export default function ActivitiesPage() {
           </button>
           <button onClick={handleRefresh} disabled={refreshing || isLoading} className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            {!refreshing && (rateLimited ? t('errors.rateLimited') : isActivitiesCacheStale(lastFetchedAt) ? t('common.expired') : '')}
           </button>
         </div>
       </div>
@@ -426,6 +468,22 @@ export default function ActivitiesPage() {
         </div>
       )}
 
+      {error && !needsReauth && !rateLimited && activities.length > 0 && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-xs text-red-600 dark:text-red-400">
+              {error}
+            </span>
+            <button
+              onClick={handleRefresh}
+              className="font-mono text-xs text-red-600 dark:text-red-400 hover:underline shrink-0"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {runningActivities.length === 0 ? (
         <div className="text-center py-16">
           <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
@@ -438,26 +496,6 @@ export default function ActivitiesPage() {
             isLoading={isLoading}
             onOpenPeriodShare={() => setIsPeriodShareOpen(true)}
           />
-
-          {/* Load More Button */}
-          {hasMore ? (
-            <div className="py-6 flex justify-center">
-              <button onClick={handleLoadMore} disabled={isLoading} className="px-6 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 rounded-full text-sm font-mono transition-colors">
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 size={14} className="animate-spin" />
-                    {t('common.loading')}
-                  </span>
-                ) : (
-                  t('common.loadMore')
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="py-6 text-center">
-              <span className="text-xs font-mono text-zinc-400">{t('common.noMore')}</span>
-            </div>
-          )}
         </>
       )}
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseCookieHeader } from '@/lib/authCookies';
+import { parseGearIdsRequest } from '@/lib/gearRequest';
 
 interface StravaGear {
   id: string;
@@ -24,7 +25,11 @@ export async function POST(request: NextRequest) {
   let gearIds: string[] = [];
   try {
     const body = await request.json();
-    gearIds = body.gearIds || [];
+    const parsed = parseGearIdsRequest(body);
+    if ('error' in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    gearIds = parsed.gearIds;
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
@@ -33,12 +38,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ gears: [] });
   }
 
-  // Deduplicate
-  const uniqueIds = [...new Set(gearIds)];
-
   // Fetch all gears in parallel with rate-limit safety
   const results = await Promise.allSettled(
-    uniqueIds.map(async (id): Promise<StravaGear | null> => {
+    gearIds.map(async (id): Promise<StravaGear | null> => {
       const res = await fetch(`https://www.strava.com/api/v3/gear/${id}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });

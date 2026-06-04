@@ -379,7 +379,13 @@ export default function ActivityDetailPage() {
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {rateLimited ? t('errors.rateLimited', '限流中') : refreshing ? t('common.refreshing', '刷新中') : isFromCache ? t('common.cached', '缓存') : ''}
+              {rateLimited
+                ? t('errors.rateLimited', '限流中')
+                : refreshing
+                  ? t('common.refreshing', '刷新中')
+                  : isFromCache
+                    ? t('common.cached', '缓存')
+                    : t('common.refresh', '刷新')}
             </button>
           )}
         </div>
