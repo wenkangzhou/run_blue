@@ -8,6 +8,7 @@ export interface RouteSyncSavedRoute {
   key: string;
   name: string;
   activityIds: number[];
+  excludedActivityIds?: number[];
   referenceActivityId: number;
   polyline?: string;
   distance: number;
@@ -21,10 +22,12 @@ export interface RouteSyncStats {
   matchesRemoved: number;
   totalMatches: number;
   skippedRoutes: number;
+  autoMergedRoutes?: number;
 }
 
 export interface RematchSavedRoutesOptions {
   pruneMissing?: boolean;
+  autoMerge?: boolean;
 }
 
 function uniqueIds(ids: number[]): number[] {
@@ -44,10 +47,11 @@ function idsChanged(previous: number[], next: number[]) {
 }
 
 function getReferenceActivity(route: RouteSyncSavedRoute, allActivities: StravaActivity[]) {
+  const excludedIds = new Set(route.excludedActivityIds ?? []);
   return (
-    allActivities.find((a) => a.id === route.referenceActivityId) ??
-    allActivities.find((a) => route.activityIds.includes(a.id)) ??
-    createActivityFromRouteReference(route) ??
+    allActivities.find((a) => a.id === route.referenceActivityId && !excludedIds.has(a.id)) ??
+    allActivities.find((a) => route.activityIds.includes(a.id) && !excludedIds.has(a.id)) ??
+    (excludedIds.has(route.referenceActivityId) ? null : createActivityFromRouteReference(route)) ??
     null
   );
 }
@@ -75,16 +79,17 @@ export function rematchSavedRoutes<T extends RouteSyncSavedRoute>(
       return route;
     }
 
+    const excludedIds = new Set(route.excludedActivityIds ?? []);
     const matchedIds = allActivities
       .filter((activity) => (
         activity.id === referenceActivity.id ||
-        areActivitiesSameRoute(referenceActivity, activity)
+        (!excludedIds.has(activity.id) && areActivitiesSameRoute(referenceActivity, activity))
       ))
       .map((activity) => activity.id);
 
     const activityIds = pruneMissing
-      ? uniqueIds(matchedIds)
-      : uniqueIds([...matchedIds, ...route.activityIds]);
+      ? uniqueIds(matchedIds).filter((id) => !excludedIds.has(id) || id === referenceActivity.id)
+      : uniqueIds([...matchedIds, ...route.activityIds]).filter((id) => !excludedIds.has(id) || id === referenceActivity.id);
     const added = activityIds.filter((id) => !route.activityIds.includes(id)).length;
     const removed = route.activityIds.filter((id) => !activityIds.includes(id)).length;
     stats.totalMatches += activityIds.length;

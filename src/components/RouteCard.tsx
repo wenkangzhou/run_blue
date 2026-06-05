@@ -7,8 +7,8 @@ import { SavedRoute } from '@/store/routes';
 import { StravaActivity } from '@/types';
 import { PixelCard } from './ui';
 import { RouteCardMap } from './map/RouteCardMap';
-import { MapPin, TrendingUp, Clock, Calendar } from 'lucide-react';
-import { formatDistance, formatPace, formatDuration } from '@/lib/strava';
+import { MapPin, TrendingUp, Calendar, Ruler } from 'lucide-react';
+import { formatDistance, formatPace } from '@/lib/strava';
 import { getBestPaceActivity } from '@/lib/routeClustering';
 import { getActivityTimestamp } from '@/lib/dates';
 
@@ -31,7 +31,7 @@ export function RouteCard({ route, activities }: RouteCardProps) {
 
   const latest = sorted[0];
   const totalDistance = routeActivities.reduce((sum, a) => sum + a.distance, 0);
-  const totalDuration = routeActivities.reduce((sum, a) => sum + a.moving_time, 0);
+  const avgDistance = count > 0 ? totalDistance / count : route.distance;
   const bestPaceActivity = getBestPaceActivity(routeActivities);
   const bestPace = bestPaceActivity
     ? formatPace(bestPaceActivity.distance, bestPaceActivity.moving_time, 'min/km')
@@ -56,7 +56,9 @@ export function RouteCard({ route, activities }: RouteCardProps) {
         <div className="p-4">
           <div className="flex items-start justify-between gap-2 mb-3">
             <div className="min-w-0">
-              <h3 className="font-mono font-bold text-base truncate">{route.name}</h3>
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-mono font-bold text-base truncate">{route.name}</h3>
+              </div>
               <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex items-center gap-1">
                 <MapPin size={12} />
                 {route.key}
@@ -77,16 +79,16 @@ export function RouteCard({ route, activities }: RouteCardProps) {
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <Clock size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <Ruler size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalTime')}</p>
-                  <p className="font-mono text-xs font-bold truncate">{formatDuration(totalDuration)}</p>
+                  <p className="font-mono text-[10px] text-zinc-500">{t('routes.averageSingleDistance', '单次约')}</p>
+                  <p className="font-mono text-xs font-bold truncate">{formatDistance(avgDistance, 'km')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
                 <Calendar size={14} className="text-orange-600 dark:text-orange-400 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="font-mono text-[10px] text-zinc-500">{t('stats.totalDistance')}</p>
+                  <p className="font-mono text-[10px] text-zinc-500">{t('routes.cumulativeDistance', '累计')}</p>
                   <p className="font-mono text-xs font-bold truncate">{formatDistance(totalDistance, 'km')}</p>
                 </div>
               </div>

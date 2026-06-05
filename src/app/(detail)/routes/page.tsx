@@ -6,18 +6,106 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
-import { useRoutesStore } from '@/store/routes';
+import { useRoutesStore, type SavedRoute } from '@/store/routes';
 import type { RouteSyncStats } from '@/lib/routeSync';
 import { RouteCard } from '@/components/RouteCard';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
-import { MapPinOff, ChevronLeft, RefreshCw, Database, AlertCircle } from 'lucide-react';
+import { getActivityTimestamp } from '@/lib/dates';
+import { areActivitiesSameRoute, createActivityFromRouteReference } from '@/lib/routeClustering';
+import { MapPinOff, ChevronLeft, RefreshCw, Database, AlertCircle, Layers, ListChecks, Undo2 } from 'lucide-react';
+
+type Activities = ReturnType<typeof useActivitiesStore.getState>['activities'];
+
+interface RouteFamily {
+  baseKey: string;
+  routes: SavedRoute[];
+  totalRuns: number;
+  latestAt: number;
+}
+
+function getRouteBaseKey(key: string) {
+  return key.split('#')[0];
+}
+
+function getRouteActivities(route: SavedRoute, activities: Activities) {
+  return activities.filter((activity) => route.activityIds.includes(activity.id));
+}
+
+function getRouteAverageDistance(route: SavedRoute, activities: Activities) {
+  const routeActivities = getRouteActivities(route, activities);
+  if (routeActivities.length === 0) return route.distance;
+  return routeActivities.reduce((sum, activity) => sum + activity.distance, 0) / routeActivities.length;
+}
+
+function getRouteLatestTimestamp(route: SavedRoute, activities: Activities) {
+  const routeActivities = getRouteActivities(route, activities);
+  if (routeActivities.length === 0) return route.createdAt;
+  return Math.max(...routeActivities.map(getActivityTimestamp));
+}
+
+function getRouteReferenceActivity(route: SavedRoute, activities: Activities) {
+  return (
+    activities.find((activity) => activity.id === route.referenceActivityId) ??
+    activities.find((activity) => route.activityIds.includes(activity.id)) ??
+    createActivityFromRouteReference(route)
+  );
+}
+
+function areRoutesSameFamily(route: SavedRoute, candidate: SavedRoute, activities: Activities) {
+  if (getRouteBaseKey(route.key) === getRouteBaseKey(candidate.key)) return true;
+
+  const routeReference = getRouteReferenceActivity(route, activities);
+  const candidateReference = getRouteReferenceActivity(candidate, activities);
+  if (!routeReference || !candidateReference) return false;
+  if (routeReference.id === candidateReference.id) return true;
+
+  return areActivitiesSameRoute(routeReference, candidateReference);
+}
+
+function buildRouteFamilies(savedRoutes: SavedRoute[], activities: Activities): RouteFamily[] {
+  const families: RouteFamily[] = [];
+
+  savedRoutes.forEach((route) => {
+    const baseKey = getRouteBaseKey(route.key);
+    const family = families.find((candidate) =>
+      candidate.routes.some((familyRoute) => areRoutesSameFamily(familyRoute, route, activities))
+    ) ?? {
+      baseKey,
+      routes: [],
+      totalRuns: 0,
+      latestAt: 0,
+    };
+
+    family.routes.push(route);
+    family.totalRuns += route.activityIds.length;
+    family.latestAt = Math.max(family.latestAt, getRouteLatestTimestamp(route, activities));
+    if (!families.includes(family)) {
+      families.push(family);
+    }
+  });
+
+  return families
+    .map((family) => ({
+      ...family,
+      routes: [...family.routes].sort((a, b) => (
+        getRouteAverageDistance(a, activities) - getRouteAverageDistance(b, activities)
+      )),
+    }))
+    .sort((a, b) => b.latestAt - a.latestAt || b.totalRuns - a.totalRuns);
+}
+
+function getFamilyTargetRoute(family: RouteFamily) {
+  return family.routes.reduce((best, route) => (
+    route.activityIds.length > best.activityIds.length ? route : best
+  ), family.routes[0]);
+}
 
 export default function RoutesPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { activities, hasMore, loadedPages } = useActivitiesStore();
-  const { savedRoutes, syncRoutes } = useRoutesStore();
+  const { savedRoutes, lastRoutesBackup, syncRoutes, restoreLastRoutesBackup } = useRoutesStore();
   const {
     isSyncing,
     progress: syncProgress,
@@ -40,9 +128,13 @@ export default function RoutesPage() {
     }
   }, [isAuthenticated, activities, savedRoutes.length, syncRoutes]);
 
-  if (authLoading || !isAuthenticated) return null;
-
+  const routeFamilies = React.useMemo(
+    () => buildRouteFamilies(savedRoutes, activities),
+    [savedRoutes, activities]
+  );
   const totalMatchedActivities = savedRoutes.reduce((sum, route) => sum + route.activityIds.length, 0);
+
+  if (authLoading || !isAuthenticated) return null;
 
   const handleSyncHistory = async () => {
     if (isSyncing) return;
@@ -57,10 +149,17 @@ export default function RoutesPage() {
       }
 
       const state = useActivitiesStore.getState();
-      const stats = syncRoutes(state.activities, { pruneMissing: !state.hasMore });
+      const stats = syncRoutes(state.activities);
       setLastSyncStats(stats);
     } catch (error) {
       console.error('[Routes] Failed to sync historical routes:', error);
+    }
+  };
+
+  const handleRestoreLastRoutesBackup = () => {
+    if (confirm(t('routes.restoreLastBackupConfirm', '确定撤销上一次路线同步/整理结果吗？当前状态会作为新的备份保留。'))) {
+      restoreLastRoutesBackup();
+      setLastSyncStats(null);
     }
   };
 
@@ -96,7 +195,7 @@ export default function RoutesPage() {
     }
     return '';
   })();
-  const shouldShowSyncPanel = savedRoutes.length > 0 && Boolean(hasMore || isSyncing || syncError || lastSyncStats);
+  const shouldShowSyncPanel = savedRoutes.length > 0 && Boolean(hasMore || isSyncing || syncError || lastSyncStats || lastRoutesBackup);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -175,6 +274,16 @@ export default function RoutesPage() {
                     {syncStatusText}
                   </p>
                 )}
+                {lastRoutesBackup && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreLastRoutesBackup}
+                    className="mt-3 inline-flex items-center gap-1 border border-zinc-200 dark:border-zinc-700 px-2 py-1 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <Undo2 size={11} />
+                    {t('routes.restoreLastBackup', '撤销上次路线同步')}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -189,9 +298,48 @@ export default function RoutesPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {savedRoutes.map((route) => (
-              <RouteCard key={route.key} route={route} activities={activities} />
+          <div className="space-y-6">
+            {routeFamilies.map((family) => (
+              <section key={family.baseKey}>
+                {family.routes.length > 1 && (() => {
+                  const targetRoute = getFamilyTargetRoute(family);
+                  return (
+                    <div className="mb-3 flex items-start justify-between gap-3 border-2 border-blue-100 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/20 px-3 py-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Layers size={15} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                          <h2 className="font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">
+                            {t('routes.similarRoutesDetected', '发现相似路线')}
+                          </h2>
+                        </div>
+                        <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                          {t('routes.similarRoutesSummary', '这 {{versions}} 条路线看起来像同一条，共 {{runs}} 次记录。进入详情后可以看轨迹并选择要合并的路线。', {
+                            versions: family.routes.length,
+                            runs: family.totalRuns,
+                          })}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/routes/${encodeURIComponent(targetRoute.key)}`}
+                        className="shrink-0 inline-flex items-center gap-1 px-2 py-1 border-2 border-zinc-200 dark:border-zinc-700 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <ListChecks size={12} />
+                        {t('routes.reviewSimilarRoutes', '去整理')}
+                      </Link>
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {family.routes.map((route) => (
+                    <RouteCard
+                      key={route.key}
+                      route={route}
+                      activities={activities}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}

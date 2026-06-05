@@ -12,11 +12,20 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { ChartDataPoint, MetricType, formatMetricValue } from '@/lib/stats';
+import {
+  ChartDataPoint,
+  MetricType,
+  calculateSummaryStats,
+  formatMetricValue,
+  formatPaceFromSeconds,
+} from '@/lib/stats';
+import { formatDuration } from '@/lib/strava';
 
 interface VolumeBarChartProps {
   data: ChartDataPoint[];
   metric: MetricType;
+  selectedKey?: string | null;
+  onSelect?: (item: ChartDataPoint) => void;
   colors?: {
     bar: string;
     barStroke: string;
@@ -25,7 +34,7 @@ interface VolumeBarChartProps {
   };
 }
 
-export function VolumeBarChart({ data, metric, colors }: VolumeBarChartProps) {
+export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: VolumeBarChartProps) {
   const { t } = useTranslation();
 
   if (!data || data.length === 0) {
@@ -79,14 +88,25 @@ export function VolumeBarChart({ data, metric, colors }: VolumeBarChartProps) {
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   const item = payload[0].payload as ChartDataPoint;
+                  const summary = calculateSummaryStats([item]);
                   return (
-                    <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]">
+                    <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] min-w-[180px]">
                       <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                         {item.label}
                       </p>
-                      <p className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      <p className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-2">
                         {item.displayValue}
                       </p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                        <span>{t('stats.totalActivities')}</span>
+                        <span className="text-right text-zinc-800 dark:text-zinc-100">{summary.activityCount}</span>
+                        <span>{t('stats.totalDistance')}</span>
+                        <span className="text-right text-zinc-800 dark:text-zinc-100">{(summary.totalDistance / 1000).toFixed(1)} km</span>
+                        <span>{t('stats.totalTime')}</span>
+                        <span className="text-right text-zinc-800 dark:text-zinc-100">{formatDuration(summary.totalDuration)}</span>
+                        <span>{t('stats.avgPace')}</span>
+                        <span className="text-right text-zinc-800 dark:text-zinc-100">{formatPaceFromSeconds(summary.avgPace)}/km</span>
+                      </div>
                     </div>
                   );
                 }
@@ -104,9 +124,10 @@ export function VolumeBarChart({ data, metric, colors }: VolumeBarChartProps) {
                 <Cell
                   key={`cell-${index}`}
                   fill={entry.isCurrent ? (colors?.currentBar || '#f97316') : (colors?.bar || '#3b82f6')}
-                  className="cursor-pointer transition-opacity hover:opacity-80"
-                  stroke={entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
-                  strokeWidth={1}
+                  className={`${entry.activities.length > 0 ? 'cursor-pointer' : 'cursor-default'} transition-opacity hover:opacity-80`}
+                  onClick={() => entry.activities.length > 0 && onSelect?.(entry)}
+                  stroke={selectedKey === entry.key ? '#18181b' : entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
+                  strokeWidth={selectedKey === entry.key ? 2 : 1}
                 />
               ))}
             </Bar>

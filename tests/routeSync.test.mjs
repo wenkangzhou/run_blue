@@ -149,3 +149,13 @@ test('rematchSavedRoutes reports skipped routes without a usable reference', () 
   assert.equal(result.stats.skippedRoutes, 1);
   assert.equal(result.stats.totalMatches, 1);
 });
+
+test('rematchSavedRoutes respects manually excluded activities', () => {
+  const result = rematchSavedRoutes([
+    makeRoute({ activityIds: [1], excludedActivityIds: [2] }),
+  ], [makeActivity(1), makeActivity(2)]);
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.routes[0].activityIds, [1]);
+  assert.equal(result.stats.totalMatches, 1);
+});

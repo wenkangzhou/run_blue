@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { StravaActivity } from '@/types';
 import {
@@ -16,6 +17,7 @@ import {
 } from '@/lib/stats';
 import { VolumeBarChart } from './charts/VolumeBarChart';
 import { ActivityCalendarHeatmap } from './ActivityCalendarHeatmap';
+import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import {
   Activity,
   BarChart3,
@@ -145,6 +147,34 @@ function formatCompactDistance(meters: number) {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
+function formatActivityDistance(meters: number) {
+  return `${(meters / 1000).toFixed(meters >= 10000 ? 1 : 2)} km`;
+}
+
+function formatActivityDate(activity: StravaActivity, locale: string) {
+  const date = getActivityDate(activity);
+  if (locale.startsWith('zh')) {
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatActivityPace(activity: StravaActivity) {
+  return formatPaceFromSeconds(
+    activity.distance > 0 ? activity.moving_time / (activity.distance / 1000) : 0
+  );
+}
+
+function getFastestActivity(activities: StravaActivity[]) {
+  const valid = activities.filter((activity) => activity.distance > 0 && activity.moving_time > 0);
+  if (valid.length === 0) return null;
+  return valid.reduce((fastest, activity) => {
+    const activityPace = activity.moving_time / (activity.distance / 1000);
+    const fastestPace = fastest.moving_time / (fastest.distance / 1000);
+    return activityPace < fastestPace ? activity : fastest;
+  }, valid[0]);
+}
+
 function SummaryTile({
   title,
   value,
@@ -191,6 +221,142 @@ function SummaryTile({
   );
 }
 
+function PeriodInspector({
+  period,
+  summary,
+  metricLabel,
+  metricValue,
+  activities,
+  locale,
+}: {
+  period: ChartDataPoint | null;
+  summary: ReturnType<typeof calculateSummaryStats> | null;
+  metricLabel: string;
+  metricValue: string;
+  activities: StravaActivity[];
+  locale: string;
+}) {
+  const { t } = useTranslation();
+
+  if (!period || !summary) {
+    return (
+      <div className="mt-4 border-t-2 border-zinc-200 dark:border-zinc-800 pt-4">
+        <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+          {t('stats.selectPeriodHint', '选择一个有训练记录的周期查看细节')}
+        </p>
+      </div>
+    );
+  }
+
+  const longestActivity = period.activities.reduce(
+    (longest, activity) => activity.distance > longest.distance ? activity : longest,
+    period.activities[0]
+  );
+  const fastestActivity = getFastestActivity(period.activities);
+  const highestClimbActivity = period.activities.reduce(
+    (highest, activity) => activity.total_elevation_gain > highest.total_elevation_gain ? activity : highest,
+    period.activities[0]
+  );
+  const highlightItems = [
+    {
+      label: t('stats.longestInPeriod', '本周期最长'),
+      value: formatActivityDistance(longestActivity.distance),
+      sub: longestActivity.name,
+    },
+    {
+      label: t('stats.fastestInPeriod', '本周期最快'),
+      value: fastestActivity ? `${formatActivityPace(fastestActivity)}/km` : '--',
+      sub: fastestActivity?.name || '--',
+    },
+    {
+      label: t('stats.climbInPeriod', '最高爬升'),
+      value: `${Math.round(highestClimbActivity.total_elevation_gain)} m`,
+      sub: highestClimbActivity.name,
+    },
+  ];
+
+  return (
+    <div className="mt-4 border-t-2 border-zinc-200 dark:border-zinc-800 pt-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-1">
+            {t('stats.selectedPeriod', '选中周期')}
+          </p>
+          <h3 className="font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            {period.label}
+          </h3>
+          <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            {metricLabel}: <span className="text-zinc-900 dark:text-zinc-100 font-bold">{metricValue}</span>
+          </p>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2 md:min-w-[420px]">
+          <div>
+            <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalActivities')}</p>
+            <p className="font-mono text-sm font-bold">{summary.activityCount}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalDistance')}</p>
+            <p className="font-mono text-sm font-bold">{formatCompactDistance(summary.totalDistance)}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalTime')}</p>
+            <p className="font-mono text-sm font-bold">{formatDuration(summary.totalDuration)}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.avgPace')}</p>
+            <p className="font-mono text-sm font-bold">{formatPaceFromSeconds(summary.avgPace)}/km</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {highlightItems.map((item) => (
+          <div key={item.label} className="border border-zinc-200 dark:border-zinc-800 px-3 py-2">
+            <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+              {item.label}
+            </p>
+            <p className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+              {item.value}
+            </p>
+            <p className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
+              {item.sub}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {activities.length > 0 && (
+        <div className="mt-4">
+          <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-2">
+            {t('stats.recentRuns', '最近训练')}
+          </p>
+          <div className="divide-y divide-zinc-200 dark:divide-zinc-800 border-y border-zinc-200 dark:border-zinc-800">
+            {activities.map((activity) => (
+              <Link
+                key={activity.id}
+                href={`/activities/${activity.id}`}
+                className="grid grid-cols-[52px_1fr_16px] sm:grid-cols-[52px_1fr_auto_16px] items-center gap-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
+              >
+                <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {formatActivityDate(activity, locale)}
+                </span>
+                <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">
+                  {activity.name}
+                </span>
+                <span className="col-start-2 sm:col-start-auto font-mono text-[11px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                  {formatActivityDistance(activity.distance)} · {formatActivityPace(activity)}/km
+                </span>
+                <ChevronRight size={14} className="row-span-2 sm:row-span-1 text-zinc-400" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionHeader({ icon: Icon, title, action }: { icon: LucideIcon; title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 mb-3">
@@ -218,6 +384,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('month');
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [metric, setMetric] = useState<MetricType>('distance');
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (availableYears.length === 0) return;
@@ -248,9 +415,37 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     () => chartData.filter((item) => item.activities.length > 0).length,
     [chartData]
   );
+  const selectedPeriod = useMemo(() => {
+    const selected = chartData.find((item) => item.key === selectedPeriodKey && item.activities.length > 0);
+    if (selected) return selected;
+    const current = chartData.find((item) => item.isCurrent && item.activities.length > 0);
+    if (current) return current;
+    return [...chartData].reverse().find((item) => item.activities.length > 0) ?? null;
+  }, [chartData, selectedPeriodKey]);
+  const selectedPeriodSummary = useMemo(
+    () => selectedPeriod ? calculateSummaryStats([selectedPeriod]) : null,
+    [selectedPeriod]
+  );
+  const selectedPeriodActivities = useMemo(
+    () => selectedPeriod
+      ? [...selectedPeriod.activities]
+          .sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a))
+          .slice(0, 4)
+      : [],
+    [selectedPeriod]
+  );
   const tone = getMetricTone(metric);
   const hasYearNav = availableYears.length > 0;
   const showYearNav = hasYearNav && (periodType === 'week' || periodType === 'month');
+
+  useEffect(() => {
+    setSelectedPeriodKey((prev) => {
+      if (prev && chartData.some((item) => item.key === prev && item.activities.length > 0)) {
+        return prev;
+      }
+      return selectedPeriod?.key ?? null;
+    });
+  }, [chartData, selectedPeriod?.key]);
 
   const handlePrevYear = () => {
     const idx = availableYears.indexOf(selectedYear);
@@ -287,6 +482,10 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const metricUnitLabel = getMetricUnit(metric);
   const bestPeriodValue = bestPeriod
     ? `${formatMetricValue(bestPeriod.value, metric)} ${metricUnitLabel}`.trim()
+    : '--';
+  const selectedMetricLabel = metricLabel(metric);
+  const selectedMetricValue = selectedPeriod
+    ? `${formatMetricValue(selectedPeriod.value, metric)} ${metricUnitLabel}`.trim()
     : '--';
   const trendText = trend
     ? metric === 'pace'
@@ -443,7 +642,21 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
 
       <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
         <SectionHeader icon={BarChart3} title={t('stats.periodTrend', '周期趋势')} />
-        <VolumeBarChart data={chartData} metric={metric} colors={tone.chart} />
+        <VolumeBarChart
+          data={chartData}
+          metric={metric}
+          selectedKey={selectedPeriodKey}
+          onSelect={(item) => setSelectedPeriodKey(item.key)}
+          colors={tone.chart}
+        />
+        <PeriodInspector
+          period={selectedPeriod}
+          summary={selectedPeriodSummary}
+          metricLabel={selectedMetricLabel}
+          metricValue={selectedMetricValue}
+          activities={selectedPeriodActivities}
+          locale={locale}
+        />
       </section>
 
       <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
