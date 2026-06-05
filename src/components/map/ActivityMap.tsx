@@ -5,6 +5,7 @@ import { decodePolyline } from '@/lib/strava';
 import { useMapTileLayer } from '@/hooks/useMapTileLayer';
 import { TILE_LAYERS, TileLayerKey } from '@/lib/mapTileLayers';
 import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
+import { addRouteEndpointMarkers } from '@/lib/routeMapVisuals';
 import { Layers } from 'lucide-react';
 import type {
   Map as LeafletMap,
@@ -102,12 +103,21 @@ export function ActivityMap({
         const actualStart: [number, number] = [points[0][0], points[0][1]];
         const actualEnd: [number, number] = [points[points.length - 1][0], points[points.length - 1][1]];
 
-        const lineColor = currentIsDark ? '#22d3ee' : '#2563eb';
+        const lineColor = currentIsDark ? '#22d3ee' : '#1d4ed8';
+        L.polyline(latLngs, {
+          color: currentIsDark ? '#0f172a' : '#ffffff',
+          weight: 9,
+          opacity: currentIsDark ? 0.7 : 0.86,
+          lineJoin: 'round',
+          className: 'activity-route-halo',
+        }).addTo(map);
+
         const polylineLayer = L.polyline(latLngs, {
           color: lineColor,
-          weight: 5,
-          opacity: currentIsDark ? 1 : 0.9,
+          weight: 5.2,
+          opacity: currentIsDark ? 0.98 : 0.94,
           lineJoin: 'round',
+          className: 'activity-route-line',
         }).addTo(map);
         
         polylineLayerRef.current = polylineLayer;
@@ -118,30 +128,8 @@ export function ActivityMap({
           animate: false,
         });
 
-        // Start marker (green)
-        const startIcon = L.divIcon({
-          className: 'start-marker',
-          html: `<div style="width:14px;height:14px;background:#22c55e;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>`,
-          iconSize: [14, 14],
-          iconAnchor: [7, 7],
-        });
-        L.marker([actualStart[0], actualStart[1]], { icon: startIcon, zIndexOffset: 1000 }).addTo(map);
-
-        // End marker (red)
-        const dist = Math.sqrt(
-          Math.pow(actualEnd[0] - actualStart[0], 2) + 
-          Math.pow(actualEnd[1] - actualStart[1], 2)
-        );
-        
-        if (dist > 0.0001) {
-          const endIcon = L.divIcon({
-            className: 'end-marker',
-            html: `<div style="width:14px;height:14px;background:#ef4444;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>`,
-            iconSize: [14, 14],
-            iconAnchor: [7, 7],
-          });
-          L.marker([actualEnd[0], actualEnd[1]], { icon: endIcon, zIndexOffset: 1001 }).addTo(map);
-        }
+        const decorationLayer = L.layerGroup().addTo(map);
+        addRouteEndpointMarkers(L, decorationLayer, [actualStart, ...points.slice(1, -1), actualEnd], { size: 20 });
 
         setMapReady(true);
         if (onReadyRef.current) onReadyRef.current();

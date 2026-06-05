@@ -52,10 +52,20 @@ export function RouteOnlyMap({ polyline, height = '100%' }: RouteOnlyMapProps) {
         // Add polyline with appropriate color for theme
         const lineColor = isDark ? '#a1a1aa' : '#1a1a1a'; // zinc-400 for dark, dark for light
         const latLngs: LatLngExpression[] = points.map(p => [p[0], p[1]]);
+        L.polyline(latLngs, {
+          color: isDark ? '#18181b' : '#ffffff',
+          weight: 5,
+          opacity: isDark ? 0.68 : 0.88,
+          lineJoin: 'round',
+          className: 'route-only-line-halo',
+        }).addTo(map);
+
         const polylineLayer = L.polyline(latLngs, {
           color: lineColor,
-          weight: 2.5,
+          weight: 2.8,
           opacity: isDark ? 1 : 0.9,
+          lineJoin: 'round',
+          className: 'route-only-line',
         }).addTo(map);
 
         // Fit bounds

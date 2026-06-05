@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,14 +12,64 @@ import { PixelButton } from '@/components/ui';
 import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
 import { getActivityDate } from '@/lib/dates';
 import {
+  getDistanceLabel,
+  getDistanceLabelEn,
   getStoredTrainingPlans,
   saveTrainingPlan,
   deleteTrainingPlan,
   type RaceDistance,
   type TrainingPlan,
 } from '@/lib/trainingPlan';
-import { Plus, Trash2, ChevronRight, Calendar, ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Gauge,
+  Plus,
+  Target,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react';
+
+const DISTANCE_KM: Record<RaceDistance, number> = {
+  '5k': 5,
+  '10k': 10,
+  '21k': 21.0975,
+  '42k': 42.195,
+};
+
+function formatTime(sec: number) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatPace(secPerKm: number) {
+  const rounded = Math.round(secPerKm);
+  const m = Math.floor(rounded / 60);
+  const s = rounded % 60;
+  return `${m}'${s.toString().padStart(2, '0')}"`;
+}
+
+function getPlanDaysToRace(plan: TrainingPlan) {
+  if (!plan.goal.raceDate) return null;
+  const race = new Date(`${plan.goal.raceDate}T00:00:00`);
+  const now = new Date();
+  return Math.ceil((race.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function getPlanPhasePreview(plan: TrainingPlan) {
+  const counts = plan.weeks.reduce<Record<string, number>>((acc, week) => {
+    acc[week.phase] = (acc[week.phase] ?? 0) + 1;
+    return acc;
+  }, {});
+  return ['base', 'build', 'peak', 'taper', 'recovery']
+    .filter((phase) => counts[phase])
+    .map((phase) => ({ phase, count: counts[phase] }));
+}
 
 export default function TrainingPlansListPage() {
   const router = useRouter();
@@ -80,20 +131,9 @@ export default function TrainingPlansListPage() {
 
   const isZh = i18n.language === 'zh';
 
-  const distanceLabel = (d: RaceDistance) => {
-    if (isZh) {
-      return d === '5k' ? '5公里' : d === '10k' ? '10公里' : d === '21k' ? '半程马拉松' : '全程马拉松';
-    }
-    return d === '5k' ? '5K' : d === '10k' ? '10K' : d === '21k' ? 'Half Marathon' : 'Full Marathon';
-  };
-
-  const formatTime = (sec: number) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  const distanceLabel = (d: RaceDistance) => (
+    isZh ? getDistanceLabel(d) : getDistanceLabelEn(d)
+  );
 
   const handleGenerate = async (data: {
     distance: RaceDistance;
@@ -140,7 +180,6 @@ export default function TrainingPlansListPage() {
       await saveTrainingPlan(json.plan);
       setPlans(await getStoredTrainingPlans());
       setShowForm(false);
-      // Navigate to detail page
       router.push(`/plans/${json.plan.id}`);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -155,9 +194,7 @@ export default function TrainingPlansListPage() {
   };
 
   const handleCancelGenerate = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    abortControllerRef.current?.abort();
   };
 
   const handleDelete = async (id: string) => {
@@ -169,94 +206,215 @@ export default function TrainingPlansListPage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      {/* Minimal Header */}
-      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
-          <div className="flex-1">
-            <Link
-              href="/activities"
-              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              <ChevronLeft size={16} />
-              {t('common.back')}
-            </Link>
-          </div>
+      <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+        <div className="container mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+          <Link
+            href="/activities"
+            className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            <ChevronLeft size={16} />
+            {t('common.back')}
+          </Link>
           <h1 className="font-pixel text-base font-bold">{t('trainingPlan.title')}</h1>
-          <div className="flex-1 flex justify-end">
-            {plans.length > 0 && (
-              <PixelButton variant="primary" size="sm" onClick={() => setShowForm((s) => !s)}>
-                <span className="inline-flex items-center gap-1">
-                  <Plus size={14} />
-                  <span className="hidden sm:inline">{t('trainingPlan.create', '新建')}</span>
-                </span>
-              </PixelButton>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowForm((value) => !value)}
+            className="inline-flex items-center gap-1 border-2 border-zinc-200 px-3 py-1.5 font-mono text-xs font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            <Plus size={14} />
+            <span className="hidden sm:inline">{t('trainingPlan.create', '新建计划')}</span>
+          </button>
         </div>
       </div>
 
-      <div className="container mx-auto px-3 py-4 max-w-2xl">
-      {error && (
-        <div className="mb-4 p-3 border-2 border-red-400 bg-red-50 dark:bg-red-950/30">
-          <p className="font-mono text-xs text-red-700 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      {(showForm || plans.length === 0) && (
-        <div className="mb-6 border-4 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4 md:p-6">
-          <p className="font-mono text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-            {t('trainingPlan.description')}
-          </p>
-          <TrainingPlanForm hasPB={hasPB} onSubmit={handleGenerate} isLoading={loading} />
-        </div>
-      )}
-
-      {plans.length > 0 && (
-        <div className="space-y-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className="group border-4 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4 flex items-center justify-between gap-4 hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
-            >
-              <Link href={`/plans/${plan.id}`} className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-pixel text-sm font-bold">{distanceLabel(plan.goal.distance)}</span>
-                  <span className="font-mono text-xs text-zinc-400">
-                    {formatTime(plan.goal.targetTimeSeconds)} · {plan.weeks.length}{t('trainingPlan.weeksUnit')}
-                  </span>
+      <main className="container mx-auto max-w-3xl px-3 py-5">
+        <section className="mb-5 border-4 border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-950">
+          <div className="border-b-2 border-zinc-100 px-4 py-4 dark:border-zinc-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-2 border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[10px] font-bold text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                  <Target size={12} />
+                  {t('trainingPlan.workspace', '训练计划工作台')}
                 </div>
-                <div className="flex items-center gap-3 font-mono text-[10px] text-zinc-500">
-                  {plan.goal.raceDate && (
-                    <span className="inline-flex items-center gap-1">
-                      <Calendar size={10} />
-                      {plan.goal.raceDate}
-                    </span>
-                  )}
-                  <span>{new Date(plan.createdAt).toLocaleDateString()}</span>
+                <h2 className="font-pixel text-xl font-bold text-zinc-950 dark:text-zinc-50">
+                  {t('trainingPlan.libraryTitle', '把目标拆成每一周')}
+                </h2>
+                <p className="mt-2 max-w-xl font-mono text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  {t('trainingPlan.librarySubtitle', '基于 PB、周跑量和比赛日期生成可执行的周期化训练计划。')}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:w-56">
+                <div className="border border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                  <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.currentVolume', '近期周量')}</p>
+                  <p className="font-mono text-lg font-bold">{weeklyVolume}km</p>
                 </div>
-              </Link>
-
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/plans/${plan.id}`}
-                  className="p-2 border-2 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <ChevronRight size={16} />
-                </Link>
-                <button
-                  onClick={() => handleDelete(plan.id)}
-                  className="p-2 border-2 border-zinc-200 dark:border-zinc-700 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 dark:hover:border-red-700 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="border border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                  <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.savedPlans', '计划数')}</p>
+                  <p className="font-mono text-lg font-bold">{plans.length}</p>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        </section>
 
-      <GeneratingOverlay isOpen={loading} onCancel={handleCancelGenerate} />
-    </div>
+        {error && (
+          <div className="mb-4 border-2 border-red-300 bg-red-50 px-3 py-3 dark:border-red-900/70 dark:bg-red-950/25">
+            <p className="font-mono text-xs text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        {(showForm || plans.length === 0) && (
+          <section className="mb-5 border-2 border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-pixel text-sm font-bold">{t('trainingPlan.createPlanTitle', '创建新计划')}</h3>
+                <p className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {t('trainingPlan.createPlanHint', '先定目标，再让系统排出训练周期。')}
+                </p>
+              </div>
+              {plans.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="font-mono text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  {t('common.cancel')}
+                </button>
+              )}
+            </div>
+            <TrainingPlanForm hasPB={hasPB} onSubmit={handleGenerate} isLoading={loading} />
+          </section>
+        )}
+
+        {plans.length > 0 ? (
+          <section className="space-y-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="font-pixel text-sm font-bold">{t('trainingPlan.savedPlanList', '已有计划')}</h3>
+              <p className="font-mono text-[11px] text-zinc-500">
+                {t('trainingPlan.sortedByNewest', '按创建时间排序')}
+              </p>
+            </div>
+            {plans.map((plan) => {
+              const targetPace = plan.goal.targetTimeSeconds / DISTANCE_KM[plan.goal.distance];
+              const daysToRace = getPlanDaysToRace(plan);
+              const phasePreview = getPlanPhasePreview(plan);
+
+              return (
+                <article
+                  key={plan.id}
+                  className="group border-2 border-zinc-200 bg-white transition-colors hover:border-blue-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-blue-600"
+                >
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/plans/${plan.id}`} className="min-w-0 flex-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="font-pixel text-base font-bold text-zinc-950 dark:text-zinc-50">
+                            {distanceLabel(plan.goal.distance)}
+                          </span>
+                          <span className="border border-zinc-200 px-2 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-800">
+                            {plan.weeks.length}{t('trainingPlan.weeksUnit')}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div>
+                            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.targetTime', '目标时间')}</p>
+                            <p className="font-mono text-sm font-bold">{formatTime(plan.goal.targetTimeSeconds)}</p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.targetPace', '目标配速')}</p>
+                            <p className="font-mono text-sm font-bold">{formatPace(targetPace)}/km</p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.raceDate', '比赛日期')}</p>
+                            <p className="font-mono text-sm font-bold">{plan.goal.raceDate || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.daysToRace', '距离比赛')}</p>
+                            <p className="font-mono text-sm font-bold">
+                              {typeof daysToRace === 'number'
+                                ? daysToRace >= 0
+                                  ? t('trainingPlan.daysCount', '{{days}} 天', { days: daysToRace })
+                                  : t('trainingPlan.racePassed', '已结束')
+                                : '-'}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Link
+                          href={`/plans/${plan.id}`}
+                          className="border-2 border-zinc-200 p-2 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                          title={t('common.view')}
+                        >
+                          <ChevronRight size={16} />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(plan.id)}
+                          className="border-2 border-zinc-200 p-2 transition-colors hover:border-red-300 hover:bg-red-50 dark:border-zinc-700 dark:hover:border-red-700 dark:hover:bg-red-950/30"
+                          title={t('common.delete')}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex h-2 overflow-hidden border border-zinc-100 dark:border-zinc-800">
+                      {phasePreview.map(({ phase, count }) => (
+                        <div
+                          key={phase}
+                          className={[
+                            phase === 'base' ? 'bg-blue-500' : '',
+                            phase === 'build' ? 'bg-orange-500' : '',
+                            phase === 'peak' ? 'bg-red-500' : '',
+                            phase === 'taper' ? 'bg-green-500' : '',
+                            phase === 'recovery' ? 'bg-zinc-400' : '',
+                          ].join(' ')}
+                          style={{ width: `${(count / plan.weeks.length) * 100}%` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-3 font-mono text-[10px] text-zinc-500">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={11} />
+                        {new Date(plan.createdAt).toLocaleDateString()}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <TrendingUp size={11} />
+                        {plan.currentAbility.weeklyVolume}km/w
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Gauge size={11} />
+                        PB 5K {plan.currentAbility.pb5k ? formatTime(plan.currentAbility.pb5k) : '-'}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Flag size={11} />
+                        {t('trainingPlan.algorithmicPlan', '算法周期计划')}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        ) : !showForm ? (
+          <section className="border-2 border-dashed border-zinc-300 bg-white px-4 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950">
+            <Target size={34} className="mx-auto mb-3 text-zinc-300 dark:text-zinc-700" />
+            <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-300">
+              {t('trainingPlan.emptyTitle', '还没有训练计划')}
+            </p>
+            <p className="mx-auto mt-2 max-w-sm font-mono text-xs leading-relaxed text-zinc-500">
+              {t('trainingPlan.emptyHint', '创建一个目标赛事计划，开始按周推进训练。')}
+            </p>
+            <PixelButton className="mt-5" onClick={() => setShowForm(true)}>
+              <Plus size={14} />
+              {t('trainingPlan.create', '新建计划')}
+            </PixelButton>
+          </section>
+        ) : null}
+
+        <GeneratingOverlay isOpen={loading} onCancel={handleCancelGenerate} />
+      </main>
     </div>
   );
 }

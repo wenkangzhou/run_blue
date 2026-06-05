@@ -171,15 +171,71 @@ body {
 }
 
 .heatmap-map .leaflet-tile {
-  filter: saturate(0.72) contrast(0.94) brightness(1.04);
+  filter: saturate(0.58) contrast(0.9) brightness(1.08);
 }
 
 .heatmap-map .heatmap-polyline {
   stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.heatmap-map .heatmap-polyline-hit {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.leaflet-container .leaflet-interactive:focus,
+.leaflet-container path:focus,
+.leaflet-container svg:focus {
+  outline: none !important;
+}
+
+.heatmap-map .heatmap-polyline-halo,
+.heatmap-map .heatmap-polyline-selected-halo,
+.activity-route-halo,
+.route-card-line-halo,
+.route-only-line-halo,
+.mini-map-line-halo {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.heatmap-map .heatmap-polyline-selected,
+.activity-route-line,
+.route-card-line,
+.route-only-line,
+.mini-map-line {
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .heatmap-map .heatmap-segment-line {
   stroke-linecap: round;
+}
+
+.route-endpoint-marker,
+.route-endpoint-marker:focus,
+.route-endpoint-marker:active {
+  outline: none !important;
+  border: none !important;
+  background: transparent !important;
+  pointer-events: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.route-line-tooltip {
+  border: 1px solid rgba(148, 163, 184, 0.32) !important;
+  border-radius: 4px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14) !important;
+  color: #334155 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 3px 6px !important;
 }
 
 /* Animation utilities */

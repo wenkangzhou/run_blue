@@ -54,10 +54,21 @@ export function MiniMap({ polyline, height = '120px' }: MiniMapProps) {
         }
 
         const latLngs: LatLngExpression[] = points.map(p => [p[0], p[1]]);
+        const lineColor = theme === 'dark' ? '#60a5fa' : '#2563eb';
+        L.polyline(latLngs, {
+          color: theme === 'dark' ? '#18181b' : '#ffffff',
+          weight: 6,
+          opacity: theme === 'dark' ? 0.66 : 0.84,
+          lineJoin: 'round',
+          className: 'mini-map-line-halo',
+        }).addTo(map);
+
         const polylineLayer = L.polyline(latLngs, {
-          color: theme === 'dark' ? '#60a5fa' : '#2563eb',
-          weight: 3,
-          opacity: 0.9,
+          color: lineColor,
+          weight: 3.2,
+          opacity: 0.94,
+          lineJoin: 'round',
+          className: 'mini-map-line',
         }).addTo(map);
 
         map.fitBounds(polylineLayer.getBounds(), { padding: [10, 10], maxZoom: 16 });

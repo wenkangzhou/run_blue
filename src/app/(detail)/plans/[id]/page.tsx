@@ -61,7 +61,7 @@ export default function TrainingPlanDetailPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-2xl">
+          <div className="container mx-auto px-4 py-4 max-w-3xl">
             <Link
               href="/plans"
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -97,7 +97,7 @@ export default function TrainingPlanDetailPage() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
+        <div className="container mx-auto px-4 py-4 max-w-3xl flex items-center justify-between">
           <Link
             href="/plans"
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -117,7 +117,7 @@ export default function TrainingPlanDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="container mx-auto px-3 py-4 max-w-2xl">
+      <div className="container mx-auto px-3 py-5 max-w-3xl">
         <TrainingPlanView plan={plan} />
       </div>
     </div>

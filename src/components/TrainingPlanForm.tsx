@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PixelButton } from '@/components/ui';
 import type { RaceDistance } from '@/lib/trainingPlan';
 import { estimatePlanWeeks } from '@/lib/trainingPlan';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CalendarDays, Clock3, Flag, Target, TimerReset } from 'lucide-react';
 
 interface TrainingPlanFormProps {
   defaultDistance?: RaceDistance;
@@ -22,7 +22,12 @@ interface TrainingPlanFormProps {
   isLoading?: boolean;
 }
 
-const DISTANCES: RaceDistance[] = ['5k', '10k', '21k', '42k'];
+const DISTANCES: Array<{ value: RaceDistance; label: string; hint: string }> = [
+  { value: '5k', label: '5K', hint: 'Speed' },
+  { value: '10k', label: '10K', hint: 'Threshold' },
+  { value: '21k', label: 'Half', hint: 'Endurance' },
+  { value: '42k', label: 'Full', hint: 'Marathon' },
+];
 
 export function TrainingPlanForm({
   defaultDistance = '10k',
@@ -33,7 +38,8 @@ export function TrainingPlanForm({
   onSubmit,
   isLoading,
 }: TrainingPlanFormProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language === 'zh';
   const [distance, setDistance] = React.useState<RaceDistance>(defaultDistance);
   const [targetTime, setTargetTime] = React.useState(defaultTargetTime);
   const [weeks, setWeeks] = React.useState(defaultWeeks ?? estimatePlanWeeks(defaultDistance));
@@ -42,6 +48,9 @@ export function TrainingPlanForm({
   React.useEffect(() => {
     setWeeks(estimatePlanWeeks(distance));
   }, [distance]);
+
+  const selectedDistance = DISTANCES.find((item) => item.value === distance) ?? DISTANCES[1];
+  const placeholder = distance === '5k' || distance === '10k' ? '42:30' : '1:45:00';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,97 +62,146 @@ export function TrainingPlanForm({
     });
   };
 
+  const displayDistanceLabel = (value: RaceDistance) => {
+    if (value === '21k') return t('trainingPlan.half', '半马');
+    if (value === '42k') return t('trainingPlan.full', '全马');
+    return value.toUpperCase();
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {!hasPB && (
-        <div className="p-3 border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 flex items-start gap-2">
-          <AlertCircle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
-          <p className="font-mono text-xs text-amber-700 dark:text-amber-300">
-            {t('trainingPlan.noPBHint', '请先设置个人档案中的 PB，以获得更准确的训练计划')}
-          </p>
+        <div className="border-2 border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-900/70 dark:bg-amber-950/25">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-300" />
+            <p className="font-mono text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+              {t('trainingPlan.noPBHint', '请先设置个人档案中的 PB，以获得更准确的训练计划')}
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Distance */}
-      <div>
-        <label className="block font-mono text-xs font-bold uppercase mb-1.5">
-          {t('trainingPlan.goalDistance', '目标赛事')}
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {DISTANCES.map((d) => (
+      <section className="border-2 border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+        <div className="mb-3 flex items-center gap-2">
+          <Flag size={15} className="text-blue-600 dark:text-blue-300" />
+          <div>
+            <h3 className="font-mono text-xs font-bold uppercase">{t('trainingPlan.goalDistance', '目标赛事')}</h3>
+            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.goalDistanceHint', '选择要备战的比赛距离')}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {DISTANCES.map((item) => (
             <button
-              key={d}
+              key={item.value}
               type="button"
-              onClick={() => setDistance(d)}
+              onClick={() => setDistance(item.value)}
               className={[
-                'px-3 py-2 font-mono text-sm font-bold border-2 transition-colors',
-                distance === d
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800',
+                'min-h-20 border-2 px-3 py-3 text-left transition-colors',
+                distance === item.value
+                  ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/30 dark:text-blue-300'
+                  : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-zinc-600',
               ].join(' ')}
             >
-              {d === '5k' && '5K'}
-              {d === '10k' && '10K'}
-              {d === '21k' && t('trainingPlan.half', '半马')}
-              {d === '42k' && t('trainingPlan.full', '全马')}
+              <span className="block font-mono text-base font-bold">{displayDistanceLabel(item.value)}</span>
+              <span className="mt-1 block font-mono text-[10px] text-zinc-500">
+                {isZh
+                  ? item.value === '5k'
+                    ? '速度'
+                    : item.value === '10k'
+                      ? '阈值'
+                      : item.value === '21k'
+                        ? '耐力'
+                        : '马拉松'
+                  : item.hint}
+              </span>
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Target Time */}
-      <div>
-        <label className="block font-mono text-xs font-bold uppercase mb-1.5">
-          {t('trainingPlan.targetTime', '目标时间')}
-        </label>
-        <input
-          type="text"
-          inputMode="text"
-          required
-          placeholder={distance === '5k' || distance === '10k' ? 'mm:ss' : 'hh:mm:ss'}
-          value={targetTime}
-          onChange={(e) => setTargetTime(e.target.value)}
-          className="w-full px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
-        />
-      </div>
-
-      {/* Weeks */}
-      <div>
-        <label className="block font-mono text-xs font-bold uppercase mb-1.5">
-          {t('trainingPlan.weeks', '计划周数')}
-        </label>
-        <div className="flex items-center gap-3">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block border-2 border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="mb-2 flex items-center gap-2">
+            <Clock3 size={15} className="text-orange-600 dark:text-orange-300" />
+            <span className="font-mono text-xs font-bold uppercase">{t('trainingPlan.targetTime', '目标时间')}</span>
+          </div>
           <input
-            type="range"
-            min={4}
-            max={20}
-            step={1}
-            value={weeks}
-            onChange={(e) => setWeeks(parseInt(e.target.value, 10))}
-            className="flex-1"
+            type="text"
+            inputMode="text"
+            required
+            placeholder={placeholder}
+            value={targetTime}
+            onChange={(e) => setTargetTime(e.target.value)}
+            className="w-full border-0 bg-transparent font-mono text-2xl font-bold text-zinc-950 outline-none placeholder:text-zinc-300 dark:text-zinc-50 dark:placeholder:text-zinc-700"
           />
-          <span className="w-12 font-mono text-sm font-bold text-right">{weeks}</span>
-        </div>
-      </div>
-
-      {/* Race Date */}
-      <div>
-        <label className="block font-mono text-xs font-bold uppercase mb-1.5">
-          {t('trainingPlan.raceDate', '比赛日期（可选）')}
+          <p className="mt-2 font-mono text-[10px] text-zinc-500">
+            {t('trainingPlan.targetTimeHint', '支持 mm:ss 或 hh:mm:ss')}
+          </p>
         </label>
-        <div className="relative overflow-hidden">
+
+        <label className="block border-2 border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="mb-2 flex items-center gap-2">
+            <CalendarDays size={15} className="text-emerald-600 dark:text-emerald-300" />
+            <span className="font-mono text-xs font-bold uppercase">{t('trainingPlan.raceDate', '比赛日期（可选）')}</span>
+          </div>
           <input
             type="date"
             value={raceDate}
             onChange={(e) => setRaceDate(e.target.value)}
-            className="w-full min-w-0 max-w-full appearance-none px-3 py-2 font-mono text-base border-4 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 outline-none focus:border-blue-500 dark:focus:border-blue-400"
+            className="w-full min-w-0 border-0 bg-transparent font-mono text-base font-bold text-zinc-950 outline-none dark:text-zinc-50"
             style={{ WebkitAppearance: 'none' }}
           />
+          <p className="mt-2 font-mono text-[10px] text-zinc-500">
+            {t('trainingPlan.raceDateHint', '设置后会自动标记当前周')}
+          </p>
+        </label>
+      </section>
+
+      <section className="border-2 border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <TimerReset size={15} className="text-violet-600 dark:text-violet-300" />
+            <div>
+              <h3 className="font-mono text-xs font-bold uppercase">{t('trainingPlan.weeks', '计划周数')}</h3>
+              <p className="font-mono text-[10px] text-zinc-500">
+                {t('trainingPlan.weeksHint', '会按目标赛事自动给出建议周期')}
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="font-mono text-2xl font-bold">{weeks}</p>
+            <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.weeksUnit', '周')}</p>
+          </div>
+        </div>
+        <input
+          type="range"
+          min={4}
+          max={20}
+          step={1}
+          value={weeks}
+          onChange={(e) => setWeeks(parseInt(e.target.value, 10))}
+          className="w-full"
+        />
+        <div className="mt-2 flex justify-between font-mono text-[10px] text-zinc-400">
+          <span>4</span>
+          <span>20</span>
+        </div>
+      </section>
+
+      <div className="border-2 border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+        <div className="flex items-start gap-2">
+          <Target size={15} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
+          <p className="font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+            {t('trainingPlan.formSummary', '将为 {{distance}} 目标生成 {{weeks}} 周训练计划，包含基础、建立、巅峰和减量周期。', {
+              distance: displayDistanceLabel(selectedDistance.value),
+              weeks,
+            })}
+          </p>
         </div>
       </div>
 
       <PixelButton variant="primary" size="lg" className="w-full" isLoading={isLoading}>
-        {isLoading ? t('trainingPlan.generating', '生成中...') : t('trainingPlan.generate', '生成训练计划')}
+        {isLoading ? t('trainingPlan.generating', '编排中...') : t('trainingPlan.generate', '生成训练计划')}
       </PixelButton>
     </form>
   );

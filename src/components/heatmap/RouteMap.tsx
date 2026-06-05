@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { decodePolyline } from '@/lib/strava';
 import { useMapTileLayer } from '@/hooks/useMapTileLayer';
 import { TILE_LAYERS } from '@/lib/mapTileLayers';
 import { prepareLeafletContainer, releaseLeafletContainer } from '@/lib/leafletContainer';
+import {
+  addRouteEndpointMarkers,
+  getValidRoutePoints,
+  getVisualRouteKey,
+} from '@/lib/routeMapVisuals';
 import type {
-  CircleMarker,
   LatLngBounds,
   Layer,
   LayerGroup,
@@ -56,12 +60,40 @@ interface RouteMapProps {
 }
 
 const CLUSTER_DETAIL_ZOOM = 14;
-const ROUTE_OPACITY = 0.28;
-const ROUTE_DIMMED_OPACITY = 0.1;
-const ROUTE_SELECTED_OPACITY = 0.96;
-const ROUTE_WEIGHT = 1.9;
-const ROUTE_SELECTED_WEIGHT = 4.2;
+const ROUTE_OPACITY = 0.36;
+const ROUTE_DETAIL_OPACITY = 0.74;
+const ROUTE_DIMMED_OPACITY = 0.08;
+const ROUTE_SELECTED_OPACITY = 0.98;
+const ROUTE_WEIGHT = 2.8;
+const ROUTE_DETAIL_WEIGHT = 5.2;
+const ROUTE_HIT_WEIGHT = 18;
+const ROUTE_SELECTED_WEIGHT = 6.8;
 const HIGHLIGHT_COLOR = '#d97706';
+const ROUTE_GROUP_COLOR = '#0f766e';
+const ROUTE_SINGLE_COLOR = '#147f93';
+
+interface DisplayRouteGroup {
+  key: string;
+  activities: MapActivity[];
+  representative: MapActivity;
+  points: Array<[number, number]>;
+  color: string;
+  count: number;
+  activityIds: Set<number>;
+}
+
+interface RouteLayerBundle {
+  halo: Polyline;
+  line: Polyline;
+  hit: Polyline;
+  route: DisplayRouteGroup;
+}
+
+interface RouteChoiceState {
+  x: number;
+  y: number;
+  activities: MapActivity[];
+}
 
 function addTileLayer(map: LeafletMap, layerKey: string, isDark: boolean, L: LeafletModule): TileLayer | null {
   const config = TILE_LAYERS[layerKey as keyof typeof TILE_LAYERS] || TILE_LAYERS.osm;
@@ -135,6 +167,15 @@ function buildClusters(activities: MapActivity[], map: LeafletMap, L: LeafletMod
 
 function computeSmartBounds(activities: MapActivity[], L: LeafletModule): LatLngBounds | null {
   if (activities.length === 0) return null;
+  const anchors = activities
+    .map((activity) => {
+      if (!activity.summary_polyline) return null;
+      const points = getValidRoutePoints(decodePolyline(activity.summary_polyline));
+      const anchor = getRouteAnchorPoint(points);
+      return anchor ? { activity, anchor, points } : null;
+    })
+    .filter((item): item is { activity: MapActivity; anchor: [number, number]; points: Array<[number, number]> } => Boolean(item));
+
   const tryBounds = (acts: MapActivity[]) => {
     const b = L.latLngBounds([]);
     let has = false;
@@ -150,11 +191,34 @@ function computeSmartBounds(activities: MapActivity[], L: LeafletModule): LatLng
     });
     return has && b && typeof b.isValid === 'function' && b.isValid() ? b : null;
   };
-  // Prefer recent 20 for a tight initial view; no span cap
-  const b20 = tryBounds(activities.slice(0, 20));
-  if (b20) return b20;
-  const b50 = tryBounds(activities.slice(0, 50));
-  if (b50) return b50;
+
+  if (anchors.length > 0) {
+    const cellSize = 0.12;
+    const cells = new Map<string, { count: number; latSum: number; lngSum: number }>();
+    anchors.forEach(({ anchor }) => {
+      const key = `${Math.floor(anchor[0] / cellSize)},${Math.floor(anchor[1] / cellSize)}`;
+      const cell = cells.get(key) ?? { count: 0, latSum: 0, lngSum: 0 };
+      cell.count += 1;
+      cell.latSum += anchor[0];
+      cell.lngSum += anchor[1];
+      cells.set(key, cell);
+    });
+
+    const densest = Array.from(cells.values()).sort((a, b) => b.count - a.count)[0];
+    if (densest && densest.count >= Math.max(4, Math.ceil(anchors.length * 0.08))) {
+      const center: [number, number] = [densest.latSum / densest.count, densest.lngSum / densest.count];
+      const dominantActivities = anchors
+        .filter(({ anchor }) => L.latLng(anchor[0], anchor[1]).distanceTo(L.latLng(center[0], center[1])) <= 26000)
+        .sort((a, b) => b.activity.start_date.localeCompare(a.activity.start_date))
+        .slice(0, 160)
+        .map(({ activity }) => activity);
+      const dominantBounds = tryBounds(dominantActivities);
+      if (dominantBounds) return dominantBounds;
+    }
+  }
+
+  const b80 = tryBounds(activities.slice(0, 80));
+  if (b80) return b80;
   return tryBounds(activities);
 }
 
@@ -173,17 +237,111 @@ function getBoundsSpanMeters(bounds: LatLngBounds): number {
   return bounds.getNorthWest().distanceTo(bounds.getSouthEast());
 }
 
+function getRouteDisplayColor(count: number) {
+  if (count > 1) return ROUTE_GROUP_COLOR;
+  return ROUTE_SINGLE_COLOR;
+}
+
+function getRouteDisplayWeight(count: number, zoom: number) {
+  const baseWeight = zoom >= CLUSTER_DETAIL_ZOOM ? ROUTE_DETAIL_WEIGHT : ROUTE_WEIGHT;
+  if (count <= 1) return baseWeight;
+  return Math.min(7.4, baseWeight + Math.log2(count + 1) * 0.86);
+}
+
+function getRouteDisplayOpacity(count: number, zoom: number) {
+  const baseOpacity = zoom >= CLUSTER_DETAIL_ZOOM ? ROUTE_DETAIL_OPACITY : ROUTE_OPACITY;
+  if (count <= 1) return baseOpacity;
+  return Math.min(0.82, baseOpacity + Math.log2(count + 1) * 0.034);
+}
+
+function getRouteHaloOpacity(isDimmed: boolean, zoom: number) {
+  if (isDimmed) return 0.12;
+  return zoom >= CLUSTER_DETAIL_ZOOM ? 0.86 : 0.42;
+}
+
+function buildDisplayRouteGroups(activities: MapActivity[]): DisplayRouteGroup[] {
+  const groups = new Map<string, DisplayRouteGroup>();
+
+  activities.forEach((activity) => {
+    if (!activity.summary_polyline) return;
+    const points = getValidRoutePoints(decodePolyline(activity.summary_polyline));
+    if (points.length < 2) return;
+
+    const key = getVisualRouteKey(points, {
+      distanceMeters: activity.distance,
+      reverseAware: true,
+    });
+    if (!key) return;
+
+    const existing = groups.get(key);
+    if (existing) {
+      existing.activities.push(activity);
+      existing.activityIds.add(activity.id);
+      existing.count += 1;
+      existing.color = getRouteDisplayColor(existing.count);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      activities: [activity],
+      representative: activity,
+      points,
+      color: getRouteDisplayColor(1),
+      count: 1,
+      activityIds: new Set([activity.id]),
+    });
+  });
+
+  return Array.from(groups.values()).sort((a, b) => a.count - b.count);
+}
+
+function getRouteGroupLabel(route: DisplayRouteGroup) {
+  return route.count > 1
+    ? `${route.representative.name} · ${route.count} runs`
+    : route.representative.name;
+}
+
+function formatChoiceDistance(meters: number) {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function formatChoiceDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+function pointSegmentDistance(point: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - a.x, point.y - a.y);
+  }
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+function uniqueActivities(activities: MapActivity[]) {
+  const seen = new Set<number>();
+  return activities.filter((activity) => {
+    if (seen.has(activity.id)) return false;
+    seen.add(activity.id);
+    return true;
+  });
+}
+
 export const RouteMap = React.forwardRef(function RouteMap(
   { activities, selectedId, onSelect, onShowPopup, sidebarOpen, isDark = false, segments }: RouteMapProps,
   forwardedRef: React.Ref<RouteMapHandle>
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
-  const layersRef = useRef<Map<number, Polyline>>(new Map());
+  const routeLayerGroupRef = useRef<LayerGroup | null>(null);
+  const routeLayersRef = useRef<Map<string, RouteLayerBundle>>(new Map());
+  const selectedRouteLayerRef = useRef<LayerGroup | null>(null);
   const clusterLayerRef = useRef<LayerGroup | null>(null);
   const clusterClickLock = useRef(false);
-  const startEndMarkersRef = useRef<Map<number, { start: CircleMarker; end: CircleMarker }>>(new Map());
-  const startEndGroupRef = useRef<LayerGroup | null>(null);
   const segmentsLayerRef = useRef<LayerGroup | null>(null);
   const segmentsRef = useRef<SegmentItem[] | undefined>(segments);
   useEffect(() => { segmentsRef.current = segments; });
@@ -193,6 +351,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
   const selectedRef = useRef(selectedId);
   const activitiesRef = useRef(activities);
   const sidebarOpenRef = useRef(sidebarOpen);
+  const [routeChoice, setRouteChoice] = useState<RouteChoiceState | null>(null);
 
   useEffect(() => { isDarkRef.current = isDark; });
   useEffect(() => { layerRef.current = layer; });
@@ -204,6 +363,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
   useEffect(() => {
     let destroyed = false;
     let mapContainer: HTMLDivElement | null = null;
+    const routeLayers = routeLayersRef.current;
     const init = async () => {
       try {
         const L = (await import('leaflet')).default;
@@ -232,7 +392,12 @@ export const RouteMap = React.forwardRef(function RouteMap(
           } else {
             updateClusterVisibility(map);
           }
-          updateStartEndVisibility(map);
+          renderPolylines(map, L, activitiesRef.current);
+        });
+        map.on('click', () => {
+          setRouteChoice(null);
+          onSelect(null);
+          onShowPopup(null);
         });
 
         // Prefer the athlete's route data for the heatmap viewport; browser geolocation can point elsewhere.
@@ -251,9 +416,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
         try { mapInstanceRef.current.remove(); } catch {}
         mapInstanceRef.current = null;
       }
-      layersRef.current.clear();
+      routeLayers.clear();
+      routeLayerGroupRef.current = null;
+      selectedRouteLayerRef.current = null;
       clusterLayerRef.current = null;
-      startEndMarkersRef.current.clear();
       releaseLeafletContainer(mapContainer);
     };
     // renderAll reads latest activities/sidebar state through refs; the map instance should initialize once.
@@ -288,6 +454,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
     const map = mapInstanceRef.current;
     if (!map) return;
     updateSelectionStyles();
+    // updateSelectionStyles reads the latest map/activity refs and should only run on selectedId changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   // Render when segments change
@@ -393,7 +561,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
       const zoomToCluster = (e: LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         clusterClickLock.current = true;
-        const targetZoom = Math.min(16, Math.max(map.getZoom() + 1, 13));
+        const targetZoom = Math.min(16, Math.max(map.getZoom() + 2, CLUSTER_DETAIL_ZOOM));
         const anchorBounds = computeClusterAnchorBounds(c, L);
         const center = anchorBounds?.isValid()
           ? anchorBounds.getCenter()
@@ -403,7 +571,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
           const span = anchorBounds ? getBoundsSpanMeters(anchorBounds) : 0;
           if (anchorBounds && span > 1200 && span < 60000) {
             try {
-              fitBoundsToView(map, anchorBounds, { maxZoom: targetZoom, minZoom: Math.min(targetZoom, 13), animate: true });
+              fitBoundsToView(map, anchorBounds, { maxZoom: targetZoom, minZoom: CLUSTER_DETAIL_ZOOM, animate: true });
             } catch {
               map.flyTo(center, targetZoom, { duration: 0.35 });
             }
@@ -455,22 +623,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
     updateClusterVisibility(map);
   }
 
-  function updateStartEndVisibility(map: LeafletMap) {
-    try {
-      const zoom = map.getZoom();
-      const show = zoom >= CLUSTER_DETAIL_ZOOM;
-      const group = startEndGroupRef.current;
-      if (!group) return;
-      if (show) {
-        if (!map.hasLayer(group)) group.addTo(map);
-      } else {
-        if (map.hasLayer(group)) map.removeLayer(group);
-      }
-    } catch (e) {
-      console.warn('updateStartEndVisibility failed:', e);
-    }
-  }
-
   function renderSegments(map: LeafletMap, L: LeafletModule) {
     if (segmentsLayerRef.current) {
       map.removeLayer(segmentsLayerRef.current);
@@ -514,115 +666,242 @@ export const RouteMap = React.forwardRef(function RouteMap(
     });
   }
 
+  function getNearbyActivitiesAtPoint(map: LeafletMap, point: { x: number; y: number }, acts: MapActivity[]) {
+    const thresholdPx = map.getZoom() >= CLUSTER_DETAIL_ZOOM ? 12 : 16;
+
+    return acts
+      .map((activity) => {
+        if (!activity.summary_polyline) return null;
+        const points = getValidRoutePoints(decodePolyline(activity.summary_polyline));
+        if (points.length < 2) return null;
+        const step = Math.max(1, Math.ceil(points.length / 180));
+        let bestDistance = Infinity;
+        let previous = map.latLngToLayerPoint(points[0]);
+
+        for (let index = step; index < points.length; index += step) {
+          const current = map.latLngToLayerPoint(points[index]);
+          bestDistance = Math.min(bestDistance, pointSegmentDistance(point, previous, current));
+          previous = current;
+          if (bestDistance <= thresholdPx) break;
+        }
+
+        const last = map.latLngToLayerPoint(points[points.length - 1]);
+        bestDistance = Math.min(bestDistance, pointSegmentDistance(point, previous, last));
+
+        return bestDistance <= thresholdPx ? { activity, distance: bestDistance } : null;
+      })
+      .filter((item): item is { activity: MapActivity; distance: number } => Boolean(item))
+      .sort((a, b) => a.distance - b.distance || b.activity.start_date.localeCompare(a.activity.start_date))
+      .slice(0, 80)
+      .map(({ activity }) => activity);
+  }
+
   function renderPolylines(map: LeafletMap, L: LeafletModule, acts: MapActivity[]) {
-    const currentSelected = selectedRef.current;
-    const newLayers = new Map<number, Polyline>();
-    const newStartEnd = new Map<number, { start: CircleMarker; end: CircleMarker }>();
-    const currentIds = new Set(acts.map(a => a.id));
-
-    // Remove stale polylines and their start/end markers
-    layersRef.current.forEach((polyLayer, id) => {
-      if (!currentIds.has(id)) {
-        map.removeLayer(polyLayer);
-        const se = startEndMarkersRef.current.get(id);
-        if (se) {
-          map.removeLayer(se.start);
-          map.removeLayer(se.end);
-        }
-      }
-    });
-
-    // Remove old start/end group if exists
-    if (startEndGroupRef.current && map.hasLayer(startEndGroupRef.current)) {
-      try { map.removeLayer(startEndGroupRef.current); } catch {}
+    if (routeLayerGroupRef.current) {
+      try { map.removeLayer(routeLayerGroupRef.current); } catch {}
+      routeLayerGroupRef.current = null;
     }
-    const startEndGroup = L.layerGroup();
-    acts.forEach((activity) => {
+    routeLayersRef.current.clear();
+
+    const allRoutes = buildDisplayRouteGroups(acts);
+    const repeatedRoutes = allRoutes.filter(route => route.count > 1);
+    const shouldCondense = map.getZoom() < CLUSTER_DETAIL_ZOOM && repeatedRoutes.length >= 8;
+    const routes = shouldCondense ? repeatedRoutes : allRoutes;
+
+    if (routes.length === 0) {
+      renderSelectedRoute(map, L);
+      return;
+    }
+
+    const zoom = map.getZoom();
+    const currentSelected = selectedRef.current;
+    const groupLayer = L.layerGroup().addTo(map);
+    routeLayerGroupRef.current = groupLayer;
+
+    routes.forEach((route) => {
       try {
-        if (!activity.summary_polyline) return;
-        const points = decodePolyline(activity.summary_polyline);
-        if (points.length < 2) return;
-        const latLngs = points.filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1])).map(p => L.latLng(p[0], p[1]));
+        const latLngs = route.points.map(p => L.latLng(p[0], p[1]));
         if (latLngs.length < 2) return;
-        const isSelected = currentSelected === activity.id;
-        const isDimmed = currentSelected !== null && !isSelected;
+        const containsSelected = currentSelected !== null && route.activityIds.has(currentSelected);
+        const isDimmed = currentSelected !== null && !containsSelected;
+        const weight = getRouteDisplayWeight(route.count, zoom);
+        const opacity = isDimmed ? ROUTE_DIMMED_OPACITY : getRouteDisplayOpacity(route.count, zoom);
 
-        let polyLayer = layersRef.current.get(activity.id);
-        let seMarkers = startEndMarkersRef.current.get(activity.id);
+        const halo = L.polyline(latLngs, {
+          color: '#ffffff',
+          weight: weight + (zoom >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+          opacity: getRouteHaloOpacity(isDimmed, zoom),
+          lineJoin: 'round',
+          interactive: false,
+          className: 'heatmap-polyline-halo',
+        }).addTo(groupLayer);
 
-        if (polyLayer) {
-          if (polyLayer.getTooltip?.()) polyLayer.unbindTooltip();
-          polyLayer.setStyle({
-            color: isSelected ? HIGHLIGHT_COLOR : activity.color,
-            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
-            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
+        const line = L.polyline(latLngs, {
+          color: route.color,
+          weight,
+          opacity,
+          lineJoin: 'round',
+          interactive: false,
+          className: 'heatmap-polyline',
+        }).addTo(groupLayer);
+
+        const hit = L.polyline(latLngs, {
+          color: route.color,
+          weight: ROUTE_HIT_WEIGHT,
+          opacity: 0.001,
+          lineJoin: 'round',
+          className: 'heatmap-polyline-hit',
+        }).addTo(groupLayer);
+
+        hit.bindTooltip(getRouteGroupLabel(route), {
+          sticky: true,
+          direction: 'top',
+          opacity: 0.92,
+          className: 'route-line-tooltip',
+        });
+
+        const restoreRouteStyle = () => {
+          const latestSelected = selectedRef.current;
+          const latestContainsSelected = latestSelected !== null && route.activityIds.has(latestSelected);
+          const latestDimmed = latestSelected !== null && !latestContainsSelected;
+          const latestWeight = getRouteDisplayWeight(route.count, map.getZoom());
+          halo.setStyle({
+            weight: latestWeight + (map.getZoom() >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+            opacity: getRouteHaloOpacity(latestDimmed, map.getZoom()),
           });
-          if (isSelected) polyLayer.bringToFront();
-        } else {
-          polyLayer = L.polyline(latLngs, {
-            color: isSelected ? HIGHLIGHT_COLOR : activity.color,
-            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
-            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
-            lineJoin: 'round',
-            className: 'heatmap-polyline',
-          }).addTo(map);
-
-          polyLayer.on('click', (e: LeafletMouseEvent) => {
-            L.DomEvent.stopPropagation(e);
-            if (clusterClickLock.current) return;
-            const newId = activity.id === selectedRef.current ? null : activity.id;
-            onSelect(newId);
-            onShowPopup(newId ? activity : null);
+          line.setStyle({
+            color: route.color,
+            weight: latestWeight,
+            opacity: latestDimmed ? ROUTE_DIMMED_OPACITY : getRouteDisplayOpacity(route.count, map.getZoom()),
           });
+        };
 
-          // Create start/end markers only if coords are valid
-          const startPt = points[0];
-          const endPt = points[points.length - 1];
-          if (Number.isFinite(startPt[0]) && Number.isFinite(startPt[1]) && Number.isFinite(endPt[0]) && Number.isFinite(endPt[1])) {
-            const startMarker = L.circleMarker(L.latLng(startPt[0], startPt[1]), {
-              radius: 2.8, fillColor: '#5d927c', fillOpacity: 0.82, color: '#fff', weight: 1.3, interactive: false,
+        hit.on('mouseover', () => {
+          halo.setStyle({
+            weight: weight + 5.6,
+            opacity: 0.94,
+          });
+          line.setStyle({
+            color: route.count > 1 ? '#0b6b60' : '#0e7490',
+            weight: weight + 1.6,
+            opacity: 0.98,
+          });
+          halo.bringToFront();
+          line.bringToFront();
+          hit.bringToFront();
+        });
+        hit.on('mouseout', restoreRouteStyle);
+
+        hit.on('click', (e: LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          if (clusterClickLock.current) return;
+          const representative = route.representative;
+          const nearbyActivities = uniqueActivities([
+            ...route.activities,
+            ...getNearbyActivitiesAtPoint(map, e.layerPoint ?? map.latLngToLayerPoint(e.latlng), activitiesRef.current),
+          ]);
+          if (nearbyActivities.length > 1) {
+            setRouteChoice({
+              x: e.containerPoint.x,
+              y: e.containerPoint.y,
+              activities: nearbyActivities,
             });
-            const endMarker = L.circleMarker(L.latLng(endPt[0], endPt[1]), {
-              radius: 2.8, fillColor: '#b16578', fillOpacity: 0.82, color: '#fff', weight: 1.3, interactive: false,
-            });
-            seMarkers = { start: startMarker, end: endMarker };
+            onSelect(null);
+            onShowPopup(null);
+            return;
           }
-        }
+          setRouteChoice(null);
+          onSelect(representative.id);
+          onShowPopup(representative);
+        });
 
-        newLayers.set(activity.id, polyLayer);
-        if (seMarkers) {
-          newStartEnd.set(activity.id, seMarkers);
-          startEndGroup.addLayer(seMarkers.start);
-          startEndGroup.addLayer(seMarkers.end);
+        routeLayersRef.current.set(route.key, { halo, line, hit, route });
+        if (containsSelected) {
+          halo.bringToFront();
+          line.bringToFront();
+          hit.bringToFront();
         }
       } catch (e) {
-        console.warn('Failed to render polyline for activity', activity.id, e);
+        console.warn('Failed to render display route', route.key, e);
       }
     });
-    startEndGroupRef.current = startEndGroup;
 
-    layersRef.current = newLayers;
-    startEndMarkersRef.current = newStartEnd;
-    updateStartEndVisibility(map);
+    renderSelectedRoute(map, L);
+  }
+
+  function renderSelectedRoute(map: LeafletMap, L: LeafletModule) {
+    if (selectedRouteLayerRef.current) {
+      try { map.removeLayer(selectedRouteLayerRef.current); } catch {}
+      selectedRouteLayerRef.current = null;
+    }
+
+    const currentSelected = selectedRef.current;
+    if (currentSelected === null) return;
+
+    const activity = activitiesRef.current.find(a => a.id === currentSelected);
+    if (!activity?.summary_polyline) return;
+
+    const points = getValidRoutePoints(decodePolyline(activity.summary_polyline));
+    if (points.length < 2) return;
+
+    const selectedGroup = L.layerGroup().addTo(map);
+    selectedRouteLayerRef.current = selectedGroup;
+    const latLngs = points.map(p => L.latLng(p[0], p[1]));
+
+    L.polyline(latLngs, {
+      color: '#ffffff',
+      weight: ROUTE_SELECTED_WEIGHT + 3.2,
+      opacity: 0.88,
+      lineJoin: 'round',
+      interactive: false,
+      className: 'heatmap-polyline-selected-halo',
+    }).addTo(selectedGroup);
+
+    L.polyline(latLngs, {
+      color: HIGHLIGHT_COLOR,
+      weight: ROUTE_SELECTED_WEIGHT,
+      opacity: ROUTE_SELECTED_OPACITY,
+      lineJoin: 'round',
+      className: 'heatmap-polyline-selected',
+    }).addTo(selectedGroup);
+
+    addRouteEndpointMarkers(L, selectedGroup, points, { size: 20 });
   }
 
   function updateSelectionStyles() {
     try {
       const currentSelected = selectedRef.current;
-      layersRef.current.forEach((layer, id) => {
+      const zoom = mapInstanceRef.current?.getZoom() ?? CLUSTER_DETAIL_ZOOM;
+      routeLayersRef.current.forEach((bundle) => {
         try {
-          const isSelected = currentSelected === id;
-          const isDimmed = currentSelected !== null && !isSelected;
-          layer.setStyle({
-            color: isSelected ? HIGHLIGHT_COLOR : (activitiesRef.current.find(a => a.id === id)?.color || '#6aa5c8'),
-            weight: isSelected ? ROUTE_SELECTED_WEIGHT : ROUTE_WEIGHT,
-            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : isSelected ? ROUTE_SELECTED_OPACITY : ROUTE_OPACITY,
+          const containsSelected = currentSelected !== null && bundle.route.activityIds.has(currentSelected);
+          const isDimmed = currentSelected !== null && !containsSelected;
+          const weight = getRouteDisplayWeight(bundle.route.count, zoom);
+          bundle.halo.setStyle({
+            weight: weight + (zoom >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+            opacity: getRouteHaloOpacity(isDimmed, zoom),
           });
-          if (isSelected) layer.bringToFront();
+          bundle.line.setStyle({
+            color: bundle.route.color,
+            weight,
+            opacity: isDimmed ? ROUTE_DIMMED_OPACITY : getRouteDisplayOpacity(bundle.route.count, zoom),
+          });
+          if (containsSelected) {
+            bundle.halo.bringToFront();
+            bundle.line.bringToFront();
+            bundle.hit.bringToFront();
+          }
         } catch (e) {
-          console.warn('[RouteMap] updateSelectionStyles per-layer failed for', id, e);
+          console.warn('[RouteMap] updateSelectionStyles per-layer failed for', bundle.route.key, e);
         }
       });
+      const map = mapInstanceRef.current;
+      if (map) {
+        (async () => {
+          const L = (await import('leaflet')).default;
+          renderSelectedRoute(map, L);
+        })();
+      }
     } catch (e) {
       console.warn('[RouteMap] updateSelectionStyles failed:', e);
     }
@@ -656,7 +935,76 @@ export const RouteMap = React.forwardRef(function RouteMap(
     },
   }));
 
-  return <div ref={containerRef} className="heatmap-map w-full h-full" style={{ minHeight: '100%' }} />;
+  const choiceActivities = routeChoice
+    ? [...routeChoice.activities].sort((a, b) => b.start_date.localeCompare(a.start_date))
+    : [];
+
+  return (
+    <div className="heatmap-map relative h-full w-full" style={{ minHeight: '100%' }}>
+      <div ref={containerRef} className="absolute inset-0" />
+      {routeChoice && (
+        <div
+          className="absolute z-[1100] w-[260px] max-w-[calc(100vw-24px)] border border-zinc-200 bg-white/95 shadow-xl backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95"
+          style={{
+            left: `${routeChoice.x + 12}px`,
+            top: `${routeChoice.y + 12}px`,
+            transform: [
+              routeChoice.x > 210 ? 'translateX(-100%)' : '',
+              routeChoice.y > 520 ? 'translateY(-100%)' : '',
+            ].filter(Boolean).join(' ') || undefined,
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
+                重合路线
+              </p>
+              <p className="font-mono text-[10px] text-zinc-500">
+                共 {routeChoice.activities.length} 条附近记录，选择一次活动
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 px-1.5 py-1 font-mono text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              onClick={() => setRouteChoice(null)}
+              aria-label="关闭"
+            >
+              ×
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto py-1">
+            {choiceActivities.map((activity) => (
+              <button
+                type="button"
+                key={activity.id}
+                className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                onClick={() => {
+                  selectedRef.current = activity.id;
+                  setRouteChoice(null);
+                  onSelect(activity.id);
+                  onShowPopup(activity);
+                }}
+              >
+                <span
+                  className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: activity.color || ROUTE_SINGLE_COLOR }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
+                    {activity.name}
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[10px] text-zinc-500">
+                    {formatChoiceDate(activity.start_date)} · {formatChoiceDistance(activity.distance)}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 });
 
 function escapeHtml(str: string): string {
