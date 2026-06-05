@@ -23,10 +23,6 @@
 
 全部基于你的真实数据，不是模板套话。支持中英文双语输出。
 
-![AI 训练分析（日常训练）](./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89.png)
-
-![AI 训练分析（比赛场景）](./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89_%E6%AF%94%E8%B5%9B.png)
-
 ---
 
 ### 🖥️ 个人跑步档案馆 `/me`
@@ -40,8 +36,6 @@
 - GitHub 风格活动日历热力图
 - 年度归档折叠列表
 
-![个人档案馆](./public/screenshot/%E4%B8%AA%E4%BA%BA%E6%A1%A3%E6%A1%88%E9%A6%86.png)
-
 ---
 
 ### 📊 数据总览与搜索
@@ -53,8 +47,6 @@
 - 按周分组的活动网格卡片，路线图预览 + 距离 + 时间
 - 深色/浅色主题自动适配
 
-![数据总览（活动列表页）](./public/screenshot/%E6%95%B0%E6%8D%AE%E6%80%BB%E8%A7%88%EF%BC%88%E6%B4%BB%E5%8A%A8%E5%88%97%E8%A1%A8%E9%A1%B5%EF%BC%89.png)
-
 ---
 
 ### 📈 数据可视化（统计页）
@@ -65,8 +57,6 @@
 - 指标维度切换（距离 / 时长 / 次数 / 卡路里 / 爬升 / **配速**）
 - GitHub 风格年度活动日历热力图（配速模式颜色自动反转）
 - 柱状图趋势 + 统计汇总卡片（总距离 / 平均配速 / 平均心率 / 累计爬升 / 总卡路里 / 次数 / 总时间 / 平均时长等）
-
-![数据可视化（统计页）](./public/screenshot/%E6%95%B0%E6%8D%AE%E5%8F%AF%E8%A7%86%E5%8C%96%EF%BC%88%E7%BB%9F%E8%AE%A1%E9%A1%B5%EF%BC%89.png)
 
 ---
 
@@ -83,8 +73,6 @@
 
 配速自动基于你的 PB 计算，每一公里都有明确目标。
 
-![算法训练计划](./public/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png)
-
 ---
 
 ### 🗺️ 路线与地图
@@ -93,20 +81,12 @@
 - **路线收藏与对比**：收藏常跑路线，基于 10 采样点路径形状匹配自动聚合历史记录，历史配速对比 + 缩略地图
 - **附近路线探索**：发现周围跑者常跑的路段
 
-![路线地图](./public/screenshot/%E8%B7%AF%E7%BA%BF%E5%9C%B0%E5%9B%BE.png)
-
-![路线收藏](./public/screenshot/%E8%B7%AF%E7%BA%BF%E6%94%B6%E8%97%8F.png)
-
 ---
 
 ### 📸 分享海报
 
 - **单次跑步分享**：透明底路线图 + 可选配速/距离/时间叠层
 - **周期海报**：一周/一个月/一个季度的跑步路线汇总拼图
-
-![单次运动海报分享](./public/screenshot/%E5%8D%95%E6%AC%A1%E8%BF%90%E5%8A%A8%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
-
-![周期海报分享](./public/screenshot/%E5%91%A8%E6%9C%9F%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png)
 
 ---
 
@@ -242,3 +222,67 @@ vercel --prod
 Strava 擅长记录，但它不擅长"读懂"你的训练。跑蓝用 AI 补上活动分析：分析心率区间、配速模式、训练负荷，识别跑崩风险、给出恢复建议；训练计划则用稳定算法模板生成周期化课表——所有这些，不需要 Strava 付费订阅。
 
 开源协议：MIT
+
+---
+
+## 页面截图
+
+<p align="center">
+  <img src="./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89.png" width="420" alt="AI 训练分析（日常训练）"/>
+  <br/>
+  <sub>AI 训练分析（日常训练）</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/AI%20%E8%AE%AD%E7%BB%83%E5%88%86%E6%9E%90%EF%BC%88%E6%B4%BB%E5%8A%A8%E8%AF%A6%E6%83%85%E9%A1%B5%EF%BC%89_%E6%AF%94%E8%B5%9B.png" width="420" alt="AI 训练分析（比赛场景）"/>
+  <br/>
+  <sub>AI 训练分析（比赛场景）</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E4%B8%AA%E4%BA%BA%E6%A1%A3%E6%A1%88%E9%A6%86.png" width="420" alt="个人跑步档案馆"/>
+  <br/>
+  <sub>个人跑步档案馆 /me</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E6%95%B0%E6%8D%AE%E6%80%BB%E8%A7%88%EF%BC%88%E6%B4%BB%E5%8A%A8%E5%88%97%E8%A1%A8%E9%A1%B5%EF%BC%89.png" width="420" alt="数据总览"/>
+  <br/>
+  <sub>数据总览（活动列表页）</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E6%95%B0%E6%8D%AE%E5%8F%AF%E8%A7%86%E5%8C%96%EF%BC%88%E7%BB%9F%E8%AE%A1%E9%A1%B5%EF%BC%89.png" width="420" alt="数据可视化"/>
+  <br/>
+  <sub>数据可视化（统计页）</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/AI%E8%AE%AD%E7%BB%83%E8%AE%A1%E5%88%92png.png" width="420" alt="训练计划"/>
+  <br/>
+  <sub>周期化训练计划</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E8%B7%AF%E7%BA%BF%E5%9C%B0%E5%9B%BE.png" width="420" alt="路线地图"/>
+  <br/>
+  <sub>路线地图</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E8%B7%AF%E7%BA%BF%E6%94%B6%E8%97%8F.png" width="420" alt="路线收藏"/>
+  <br/>
+  <sub>路线收藏与对比</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E5%8D%95%E6%AC%A1%E8%BF%90%E5%8A%A8%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png" width="320" alt="单次海报"/>
+  <br/>
+  <sub>单次运动海报分享</sub>
+</p>
+
+<p align="center">
+  <img src="./public/screenshot/%E5%91%A8%E6%9C%9F%E6%B5%B7%E6%8A%A5%E5%88%86%E4%BA%AB.png" width="320" alt="周期海报"/>
+  <br/>
+  <sub>周期海报分享</sub>
+</p>
