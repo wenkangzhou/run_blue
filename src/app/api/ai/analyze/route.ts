@@ -63,11 +63,17 @@ export async function POST(request: NextRequest) {
     const trainingProfile = analyzeTrainingHistory(
       historyActivities,
       currentActivity,
-      mergedPBs
+      mergedPBs,
+      lthr
     );
     
     // Classify the current activity
-    const classification = classifyActivity(currentActivity);
+    const classification = classifyActivity(
+      currentActivity,
+      trainingProfile.paceZones,
+      trainingProfile.estimatedPBs.reliability,
+      lthr
+    );
     
     // Stream analysis: segment HR + pace by km
     const avgPaceSecPerKm = activity.moving_time / activity.distance * 1000;
@@ -90,6 +96,7 @@ export async function POST(request: NextRequest) {
         paceZones: trainingProfile.paceZones,
         patterns: trainingProfile.patterns,
         physiologyMetrics: trainingProfile.physiologyMetrics,
+        similarStats: trainingProfile.similarStats,
       },
       classification,
       officialPBs: mergedPBs,

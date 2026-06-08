@@ -91,13 +91,13 @@ function key(overrides = {}) {
   });
 }
 
-test('builds stable v5 keys for identical AI analysis inputs', () => {
+test('builds stable v13 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v5');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v13');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v5_1_/);
+  assert.match(first, /^ai_analysis_v13_1_/);
 });
 
 test('changes key when a middle historical activity changes', () => {

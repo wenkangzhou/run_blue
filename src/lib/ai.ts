@@ -27,7 +27,12 @@ export async function analyzeActivity(
     throw new Error('KIMI_API_KEY not configured');
   }
 
-  const classification = classifyActivity(activity);
+  const classification = classifyActivity(
+    activity,
+    trainingProfile.paceZones,
+    trainingProfile.estimatedPBs.reliability,
+    lthr
+  );
   const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique, lthr, streamAnalysis);
 
   // Retry on JSON parse failure (common on cold-start / network hiccup)

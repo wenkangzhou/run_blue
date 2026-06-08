@@ -1,7 +1,7 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v5';
+export const AI_ANALYSIS_CACHE_VERSION = 'v13';
 
 type HistoryActivity = Pick<
   StravaActivity,
@@ -26,6 +26,7 @@ type HistoryActivity = Pick<
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
+      | 'laps'
       | 'best_efforts'
     >
   >;
@@ -83,6 +84,26 @@ function getSplitsFingerprint(activity: Pick<HistoryActivity, 'splits_metric'>) 
   };
 }
 
+function getLapsFingerprint(activity: Pick<HistoryActivity, 'laps'>) {
+  const laps = activity.laps;
+  if (!laps || laps.length === 0) return null;
+  const first = laps[0];
+  const last = laps[laps.length - 1];
+  return {
+    count: laps.length,
+    first: {
+      distance: roundNumber(first.distance, 0),
+      movingTime: first.moving_time,
+      avgHr: roundNumber(first.average_heartrate),
+    },
+    last: {
+      distance: roundNumber(last.distance, 0),
+      movingTime: last.moving_time,
+      avgHr: roundNumber(last.average_heartrate),
+    },
+  };
+}
+
 function getHistoryFingerprint(activities: HistoryActivity[]): string {
   if (activities.length === 0) return 'empty';
 
@@ -105,6 +126,7 @@ function getHistoryFingerprint(activities: HistoryActivity[]): string {
     calories: roundNumber(activity.calories, 0),
     bestEfforts: getBestEffortsFingerprint(activity),
     splits: getSplitsFingerprint(activity),
+    laps: getLapsFingerprint(activity),
   }));
 
   return [
@@ -165,6 +187,7 @@ export function getAIAnalysisCacheKey({
       workoutType: activity.workout_type ?? null,
       bestEfforts: getBestEffortsFingerprint(activity),
       splits: getSplitsFingerprint(activity),
+      laps: getLapsFingerprint(activity),
     },
     locale,
     profile: profile

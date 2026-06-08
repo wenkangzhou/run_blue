@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { ActivityStream, StravaActivity } from '@/types';
 import {
   Sparkles, RefreshCw, Clock, Zap, TrendingUp, Target,
-  Activity, AlertTriangle, ChevronRight, BarChart3, Trophy,
+  Activity, AlertTriangle, ChevronRight, BarChart3, Trophy, Brain, Radar, ListTree,
 } from 'lucide-react';
-import { getUserProfile } from '@/lib/userProfile';
+import { getWorkoutTypeLabel } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 
 interface AIAnalysisCardProps {
@@ -24,7 +24,7 @@ const intensityColors: Record<string, { color: string; bg: string }> = {
 
 const zoneColors: Record<string, string> = {
   E: 'text-green-600', M: 'text-blue-600', T: 'text-orange-600',
-  I: 'text-red-600', R: 'text-purple-600', unknown: 'text-gray-600',
+  I: 'text-red-600', R: 'text-purple-600',
 };
 
 // Friel HR zone colors (Z1→Z5)
@@ -37,7 +37,7 @@ const hrZoneDisplay: Record<string, { label: string; color: string; bg: string }
 };
 
 export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     analysis,
     streamAnalysis,
@@ -54,43 +54,173 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
     : null;
   const isRace = classification?.isRace;
+  const workoutTypeLabel = classification
+    ? getWorkoutTypeLabel(classification.workoutType, i18n.language)
+    : '';
+  const confidenceLabel = classification
+    ? t(`aiAnalysis.confidence.${classification.workoutTypeConfidence}`, classification.workoutTypeConfidence)
+    : '';
+  const isLowIntensityRun = classification?.workoutType === 'easy' || classification?.workoutType === 'recovery';
+  const comparisonMeta = trainingStats?.similarStats ?? null;
+  const comparisonIsReferenceOnly = Boolean(
+    isLowIntensityRun ||
+    comparisonMeta?.sampleConfidence === 'low' ||
+    comparisonMeta?.comparisonMode === 'fallback'
+  );
 
-  // Pace zone calculation (Daniels)
-  const currentPaceSecKm = activity.moving_time / activity.distance * 1000;
-  let pb5kSec = 1500;
-  const userProfile = getUserProfile();
-  if (userProfile?.pbs?.['5k'] && userProfile.pbs['5k'] > 0) {
-    pb5kSec = userProfile.pbs['5k'];
-  } else if (activity.best_efforts) {
-    const effort5k = activity.best_efforts.find(e =>
-      e.name?.toLowerCase().includes('5k') || e.name?.toLowerCase().includes('5 kilometer')
-    );
-    if (effort5k && effort5k.elapsed_time > 0) pb5kSec = effort5k.elapsed_time;
+  function getLowIntensityExecution() {
+    if (!classification || !isLowIntensityRun) return null;
+
+    const z1 = hrDist?.z1 ?? 0;
+    const z2 = hrDist?.z2 ?? 0;
+    const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
+    const drift = streamAnalysis?.avgHRDrift ?? 0;
+
+    if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
+      return {
+        title: classification.workoutType === 'recovery'
+          ? t('aiAnalysis.recoveryQuality', '恢复质量')
+          : t('aiAnalysis.aerobicQuality', '有氧质量'),
+        status: t('aiAnalysis.executionCaution', '略偏顶'),
+        detail: t('aiAnalysis.executionCautionHint', '这次低强度训练的负荷略高，下一次更适合把重心放回轻松和恢复。'),
+        color: 'text-amber-600',
+      };
+    }
+
+    if (z1 + z2 >= 95 && drift <= 6) {
+      return {
+        title: classification.workoutType === 'recovery'
+          ? t('aiAnalysis.recoveryQuality', '恢复质量')
+          : t('aiAnalysis.aerobicQuality', '有氧质量'),
+        status: t('aiAnalysis.executionExcellent', '到位'),
+        detail: t('aiAnalysis.executionExcellentHint', '心率分布和后程控制都很干净，说明这次低强度训练完成得很到位。'),
+        color: 'text-emerald-600',
+      };
+    }
+
+    if (z1 + z2 >= 85) {
+      return {
+        title: classification.workoutType === 'recovery'
+          ? t('aiAnalysis.recoveryQuality', '恢复质量')
+          : t('aiAnalysis.aerobicQuality', '有氧质量'),
+        status: t('aiAnalysis.executionControlled', '控制良好'),
+        detail: t('aiAnalysis.executionControlledHint', '整体仍在低强度范围内，适合作为一次合格的恢复或有氧补量。'),
+        color: 'text-blue-600',
+      };
+    }
+
+    return {
+      title: classification.workoutType === 'recovery'
+        ? t('aiAnalysis.recoveryQuality', '恢复质量')
+        : t('aiAnalysis.aerobicQuality', '有氧质量'),
+      status: t('aiAnalysis.executionMixed', '可再放松一点'),
+      detail: t('aiAnalysis.executionMixedHint', '这次仍有训练价值，但如果目的是恢复，下次还可以再保守一些。'),
+      color: 'text-zinc-700 dark:text-zinc-300',
+    };
   }
-  const pb5kPace = pb5kSec / 5;
-  const zones = {
-    E: { max: pb5kPace * 1.35, label: 'E-轻松', color: 'text-green-600' },
-    M: { max: pb5kPace * 1.15, label: 'M-马拉松', color: 'text-blue-600' },
-    T: { max: pb5kPace * 1.00, label: 'T-阈值', color: 'text-orange-600' },
-    I: { max: pb5kPace * 0.92, label: 'I-间歇', color: 'text-red-600' },
-    R: { max: pb5kPace * 0.87, label: 'R-重复', color: 'text-purple-600' },
-  };
-  let calculatedZoneKey = 'E';
-  if (currentPaceSecKm <= zones.R.max) calculatedZoneKey = 'R';
-  else if (currentPaceSecKm <= zones.I.max) calculatedZoneKey = 'I';
-  else if (currentPaceSecKm <= zones.T.max) calculatedZoneKey = 'T';
-  else if (currentPaceSecKm <= zones.M.max) calculatedZoneKey = 'M';
 
-  const aiZone = analysis?.paceZoneAnalysis?.zone?.trim();
-  const normalizedAiZone = aiZone ? aiZone.charAt(0).toUpperCase() + aiZone.slice(1).toLowerCase() : '';
-  const validZones = ['E', 'M', 'T', 'I', 'R'];
-  const zoneKey = (normalizedAiZone && validZones.includes(normalizedAiZone)) ? normalizedAiZone : calculatedZoneKey;
-  const zoneLabel = t(`aiAnalysis.zone${zoneKey}`, zoneKey);
-  const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.unknown };
+  function formatStructureSummary() {
+    if (!classification) return '';
+    const structure = classification.structure;
+    const parts: string[] = [];
+
+    if (structure.lapCount > 0) {
+      parts.push(t('aiAnalysis.structureLaps', { count: structure.lapCount, defaultValue: `${structure.lapCount} 圈` }));
+    }
+    const shouldShowRepCount = structure.shortRepCount > 0 && (
+      structure.source === 'laps' ||
+      structure.splitPattern === 'interval' ||
+      structure.fastRepCount > 0 ||
+      structure.recoveryRepCount > 0
+    );
+    if (shouldShowRepCount) {
+      parts.push(t('aiAnalysis.structureReps', { count: structure.shortRepCount, defaultValue: `${structure.shortRepCount} 个重复段` }));
+    }
+    if (structure.splitPattern !== 'unknown') {
+      parts.push(t(`aiAnalysis.pattern.${structure.splitPattern}`, structure.splitPattern));
+    }
+
+    return parts.join(' · ');
+  }
+
+  function formatEvidence(evidence: string) {
+    if (i18n.language.startsWith('en')) return evidence;
+
+    if (evidence === 'Strava workout_type=1') return 'Strava 将本次活动标记为比赛';
+    if (evidence === 'activity name matches race keywords') return '活动名称包含比赛关键词';
+    if (evidence === 'name/description indicates treadmill') return '名称或描述显示这是跑步机训练';
+    if (evidence === 'trainer/VirtualRun flag') return '活动标记为 trainer / VirtualRun';
+    if (evidence === 'keyword match: progression') return '名称或描述命中“渐进跑”关键词';
+    if (evidence === 'keyword match: recovery') return '名称或描述命中“恢复跑”关键词';
+    if (evidence === 'keyword match: easy') return '名称或描述命中“轻松跑”关键词';
+    if (evidence === 'split pattern progression') return '分段模式显示为渐进跑';
+    if (evidence === 'warmup/cooldown pattern detected') return '检测到明显的热身/冷身结构';
+    if (evidence === 'pace falls in threshold zone') return '当前配速落在阈值区间';
+    if (evidence === 'pace sits inside threshold zone') return '当前配速真正落在阈值区间';
+    if (evidence === 'pace sits inside marathon zone') return '当前配速真正落在马拉松配速区间';
+    if (evidence === 'pace sits inside easy zone') return '当前配速真正落在轻松跑区间';
+    if (evidence === 'pace sits inside interval zone') return '当前配速真正落在间歇区间';
+    if (evidence === 'pace sits inside repetition zone') return '当前配速真正落在重复跑区间';
+    if (evidence === 'pace-zone model unavailable, defaulted to easy') return '当前没有可用的配速区间模型，默认归为轻松跑';
+    if (evidence === 'pace in repetition zone') return '当前配速落在重复跑区间';
+    if (evidence === 'pace in interval zone') return '当前配速落在间歇跑区间';
+    if (evidence === 'pace in threshold zone') return '当前配速落在乳酸阈值区间';
+    if (evidence === 'pace in marathon zone') return '当前配速落在马拉松配速区间';
+    if (evidence === 'pace in easy zone') return '当前配速落在轻松跑区间';
+    if (evidence === 'easy pace with low aerobic heart rate') return '配速轻松且心率保持在低有氧范围';
+    if (evidence === 'easy-zone pace without workout structure') return '配速处于轻松区间，且没有明显质量课结构';
+    if (evidence === 'short duration with very low cardiac cost') return '单次时间较短，且整体心肺负担很低';
+    if (evidence === 'aerobic volume with low heart-rate cost') return '完成了一次低心率成本的有氧跑量积累';
+    if (evidence === 'steady aerobic effort without recovery-only profile') return '整体是稳定有氧输出，但不像纯恢复跑';
+    if (evidence === 'insufficient workout-structure evidence') return '训练结构证据不足，只能做保守判断';
+    if (evidence === 'no clear repeat structure, possibly steady hard effort') return '没有明显重复段结构，更像持续偏强的稳态努力';
+
+    let match = evidence.match(/^(\d+) laps with (\d+) short reps$/);
+    if (match) return `${match[1]} 圈中包含 ${match[2]} 个短重复段`;
+
+    match = evidence.match(/^(\d+) faster reps and (\d+) recovery reps$/);
+    if (match) return `${match[1]} 个快段，对应 ${match[2]} 个恢复段`;
+
+    match = evidence.match(/^high climb ratio (\d+)m\/km with repeated short reps$/);
+    if (match) return `单位距离爬升较高（${match[1]} 米/公里），且伴随重复短段`;
+
+    match = evidence.match(/^distance ([\d.]+)km$/);
+    if (match) return `本次距离为 ${match[1]} km`;
+
+    match = evidence.match(/^average HR sits in threshold zone \((\d+) bpm\)$/);
+    if (match) return `平均心率 ${match[1]} bpm，落在阈值心率区间`;
+
+    match = evidence.match(/^average HR stayed in low aerobic zone \((\d+) bpm\)$/);
+    if (match) return `平均心率 ${match[1]} bpm，保持在低有氧心率区间`;
+
+    match = evidence.match(/^average HR stayed below threshold zone \((\d+) bpm\)$/);
+    if (match) return `平均心率 ${match[1]} bpm，低于阈值心率区间`;
+
+    match = evidence.match(/^keyword match: (.+)$/);
+    if (match) return `名称或描述命中关键词：${match[1]}`;
+
+    match = evidence.match(/^split pattern (.+)$/);
+    if (match) return `分段模式识别为 ${match[1]}`;
+
+    return evidence;
+  }
 
   // HR zone distribution bars
   const hrDist = streamAnalysis?.hrZoneDistribution;
   const hrZonesOrdered = ['z5', 'z4', 'z3', 'z2', 'z1'] as const;
+
+  const structureSummary = formatStructureSummary();
+  const lowIntensityExecution = getLowIntensityExecution();
+
+  const aiZone = analysis?.paceZoneAnalysis?.zone?.trim();
+  const normalizedAiZone = aiZone ? aiZone.charAt(0).toUpperCase() + aiZone.slice(1).toLowerCase() : '';
+  const validZones = ['E', 'M', 'T', 'I', 'R'];
+  const fallbackZone = classification?.paceZone && validZones.includes(classification.paceZone) ? classification.paceZone : 'E';
+  const zoneKey = (normalizedAiZone && validZones.includes(normalizedAiZone)) ? normalizedAiZone : fallbackZone;
+  const zoneTranslationKey = `aiAnalysis.zone${zoneKey}`;
+  const zoneFallbackLabel = zoneKey;
+  const zoneLabel = t(zoneTranslationKey, zoneFallbackLabel);
+  const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
 
   return (
     <div className="border-4 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900">
@@ -152,6 +282,39 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
               <p className="font-mono text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">{analysis.summary}</p>
             </div>
 
+            {classification && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Brain className="w-3 h-3 text-zinc-400" />
+                    <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.workoutRead', '训练识别')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-base font-bold text-zinc-900 dark:text-zinc-100">{workoutTypeLabel}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                      {confidenceLabel}
+                    </span>
+                  </div>
+                  {structureSummary && (
+                    <p className="mt-1 font-mono text-[11px] text-zinc-500">{structureSummary}</p>
+                  )}
+                </div>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Radar className="w-3 h-3 text-zinc-400" />
+                    <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.whyItThinksSo', '判断依据')}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {classification.workoutTypeEvidence.slice(0, 2).map((evidence, index) => (
+                      <p key={index} className="font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        {formatEvidence(evidence)}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Key Metrics Grid */}
             <div className="grid grid-cols-2 gap-2">
               <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
@@ -191,9 +354,31 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
               <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
                 <div className="flex items-center gap-1 mb-1">
                   <TrendingUp className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.comparison')}</span>
+                  <span className="font-mono text-[10px] text-zinc-500 uppercase">
+                    {comparisonIsReferenceOnly && lowIntensityExecution
+                      ? lowIntensityExecution.title
+                      : comparisonIsReferenceOnly
+                        ? t('aiAnalysis.comparisonReference', '配速参考')
+                        : t('aiAnalysis.comparison')}
+                  </span>
                 </div>
-                <span className="font-mono text-sm font-bold">{analysis.comparisonToAverage}</span>
+                {comparisonIsReferenceOnly && lowIntensityExecution ? (
+                  <div>
+                    <span className={`font-mono text-lg font-bold ${lowIntensityExecution.color}`}>{lowIntensityExecution.status}</span>
+                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-zinc-500">{lowIntensityExecution.detail}</p>
+                  </div>
+                ) : comparisonIsReferenceOnly ? (
+                  <div>
+                    <span className="font-mono text-sm font-bold">{analysis.comparisonToAverage}</span>
+                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-zinc-500">
+                      {isLowIntensityRun
+                        ? t('aiAnalysis.easyRunComparisonHint', '轻松/恢复跑更看重低负荷完成度，配速对比只作背景参考。')
+                        : t('aiAnalysis.comparisonSecondaryHint', '这组历史样本参考性一般，更适合当作方向提示。')}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="font-mono text-sm font-bold">{analysis.comparisonToAverage}</span>
+                )}
               </div>
             </div>
 
@@ -256,8 +441,23 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                       <div className="flex items-start gap-3">
                         <Activity className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">{t('aiAnalysis.similarActivities')}</span>
+                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
+                            {comparisonIsReferenceOnly
+                              ? t('aiAnalysis.similarActivitiesReference', '同类参考')
+                              : t('aiAnalysis.similarActivities')}
+                          </span>
                           <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{analysis.similarActivitiesInsight}</p>
+                        </div>
+                      </div>
+                    )}
+                    {comparisonIsReferenceOnly && analysis.comparisonToAverage && (
+                      <div className="flex items-start gap-3">
+                        <TrendingUp className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
+                            {t('aiAnalysis.comparisonReference', '配速参考')}
+                          </span>
+                          <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{analysis.comparisonToAverage}</p>
                         </div>
                       </div>
                     )}
@@ -271,6 +471,21 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                           <p className={`font-mono text-sm ${isRace ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
                             {analysis.nextWorkoutSuggestion}
                           </p>
+                        </div>
+                      </div>
+                    )}
+                    {classification && (
+                      <div className="flex items-start gap-3">
+                        <ListTree className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
+                            {t('aiAnalysis.classificationDetail', '识别明细')}
+                          </span>
+                          <div className="space-y-1">
+                            {classification.workoutTypeEvidence.map((evidence, index) => (
+                              <p key={index} className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{formatEvidence(evidence)}</p>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}

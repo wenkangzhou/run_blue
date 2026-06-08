@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { AIAnalysis } from '@/lib/ai';
-import type { ActivityClassification } from '@/lib/trainingAnalysis';
+import type { ActivityClassification, SimilarActivityStats } from '@/lib/trainingAnalysis';
 import type { StreamAnalysis } from '@/lib/streamAnalysis';
 import { getMergedPBsForAnalysis, getUserProfile } from '@/lib/userProfile';
 import { clearCachedAIAnalysis, getCachedAIAnalysis, setCachedAIAnalysis } from '@/lib/aiAnalysisCache';
@@ -17,6 +17,7 @@ interface AITrainingStats {
   paceZones?: unknown;
   patterns?: unknown;
   physiologyMetrics?: unknown;
+  similarStats?: SimilarActivityStats | null;
 }
 
 interface CachedAIAnalysis {
@@ -58,6 +59,7 @@ type AIHistoryActivity = Pick<
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
+      | 'laps'
       | 'best_efforts'
     >
   >;
@@ -86,6 +88,7 @@ function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
     workout_type: activity.workout_type,
     calories: activity.calories,
     splits_metric: activity.splits_metric,
+    laps: activity.laps,
     best_efforts: activity.best_efforts,
   };
 }

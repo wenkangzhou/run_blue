@@ -1,7 +1,7 @@
 import { StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
 import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
-import { formatPace } from './trainingAnalysis';
+import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 
 /**
@@ -44,7 +44,7 @@ export function generateFallbackAnalysis(
 
   // Race-specific fallback
   const fallbackComparison = profile.similarStats
-    ? buildAccurateComparison(activity, profile.similarStats, locale)
+    ? buildAccurateComparison(activity, profile.similarStats, locale, classification.workoutType)
     : null;
 
   if (classification.isRace) {
@@ -84,11 +84,32 @@ export function generateFallbackAnalysis(
 
   // Normal training fallback
   const suggestions = [...profile.patterns.trainingDeficiencies];
+  const workoutTypeLabel = getWorkoutTypeLabel(classification.workoutType, locale);
   if (!profile.patterns.hasLongRuns && activity.distance < 15000) {
     suggestions.push(en ? 'Try to schedule a 15km+ long run this week.' : '建议本周安排一次15km+的长距离训练');
   }
-  if (!profile.patterns.hasIntervalWorkouts) {
+  if (!profile.patterns.hasIntervalWorkouts && classification.workoutType !== 'interval' && classification.workoutType !== 'fartlek') {
     suggestions.push(en ? 'Try 400m x 6 interval workout once a week, keep pace in I zone.' : '可尝试每周一次400m×6间歇训练，配速控制在I区');
+  }
+
+  if (classification.workoutType === 'interval' || classification.workoutType === 'fartlek') {
+    suggestions.unshift(
+      en
+        ? 'Review the rep-to-recovery contrast and keep the fast reps even rather than opening too aggressively.'
+        : '重点回看快段与恢复段的对比，下一次尽量让各重复段更均匀，不要前几组冲得过猛。'
+    );
+  } else if (classification.workoutType === 'progression') {
+    suggestions.unshift(
+      en
+        ? 'Keep the first third controlled so the final acceleration comes from rhythm, not from forcing the pace early.'
+        : '渐进跑的重点是前段克制，把后程加速建立在节奏递进上，而不是前面抢配速。'
+    );
+  } else if (classification.workoutType === 'long-run') {
+    suggestions.unshift(
+      en
+        ? 'Treat fueling, hydration, and pace stability as the main quality markers for long runs.'
+        : '长距离训练优先关注补给、补水和配速稳定性，而不是单纯追求更快。'
+    );
   }
 
   // Build comparison text based on accurate data
@@ -113,8 +134,8 @@ export function generateFallbackAnalysis(
 
   return {
     summary: en
-      ? `Completed ${(activity.distance / 1000).toFixed(1)}km workout at ${paceStr}/km, in the ${zoneDesc}.${encouragement}`
-      : `本次${(activity.distance / 1000).toFixed(1)}km训练完成，配速${paceStr}/km处于${zoneDesc}。${encouragement}`,
+      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${encouragement}`
+      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${encouragement}`,
     intensity: 'moderate',
     recoveryHours: activity.distance > 10000 ? 36 : 24,
     comparisonToAverage: comparisonText,
