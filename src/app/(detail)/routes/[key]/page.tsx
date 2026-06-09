@@ -206,13 +206,13 @@ export default function RouteDetailPage() {
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
-          <Link
-            href="/routes"
+          <button
+            onClick={() => router.back()}
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </button>
 
           <div className="flex-1 min-w-0 mx-3 text-center">
             {isEditingName ? (

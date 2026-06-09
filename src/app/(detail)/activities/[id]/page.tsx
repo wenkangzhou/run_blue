@@ -10,6 +10,7 @@ import { getActivity, getActivityStreams, formatDateTime, formatDistance, format
 import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
 import { getActivityDateKey } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
+import { useRoutesStore } from '@/store/routes';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { SplitsTable } from '@/components/SplitsTable';
@@ -19,7 +20,7 @@ import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
 import { SharePosterModal } from '@/components/SharePosterModal';
 import { SaveRouteButton } from '@/components/SaveRouteButton';
 import { calculatePaceTrend } from '@/lib/paceTrend';
-import { ChevronLeft, Loader2, RefreshCw, Share2, TrendingUp } from 'lucide-react';
+import { ChevronLeft, Loader2, RefreshCw, Share2, TrendingUp, MapPin, Trophy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // 20km threshold for collapsing
@@ -54,6 +55,55 @@ export default function ActivityDetailPage() {
     if (!activity) return null;
     return calculatePaceTrend(allActivities, activity.id);
   }, [allActivities, activity]);
+
+  // Route achievement data
+  const { savedRoutes } = useRoutesStore();
+  const routeAchievement = useMemo(() => {
+    if (!activity) return null;
+    // Find route that contains this activity
+    const route = savedRoutes.find((r) => r.activityIds.includes(activity.id));
+    if (!route) return null;
+
+    // Get all activities for this route
+    const routeActivities = allActivities
+      .filter((a) => route.activityIds.includes(a.id))
+      .sort((a, b) => {
+        const tsA = new Date(a.start_date).getTime();
+        const tsB = new Date(b.start_date).getTime();
+        return tsB - tsA; // newest first
+      });
+
+    if (routeActivities.length === 0) return null;
+
+    // Calculate pace for each (seconds per km)
+    const pacedActivities = routeActivities.map((a) => ({
+      id: a.id,
+      pace: a.moving_time / (a.distance / 1000), // sec/km
+      date: a.start_date,
+    }));
+
+    // Sort by pace (fastest first)
+    const byPace = [...pacedActivities].sort((a, b) => a.pace - b.pace);
+    const currentPace = pacedActivities.find((p) => p.id === activity.id)?.pace ?? 0;
+    const rank = byPace.findIndex((p) => p.id === activity.id) + 1; // 1-based
+    const total = byPace.length;
+    const isPB = rank === 1 && total > 1;
+
+    // Average pace of all runs on this route
+    const avgPace = pacedActivities.reduce((s, p) => s + p.pace, 0) / pacedActivities.length;
+    const diffSec = currentPace - avgPace; // positive = slower
+
+    return {
+      routeKey: route.key,
+      routeName: route.name,
+      totalRuns: total,
+      rank,
+      isPB,
+      diffSec,
+      avgPace,
+      currentPace,
+    };
+  }, [activity, savedRoutes, allActivities]);
 
   // Use ref to track if we have loaded data to avoid infinite loops
   const hasLoadedRef = useRef(false);
@@ -462,6 +512,46 @@ export default function ActivityDetailPage() {
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Route Achievement Banner */}
+          {routeAchievement && (
+            <div className="mb-4 border-2 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
+                    <span className="font-mono text-[10px] uppercase text-zinc-500">{t('activity.route', '路线')}</span>
+                  </div>
+                  <h3 className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                    {routeAchievement.routeName}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    {routeAchievement.isPB && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
+                        <Trophy className="w-3 h-3" />
+                        {t('activity.routePB', '路线 PB')}
+                      </span>
+                    )}
+                    <span className="font-mono text-[10px] text-zinc-500">
+                      {t('activity.routeRank', { rank: routeAchievement.rank, total: routeAchievement.totalRuns })}
+                    </span>
+                    {routeAchievement.diffSec !== 0 && (
+                      <span className={`font-mono text-[10px] font-bold ${routeAchievement.diffSec < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {routeAchievement.diffSec < 0 ? '↑' : '↓'} {Math.abs(Math.round(routeAchievement.diffSec))}s/km
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Link
+                  href={`/routes/${encodeURIComponent(routeAchievement.routeKey)}`}
+                  className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[10px] font-bold border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                >
+                  {t('activity.viewRoute', '路线详情')}
+                  <ChevronLeft className="w-3 h-3 rotate-180" />
+                </Link>
+              </div>
             </div>
           )}
 

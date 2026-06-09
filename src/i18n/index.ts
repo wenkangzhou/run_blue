@@ -132,6 +132,10 @@ const resources = {
         gear: 'Gear',
         device: 'Device',
         elapsedTime: 'Elapsed Time',
+        route: 'Route',
+        routePB: 'Route PB',
+        routeRank: '#{{rank}} of {{total}}',
+        viewRoute: 'Route',
  },
       stats: {
         title: 'Statistics',
@@ -653,6 +657,10 @@ const resources = {
         gear: '装备',
         device: '设备',
         elapsedTime: '用时',
+        route: '路线',
+        routePB: '路线 PB',
+        routeRank: '第 {{rank}} 快（共 {{total}} 次）',
+        viewRoute: '路线详情',
       },
       stats: {
         title: '统计',

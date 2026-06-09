@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityStream, StravaActivity } from '@/types';
 import {
   Sparkles, RefreshCw, Clock, Zap, TrendingUp, Target,
   Activity, AlertTriangle, ChevronRight, BarChart3, Trophy, Brain, Radar, ListTree,
+  MessageSquare, ArrowRight,
 } from 'lucide-react';
 import { getWorkoutTypeLabel } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
@@ -212,6 +213,115 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const structureSummary = formatStructureSummary();
   const lowIntensityExecution = getLowIntensityExecution();
 
+  // Coach verdict: structured evaluation
+  const verdict = useMemo(() => {
+    if (!analysis || !classification) return null;
+
+    // 1. Training type
+    const type = workoutTypeLabel;
+
+    // 2. Effect evaluation
+    let effect: 'excellent' | 'good' | 'fair' | 'poor' = 'good';
+    let effectLabel = '完成良好';
+
+    if (isRace) {
+      effect = 'good';
+      effectLabel = '比赛完成';
+    } else if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
+      const z1 = hrDist?.z1 ?? 0;
+      const z2 = hrDist?.z2 ?? 0;
+      const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
+      const drift = streamAnalysis?.avgHRDrift ?? 0;
+
+      if (z1 + z2 >= 95 && drift <= 6) {
+        effect = 'excellent';
+        effectLabel = '执行到位';
+      } else if (z1 + z2 >= 85) {
+        effect = 'good';
+        effectLabel = '控制良好';
+      } else if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
+        effect = 'fair';
+        effectLabel = '略偏顶';
+      } else {
+        effect = 'poor';
+        effectLabel = '可再放松';
+      }
+    } else if (classification.intensity === 'hard') {
+      if (classification.paceZoneExactMatch) {
+        effect = 'good';
+        effectLabel = '配速精准';
+      } else if (streamAnalysis?.hasHRDrift) {
+        effect = 'fair';
+        effectLabel = '后程掉速';
+      } else {
+        effect = 'good';
+        effectLabel = '完成良好';
+      }
+    }
+
+    // Override by warnings
+    if (analysis.warnings && analysis.warnings.length > 0) {
+      effect = 'poor';
+      effectLabel = '需要注意';
+    }
+
+    // 3. Pros & cons
+    const pros: string[] = [];
+    const cons: string[] = [];
+
+    // From pace zone appropriateness
+    if (analysis.paceZoneAnalysis?.appropriateness === 'appropriate') {
+      pros.push('配速落在目标区间');
+    } else if (analysis.paceZoneAnalysis?.appropriateness === 'too-fast') {
+      cons.push('配速偏快，负荷偏高');
+    } else if (analysis.paceZoneAnalysis?.appropriateness === 'too-slow') {
+      pros.push('配速保守，恢复充分');
+    }
+
+    // From stream analysis
+    if (streamAnalysis?.hasHRDrift) {
+      cons.push(`后程心率漂移 ${Math.round(streamAnalysis.avgHRDrift)}%，体能储备不足`);
+    } else if (streamAnalysis?.avgHRDrift && streamAnalysis.avgHRDrift > 5) {
+      cons.push(`后程心率有小幅漂移`);
+    } else if (streamAnalysis?.avgHRDrift !== undefined && streamAnalysis.avgHRDrift <= 5) {
+      pros.push('心率控制稳定');
+    }
+
+    // From low intensity execution
+    if (lowIntensityExecution) {
+      if (lowIntensityExecution.status === t('aiAnalysis.executionExcellent', '到位')) {
+        pros.push('低强度执行到位');
+      } else if (lowIntensityExecution.status === t('aiAnalysis.executionCaution', '略偏顶')) {
+        cons.push('低强度负荷偏高');
+      }
+    }
+
+    // From comparison
+    if (analysis.comparisonToAverage && !comparisonIsReferenceOnly) {
+      const isFaster = analysis.comparisonToAverage.includes('快') || analysis.comparisonToAverage.includes('faster');
+      if (isFaster) {
+        pros.push('比同类训练更快');
+      }
+    }
+
+    // 4. Advice
+    const advice: string[] = [];
+    if (analysis.suggestions && analysis.suggestions.length > 0) {
+      advice.push(...analysis.suggestions.slice(0, 2));
+    } else if (analysis.nextWorkoutSuggestion) {
+      advice.push(analysis.nextWorkoutSuggestion);
+    }
+
+    return { type, effect, effectLabel, pros, cons, advice };
+  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, comparisonIsReferenceOnly, t]);
+
+  const effectStyles: Record<string, { color: string; bg: string; border: string }> = {
+    excellent: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-400' },
+    good:      { color: 'text-blue-700 dark:text-blue-400',      bg: 'bg-blue-50 dark:bg-blue-900/15',      border: 'border-blue-400' },
+    fair:      { color: 'text-amber-700 dark:text-amber-400',    bg: 'bg-amber-50 dark:bg-amber-900/15',    border: 'border-amber-400' },
+    poor:      { color: 'text-red-700 dark:text-red-400',        bg: 'bg-red-50 dark:bg-red-900/15',        border: 'border-red-400' },
+  };
+
   const aiZone = analysis?.paceZoneAnalysis?.zone?.trim();
   const normalizedAiZone = aiZone ? aiZone.charAt(0).toUpperCase() + aiZone.slice(1).toLowerCase() : '';
   const validZones = ['E', 'M', 'T', 'I', 'R'];
@@ -274,6 +384,66 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                 <span className="font-mono text-[10px] text-amber-700 dark:text-amber-300 flex-1">
                   {t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
                 </span>
+              </div>
+            )}
+
+            {/* Coach Verdict */}
+            {verdict && (
+              <div className={`border-2 ${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg} p-3`}>
+                {/* Header: Type + Effect */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{verdict.type}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} border ${effectStyles[verdict.effect].border}`}>
+                      {verdict.effectLabel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pros */}
+                {verdict.pros.length > 0 && (
+                  <div className="mb-2">
+                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">优点</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {verdict.pros.map((pro, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                          <span className="text-emerald-500">+</span>
+                          {pro}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cons */}
+                {verdict.cons.length > 0 && (
+                  <div className="mb-2">
+                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">不足</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {verdict.cons.map((con, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                          <span className="text-red-500">−</span>
+                          {con}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Advice */}
+                {verdict.advice.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">建议</p>
+                    <div className="space-y-1">
+                      {verdict.advice.map((item, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <ArrowRight className="w-3 h-3 mt-0.5 text-blue-500 flex-shrink-0" />
+                          <p className="font-mono text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{item}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
