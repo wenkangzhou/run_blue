@@ -1,7 +1,8 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v13';
+export const AI_ANALYSIS_CACHE_VERSION = 'v16';
+const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v15'];
 
 type HistoryActivity = Pick<
   StravaActivity,
@@ -166,15 +167,15 @@ function getStreamFingerprint(streams: Record<string, ActivityStream> | null): s
   return hashString(JSON.stringify(normalized));
 }
 
-export function getAIAnalysisCacheKey({
+function buildAIAnalysisCacheKey({
   activity,
   streams,
   historyActivities,
   locale,
   profile,
-}: AIAnalysisCacheKeyInput): string {
+}: AIAnalysisCacheKeyInput, version: string): string {
   const inputFingerprint = {
-    version: AI_ANALYSIS_CACHE_VERSION,
+    version,
     activity: {
       id: activity.id,
       distance: roundNumber(activity.distance, 0),
@@ -203,5 +204,13 @@ export function getAIAnalysisCacheKey({
     streams: getStreamFingerprint(streams),
   };
 
-  return `ai_analysis_${AI_ANALYSIS_CACHE_VERSION}_${activity.id}_${hashString(JSON.stringify(inputFingerprint))}`;
+  return `ai_analysis_${version}_${activity.id}_${hashString(JSON.stringify(inputFingerprint))}`;
+}
+
+export function getAIAnalysisCacheKey(input: AIAnalysisCacheKeyInput): string {
+  return buildAIAnalysisCacheKey(input, AI_ANALYSIS_CACHE_VERSION);
+}
+
+export function getLegacyAIAnalysisCacheKeys(input: AIAnalysisCacheKeyInput): string[] {
+  return AI_ANALYSIS_LEGACY_CACHE_VERSIONS.map((version) => buildAIAnalysisCacheKey(input, version));
 }

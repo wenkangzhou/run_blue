@@ -23,7 +23,7 @@ const compiled = ts.transpileModule(source, {
 
 writeFileSync(compiledPath, compiled);
 
-const { AI_ANALYSIS_CACHE_VERSION, getAIAnalysisCacheKey } = require(compiledPath);
+const { AI_ANALYSIS_CACHE_VERSION, getAIAnalysisCacheKey, getLegacyAIAnalysisCacheKeys } = require(compiledPath);
 
 function makeActivity(id, overrides = {}) {
   return {
@@ -81,23 +81,36 @@ function makeStreams(overrides = {}) {
 }
 
 function key(overrides = {}) {
-  return getAIAnalysisCacheKey({
+  return getAIAnalysisCacheKey(makeCacheInput(overrides));
+}
+
+function makeCacheInput(overrides = {}) {
+  return {
     activity: makeActivity(1),
     streams: makeStreams(),
     historyActivities: [makeActivity(3), makeActivity(2), makeActivity(1)],
     locale: 'zh',
     profile: makeProfile(),
     ...overrides,
-  });
+  };
 }
 
-test('builds stable v13 keys for identical AI analysis inputs', () => {
+test('builds stable v16 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v13');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v16');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v13_1_/);
+  assert.match(first, /^ai_analysis_v16_1_/);
+});
+
+test('builds legacy v15 fallback keys for existing cached analysis', () => {
+  const current = key();
+  const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput());
+
+  assert.equal(legacy.length, 1);
+  assert.match(legacy[0], /^ai_analysis_v15_1_/);
+  assert.notEqual(legacy[0], current);
 });
 
 test('changes key when a middle historical activity changes', () => {

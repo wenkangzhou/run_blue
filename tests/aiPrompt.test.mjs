@@ -219,6 +219,46 @@ test('buildProfessionalPrompt uses ability-based zones and workout-type guidance
   assert.match(prompt, /Sample size is small/);
 });
 
+test('buildProfessionalPrompt keeps ordinary long runs from becoming default M-pace workouts', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 18010,
+      moving_time: 6042,
+      average_speed: 2.98,
+    }),
+    null,
+    makeProfile(),
+    makeClassification({
+      intensity: 'moderate',
+      paceZone: 'E',
+      paceZoneConfidence: 'medium',
+      workoutType: 'long-run',
+      workoutTypeConfidence: 'medium',
+      workoutTypeEvidence: ['distance exceeds typical long-run threshold'],
+      structure: {
+        source: 'splits',
+        lapCount: 0,
+        medianLapDistance: null,
+        shortRepCount: 0,
+        fastRepCount: 0,
+        recoveryRepCount: 0,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'steady',
+        paceVariability: 0.04,
+      },
+    }),
+    'zh',
+    { height: 178, weight: 68 },
+    176
+  );
+
+  assert.match(prompt, /不要把普通长距离自动改造成 M 配速质量课/);
+  assert.match(prompt, /不要默认建议 M 配速结尾或 M 配速穿插/);
+  assert.match(prompt, /精确饮水\/电解质量不是必须项/);
+  assert.match(prompt, /不要写“目标配速”/);
+});
+
 test('buildProfessionalPrompt tells the model to acknowledge uncertainty when evidence is weak', () => {
   const prompt = buildProfessionalPrompt(
     makeActivity({ laps: undefined, splits_metric: undefined, has_heartrate: false, average_heartrate: undefined }),
@@ -319,4 +359,47 @@ test('buildProfessionalPrompt treats muggy but not hot weather as minor context'
   assert.match(prompt, /热环境判断: 偏闷或偏暖/);
   assert.match(prompt, /只带来轻度的闷热负担/);
   assert.match(prompt, /不要直接写成“热应激”/);
+});
+
+test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 6740,
+      moving_time: 2396,
+      average_heartrate: 133,
+      max_heartrate: 151,
+    }),
+    null,
+    makeProfile(),
+    makeClassification({
+      intensity: 'easy',
+      paceZone: 'E',
+      paceZoneConfidence: 'medium',
+      workoutType: 'recovery',
+      workoutTypeConfidence: 'low',
+      workoutTypeEvidence: ['easy pace with low aerobic heart rate'],
+      structure: {
+        source: 'splits',
+        lapCount: 0,
+        medianLapDistance: null,
+        shortRepCount: 0,
+        fastRepCount: 0,
+        recoveryRepCount: 0,
+        hasWarmup: false,
+        hasCooldown: false,
+        splitPattern: 'steady',
+        paceVariability: 0.05,
+      },
+    }),
+    'zh',
+    { height: 180, weight: 68 },
+    176
+  );
+
+  assert.match(prompt, /不要把轻松\/恢复跑配速写成“目标配速”/);
+  assert.match(prompt, /不要根据 BMI 推导表现结论/);
+  assert.match(prompt, /不要给出精确到克数的营养处方/);
+  assert.match(prompt, /不要给出精确到克数的碳水\/蛋白建议/);
+  assert.match(prompt, /不要仅凭心率变化诊断脱水/);
+  assert.match(prompt, /补水建议保持定性/);
 });

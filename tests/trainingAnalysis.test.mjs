@@ -171,6 +171,30 @@ test('classifyActivity recognizes progression runs from splits', () => {
   assert.equal(classification.structure.splitPattern, 'progression');
 });
 
+test('classifyActivity recognizes progression runs with a cooldown split', () => {
+  const activity = makeActivity(23, {
+    name: 'Morning run',
+    distance: 6740,
+    moving_time: 2060,
+    average_heartrate: 146,
+    max_heartrate: 164,
+    splits_metric: [
+      makeSplit(0, 330),
+      makeSplit(1, 305),
+      makeSplit(2, 277),
+      makeSplit(3, 294),
+      makeSplit(4, 258),
+      makeSplit(5, 298),
+      makeSplit(6, 366, { distance: 740, moving_time: 271 }),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200), 'medium', 176);
+
+  assert.equal(classification.workoutType, 'progression');
+  assert.equal(classification.structure.splitPattern, 'progression');
+});
+
 test('classifyActivity does not snap low-confidence pace models into threshold', () => {
   const activity = makeActivity(21, {
     name: 'Morning steady run',

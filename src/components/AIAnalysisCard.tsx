@@ -6,9 +6,9 @@ import { ActivityStream, StravaActivity } from '@/types';
 import {
   Sparkles, RefreshCw, Clock, Zap, TrendingUp, Target,
   Activity, AlertTriangle, ChevronRight, BarChart3, Trophy, Brain, Radar, ListTree,
-  MessageSquare, ArrowRight,
+  ArrowRight,
 } from 'lucide-react';
-import { getWorkoutTypeLabel } from '@/lib/trainingAnalysis';
+import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 
 interface AIAnalysisCardProps {
@@ -36,6 +36,32 @@ const hrZoneDisplay: Record<string, { label: string; color: string; bg: string }
   z2: { label: 'Z2 有氧基础', color: 'text-blue-600', bg: 'bg-blue-500' },
   z1: { label: 'Z1 恢复', color: 'text-slate-500', bg: 'bg-slate-400' },
 };
+
+function getAppropriatePaceProLabel(workoutType: ActivityClassification['workoutType'] | undefined): string {
+  switch (workoutType) {
+    case 'easy':
+    case 'recovery':
+      return '低强度范围匹配';
+    case 'progression':
+      return '渐进节奏清晰';
+    case 'long-run':
+      return '耐力节奏稳定';
+    case 'interval':
+    case 'fartlek':
+      return '重复段强度匹配';
+    case 'threshold':
+    case 'tempo':
+      return '强度区间匹配';
+    case 'hill':
+      return '爬升强度匹配';
+    case 'treadmill':
+      return '配速控制稳定';
+    case 'race':
+      return '比赛配速匹配';
+    default:
+      return '配速区间匹配';
+  }
+}
 
 export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const { t, i18n } = useTranslation();
@@ -271,7 +297,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
     // From pace zone appropriateness
     if (analysis.paceZoneAnalysis?.appropriateness === 'appropriate') {
-      pros.push('配速落在目标区间');
+      pros.push(getAppropriatePaceProLabel(classification.workoutType));
     } else if (analysis.paceZoneAnalysis?.appropriateness === 'too-fast') {
       cons.push('配速偏快，负荷偏高');
     } else if (analysis.paceZoneAnalysis?.appropriateness === 'too-slow') {

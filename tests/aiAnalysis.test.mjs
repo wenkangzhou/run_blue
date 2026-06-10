@@ -283,6 +283,122 @@ test('parseAIResponse softens harsh ranking language for recovery runs', () => {
   assert.match(result.suggestions[0], /稳态有氧跑再校准能力模型/);
 });
 
+test('parseAIResponse removes target-pace wording and BMI nutrition prescriptions for short recovery runs', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '本次恢复跑配速落在目标区间，后半段略慢于目标。',
+      intensity: 'easy',
+      recoveryHours: 12,
+      suggestions: [
+        '第3-5公里略慢于目标，但心率很低，属于主动放松。',
+        'BMI 21.0配合180cm身高提示长跑经济性良好，建议补充碳水1.0-1.2g/kg体重（约68-82g），香蕉或燕麦优先。',
+      ],
+    }),
+    makeActivity({ distance: 6740, moving_time: 2396 }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'recovery', workoutTypeConfidence: 'low', paceZone: 'E' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(result.summary, /目标区间|慢于目标/);
+  assert.match(result.summary, /低强度范围|更偏放松/);
+  assert.equal(result.suggestions.length, 1);
+  assert.doesNotMatch(result.suggestions[0], /目标/);
+  assert.doesNotMatch(result.suggestions.join(' '), /BMI|碳水|g\/kg|香蕉|燕麦/);
+});
+
+test('parseAIResponse softens overconfident hydration speculation on short runs', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '闷热环境下建议提前30分钟补充300ml电解质水，观察第6公里心率骤降是否与脱水后身体自我保护有关。',
+      intensity: 'moderate',
+      recoveryHours: 24,
+      suggestions: [
+        '闷热环境下建议提前30分钟补充300ml电解质水，观察第6公里心率骤降是否与脱水后身体自我保护有关。',
+      ],
+    }),
+    makeActivity({
+      distance: 6740,
+      moving_time: 2040,
+      average_temp: 25,
+      description: 'Humidity 77%',
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'progression', paceZone: 'E' }),
+    'zh'
+  );
+
+  const joined = [result.summary, ...result.suggestions].join(' ');
+  assert.doesNotMatch(joined, /脱水|身体自我保护|300ml|电解质水/);
+  assert.match(joined, /适量补水/);
+  assert.match(joined, /主动冷身|心率设备读数|体感变化/);
+});
+
+test('parseAIResponse keeps muggy long-run hydration advice qualitative', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '18°C高湿环境下85%湿度会轻微抑制散热。',
+      intensity: 'moderate',
+      recoveryHours: 36,
+      suggestions: [
+        '未来类似天气的长距离建议携带150-200ml运动饮料，每30分钟少量补液即可，即使体感不渴，提前预防隐性脱水导致的后程心率漂移。',
+      ],
+    }),
+    makeActivity({
+      distance: 21280,
+      moving_time: 7052,
+      average_temp: 18,
+      description: 'Humidity 85%',
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'long-run', paceZone: 'E' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(result.suggestions.join(' '), /150-200ml|每30分钟|即使体感不渴|隐性脱水/);
+  assert.match(result.suggestions[0], /携带少量饮水或运动饮料|按体感少量补液/);
+});
+
+test('parseAIResponse avoids turning ordinary long runs into M-pace workouts', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '这是一次稳定长距离。',
+      intensity: 'moderate',
+      recoveryHours: 36,
+      suggestions: [
+        '若体感轻松可尝试最后2公里渐进加速至M区（约5\'00"-5\'10"/km），模拟比赛后程发力模式。',
+        '心率全程Z1但配速已达近期同类最快，可考虑在下周长距离中尝试穿插2-3组1km@M区（5\'00"/km），组间2km恢复。',
+      ],
+    }),
+    makeActivity({ distance: 18010, moving_time: 6042 }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'long-run', paceZone: 'E' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(result.suggestions.join(' '), /加速至M区|1km@M区/);
+  assert.match(result.suggestions.join(' '), /普通长距离仍优先保持E区稳定|质量长距离/);
+});
+
+test('parseAIResponse changes target-pace wording to reference pace without explicit workout target', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '夏季渐进跑可将目标配速整体下调5-10秒/km，目标区间不要卡太死。',
+      intensity: 'moderate',
+      recoveryHours: 24,
+      suggestions: ['夏季渐进跑可将目标配速整体下调5-10秒/km。'],
+    }),
+    makeActivity({ distance: 6740, moving_time: 2040 }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'progression', paceZone: 'E' }),
+    'zh'
+  );
+
+  const joined = [result.summary, ...result.suggestions].join(' ');
+  assert.doesNotMatch(joined, /目标配速|目标区间/);
+  assert.match(joined, /参考配速|训练区间/);
+});
+
 test('parseAIResponse forces race intensity and default race recovery', () => {
   const result = parseAIResponse(
     JSON.stringify({ summary: 'Race day', intensity: 'easy' }),

@@ -295,11 +295,14 @@ function getWorkoutSpecificGuidance(
       lines.push('For progression runs, evaluate the pace build: patient opening, smooth acceleration, and whether the final third stayed controlled.');
     } else if (type === 'long-run') {
       lines.push('For long runs, prioritize durability, fueling, hydration, stable effort, and recovery cost over raw speed.');
+      lines.push('Do not infer dehydration or physiological self-protection from heart-rate changes alone. Mention hydration as a possibility only when duration, heat, humidity, or subjective evidence supports it.');
+      lines.push('Do not turn an ordinary long run into an M-pace workout. Mention marathon-pace inserts only if the data clearly shows this was already a quality long run or the next-session context explicitly calls for it.');
     } else if (type === 'easy' || type === 'recovery') {
       lines.push('For easy/recovery runs, success means low stress and relaxed aerobic work. Do not ask the athlete to run faster unless the workout intent was misclassified.');
       lines.push('If HR seems high for an easy run, consider heat, fatigue, sleep, illness, and accumulated load before calling it poor execution.');
       lines.push('A slower-than-average percentile is not a problem by itself for easy/recovery runs. Judge success by low strain and intent match first.');
       lines.push('If the ability model seems off, suggest validating it with a separate steady aerobic run or updated PB/profile data, not by speeding up the current recovery run.');
+      lines.push('Do not describe easy/recovery pace as a "target pace" unless the athlete explicitly set a workout target. Use "low-intensity range", "recovery intent", or "relaxed aerobic range" instead.');
     } else if (type === 'hill') {
       lines.push('For hill workouts, pace is terrain-limited. Focus on climb effort, form, power, recovery, and downhill control.');
     } else if (type === 'treadmill') {
@@ -318,11 +321,14 @@ function getWorkoutSpecificGuidance(
       lines.push('如果是渐进跑，重点评估配速构建：前段是否克制、中段是否平顺加速、最后三分之一是否仍可控。');
     } else if (type === 'long-run') {
       lines.push('如果是长距离，优先评估耐受力、补给补水、努力程度稳定性和恢复成本，不要只看绝对速度。');
+      lines.push('不要仅凭心率变化推断脱水或“身体自我保护”。只有时长、温度、湿度或主观证据支持时，才把补水作为可能因素提出。');
+      lines.push('不要把普通长距离自动改造成 M 配速质量课。只有数据明确显示这本来就是质量长距离，或下次训练上下文明示需要时，才提马配穿插。');
     } else if (type === 'easy' || type === 'recovery') {
       lines.push('如果是轻松跑/恢复跑，成功标准是低压力和放松的有氧刺激。除非训练意图识别明显错误，否则不要建议跑更快。');
       lines.push('如果轻松跑心率偏高，先考虑高温、疲劳、睡眠、疾病或累计负荷，再判断是否执行不佳。');
       lines.push('对轻松跑/恢复跑来说，配速排名靠后本身不是问题，优先看负荷是否低、训练意图是否匹配。');
       lines.push('如果怀疑能力模型偏了，应建议用一次单独的稳态有氧跑或更新 PB/档案来校准，而不是要求这次恢复跑主动提速。');
+      lines.push('除非用户明确设置了训练目标，否则不要把轻松/恢复跑配速写成“目标配速”或“慢于目标”，应改用“低强度范围”“恢复意图”“放松有氧范围”。');
     } else if (type === 'hill') {
       lines.push('如果是坡跑，配速受地形限制。重点看爬坡努力程度、跑姿、力量输出、恢复和下坡控制。');
     } else if (type === 'treadmill') {
@@ -517,8 +523,8 @@ export function buildProfessionalPrompt(
         ? `\n- BMI: ${bmi}`
         : `\n- BMI: ${bmi}`;
       prompt += en
-        ? `\n- When analyzing, consider the athlete's body composition: a lower BMI may indicate better running economy for distance events, while a higher BMI suggests more muscle mass which can benefit power-based efforts. Tailor injury prevention and nutrition advice accordingly.`
-        : `\n- 分析时请结合运动员身体构成：较低BMI通常意味着更好的长跑经济性，较高BMI可能代表更多肌肉量有利于力量型训练。据此调整受伤预防和营养建议。`;
+        ? `\n- Use physique only as light context for load tolerance and injury risk. Do NOT derive BMI-based performance claims or gram-level nutrition prescriptions unless this is a long run, hard session, race, or there is explicit fueling evidence.`
+        : `\n- 身体数据只作为负荷耐受和伤病风险的轻量背景。除非这是长距离、高强度、比赛，或有明确补给问题证据，否则不要根据 BMI 推导表现结论，也不要给出精确到克数的营养处方。`;
     }
   }
 
@@ -758,6 +764,16 @@ export function buildProfessionalPrompt(
       ? `\n5. Next workout suggestion: CRITICAL RULE — If this workout intensity is "hard"/"extreme" OR pace zone is T/I/R, the next session MUST be an easy recovery run (E zone, 5-8km, 30-60s/km slower than marathon pace), with the goal of active recovery. NO intensity workouts (tempo, interval, or repetition) should be suggested after a hard session. Only if this was an easy/moderate aerobic run, you may suggest a specific quality session from the three-components perspective.`
       : `\n5. 下次训练建议: 关键规则 — 如果本次强度为"hard"/"extreme"或配速区间落在T/I/R，下次训练必须是轻松恢复跑（E区，5-8km，比马拉松配速慢30-60秒/km），目的是促进恢复。严禁在高强度训练后建议乳酸阈值跑、间歇跑或重复跑。只有本次是有氧轻松跑时，才可以从三要素角度建议具体质量课。`;
 
+    if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
+      prompt += en
+        ? `\n5a. Easy/recovery suggestions must stay focused on effort control, freshness checks, and readiness for the next session. Avoid target-pace chasing, BMI-based nutrition prescriptions, and gram-level carb/protein advice for short low-intensity runs.`
+        : `\n5a. 轻松/恢复跑的建议必须聚焦在强度控制、疲劳观察和下一次训练准备。短时间低强度训练不要追“目标配速”，不要根据 BMI 写营养处方，也不要给出精确到克数的碳水/蛋白建议。`;
+    }
+
+    prompt += en
+      ? `\n5b. Hydration/dehydration rule: do NOT diagnose dehydration or "body protection" from heart-rate changes alone. If the run is under 90 minutes or there is no clear heat-stress evidence, keep hydration advice qualitative instead of giving exact electrolyte/fluid volumes.`
+      : `\n5b. 补水/脱水规则：不要仅凭心率变化诊断脱水或“身体自我保护”。如果训练少于90分钟，或没有明确热应激证据，补水建议保持定性，不要给出精确电解质/饮水量。`;
+
     // Extra guidance for long runs (>= 15km)
     if (activity.distance >= 15000) {
       prompt += en
@@ -778,6 +794,12 @@ export function buildProfessionalPrompt(
       prompt += en
         ? `\n- In "suggestions", focus on: fueling/hydration for future long runs, pacing strategy refinements, and recovery needs. Do NOT suggest "increase speed" for a long run.`
         : `\n- "suggestions"中应聚焦：未来长距离的补给策略、配速策略优化、恢复需求。严禁对长距离训练建议"提升速度"。`;
+      prompt += en
+        ? `\n- Exact fluid/electrolyte amounts are optional, not mandatory. If weather is only muggy rather than heat-stress, phrase hydration as a practical check instead of a dehydration diagnosis.`
+        : `\n- 精确饮水/电解质量不是必须项。如果天气只是闷湿而非热应激，应把补水写成执行检查，而不是脱水诊断。`;
+      prompt += en
+        ? `\n- For ordinary long runs, do NOT recommend M-pace finishes or M-pace inserts as the default next step. If you mention them, explicitly frame them as a separate quality long run with recovery planned around it.`
+        : `\n- 对普通长距离，不要默认建议 M 配速结尾或 M 配速穿插。如果提到它，必须明确这是单独的质量长距离安排，并需要配套恢复。`;
     }
   }
 
@@ -853,6 +875,9 @@ export function buildProfessionalPrompt(
     ? `\n- Separate hard facts from inference. For example: lap structure, split pattern, weather, and heart-rate zones are facts; workout intent is an inference that should match the supplied classification confidence.`
     : `\n- 请区分数据事实与推断。圈结构、分段模式、天气、心率区间属于事实；训练意图属于推断，且应与上面提供的训练类型置信度保持一致。`;
   prompt += en
+    ? `\n- Unless the activity data explicitly contains a planned workout target, say "reference pace" or "estimated zone" instead of "target pace".`
+    : `\n- 除非活动数据明确包含计划训练目标，否则不要写“目标配速”，应写“参考配速”或“能力估算区间”。`;
+  prompt += en
     ? `\n- If confidence is low or evidence is missing, you MUST say so directly in the summary instead of writing overconfident prose.`
     : `\n- 如果识别置信度较低或关键证据缺失，必须在 summary 中直接说明，不要用很笃定的口吻掩盖不确定性。`;
   prompt += en
@@ -861,6 +886,11 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- In "suggestions", do NOT mechanically recommend "increase weekly volume to X km". Instead, focus on: (1) if weekly volume spiked, warn about injury risk and recommend rest; (2) if this was a hard session, recommend recovery; (3) give 1-2 specific, actionable technique or pacing tips relevant to THIS workout.`
     : `\n- "suggestions" 中不要机械建议"把周跑量提升到XXkm"。应聚焦：(1)如果本周跑量环比大增，提醒受伤风险并建议休息；(2)如果本次是高强度训练，建议恢复；(3)给出1-2条与本次训练直接相关的技术或配速建议。`;
+  if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
+    prompt += en
+      ? `\n- For easy/recovery runs, avoid "target pace" language. If pace is slower than recent runs, frame it as relaxed execution unless HR/load evidence says otherwise.`
+      : `\n- 对轻松/恢复跑，避免使用“目标配速”话术。如果配速比近期慢，除非心率或负荷证据显示异常，否则应表述为更放松的执行。`;
+  }
   prompt += en
     ? `\n- Each field must be substantive (at least 30 words for summary, at least 20 words for trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion). Empty or one-sentence responses are NOT acceptable.`
     : `\n- 每个字段必须有实质内容（summary 至少30字，trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion 至少20字）。空值或一句话敷衍 unacceptable。`;

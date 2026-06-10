@@ -8,7 +8,8 @@ import type { ActivityClassification, SimilarActivityStats } from '@/lib/trainin
 import type { StreamAnalysis } from '@/lib/streamAnalysis';
 import { getMergedPBsForAnalysis, getUserProfile } from '@/lib/userProfile';
 import { clearCachedAIAnalysis, getCachedAIAnalysis, setCachedAIAnalysis } from '@/lib/aiAnalysisCache';
-import { getAIAnalysisCacheKey } from '@/lib/aiAnalysisCacheKey';
+import { getAIAnalysisCacheKey, getLegacyAIAnalysisCacheKeys } from '@/lib/aiAnalysisCacheKey';
+import { normalizeAIAnalysisForDisplay } from '@/lib/aiResponseParser';
 import { useActivitiesStore } from '@/store/activities';
 
 interface AITrainingStats {
@@ -108,14 +109,29 @@ export function useAIAnalysis(
     [activities]
   );
   const cacheKey = useMemo(
-    () =>
-      getAIAnalysisCacheKey({
+    () => {
+      const cacheInput = {
         activity,
         streams,
         historyActivities: analysisHistoryActivities,
         locale: i18n.language,
         profile: getUserProfile(),
-      }),
+      };
+      return getAIAnalysisCacheKey(cacheInput);
+    },
+    [activity, streams, analysisHistoryActivities, i18n.language]
+  );
+  const legacyCacheKeys = useMemo(
+    () => {
+      const cacheInput = {
+        activity,
+        streams,
+        historyActivities: analysisHistoryActivities,
+        locale: i18n.language,
+        profile: getUserProfile(),
+      };
+      return getLegacyAIAnalysisCacheKeys(cacheInput);
+    },
     [activity, streams, analysisHistoryActivities, i18n.language]
   );
 
@@ -125,6 +141,28 @@ export function useAIAnalysis(
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const normalizeCachedPayload = useCallback((payload: CachedAIAnalysis): CachedAIAnalysis => {
+    if (!payload.analysis || !payload.classification) return payload;
+
+    return {
+      ...payload,
+      analysis: normalizeAIAnalysisForDisplay(
+        payload.analysis,
+        activity,
+        payload.classification,
+        i18n.language
+      ),
+    };
+  }, [activity, i18n.language]);
+
+  const applyAnalysisPayload = useCallback((payload: CachedAIAnalysis) => {
+    const normalizedPayload = normalizeCachedPayload(payload);
+    setAnalysis(normalizedPayload.analysis);
+    setStreamAnalysis(normalizedPayload.streamAnalysis);
+    setTrainingStats(normalizedPayload.trainingStats);
+    setClassification(normalizedPayload.classification);
+  }, [normalizeCachedPayload]);
 
   const refreshAnalysis = useCallback(async () => {
     setLoading(true);
@@ -155,10 +193,12 @@ export function useAIAnalysis(
       }
 
       const data = (await response.json()) as AIAnalyzeResponse;
-      setAnalysis(data.analysis);
-      setStreamAnalysis(data.streamAnalysis);
-      setTrainingStats(data.trainingProfile);
-      setClassification(data.classification);
+      applyAnalysisPayload({
+        analysis: data.analysis,
+        streamAnalysis: data.streamAnalysis,
+        trainingStats: data.trainingProfile,
+        classification: data.classification,
+      });
 
       await setCachedAIAnalysis(cacheKey, {
         analysis: data.analysis,
@@ -172,31 +212,30 @@ export function useAIAnalysis(
     } finally {
       setLoading(false);
     }
-  }, [activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t]);
+  }, [activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCachedAnalysis() {
-      const parsed = await getCachedAIAnalysis<CachedAIAnalysis>(cacheKey);
+      const keys = [cacheKey, ...legacyCacheKeys];
+      for (const key of keys) {
+        const parsed = await getCachedAIAnalysis<CachedAIAnalysis>(key);
 
-      if (cancelled) return;
+        if (cancelled) return;
+        if (!parsed) continue;
 
-      if (parsed) {
         const maxAge = parsed.isQuotaExceeded ? AI_ANALYSIS_QUOTA_TTL : AI_ANALYSIS_CACHE_TTL;
         const generatedAt = parsed.analysis?.generatedAt ?? 0;
         if (generatedAt && Date.now() - generatedAt < maxAge) {
-          setAnalysis(parsed.analysis);
-          setStreamAnalysis(parsed.streamAnalysis);
-          setTrainingStats(parsed.trainingStats);
-          setClassification(parsed.classification);
+          applyAnalysisPayload(parsed);
           if (parsed.isQuotaExceeded) {
             setError('AI 分析配额已用完，请稍后再试。已显示系统生成的基础分析。');
           }
           return;
         }
 
-        await clearCachedAIAnalysis(cacheKey);
+        await clearCachedAIAnalysis(key);
       }
 
       if (!cancelled) {
@@ -213,7 +252,7 @@ export function useAIAnalysis(
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, refreshAnalysis]);
+  }, [cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');
 

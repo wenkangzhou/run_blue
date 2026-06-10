@@ -351,13 +351,25 @@ function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary[
 
   if (intervalCycles >= 2) return 'interval';
 
-  const firstThird = paces.slice(0, Math.ceil(paces.length / 3));
-  const lastThird = paces.slice(Math.floor((paces.length * 2) / 3));
+  const progressionPaces =
+    paces.length >= 5 && paces[paces.length - 1] > avgPace * 1.08
+      ? paces.slice(0, -1)
+      : paces;
+  const firstThird = progressionPaces.slice(0, Math.ceil(progressionPaces.length / 3));
+  const lastThird = progressionPaces.slice(Math.floor((progressionPaces.length * 2) / 3));
   const firstAvg = average(firstThird);
   const lastAvg = average(lastThird);
   if (firstAvg > 0) {
     const trend = (lastAvg - firstAvg) / firstAvg;
-    if (Math.abs(trend) >= 0.06) return 'progression';
+    if (trend <= -0.06) return 'progression';
+  }
+
+  if (progressionPaces.length >= 5 && firstAvg > 0) {
+    const bestPace = Math.min(...progressionPaces);
+    const bestIndex = progressionPaces.indexOf(bestPace);
+    const lateEnough = bestIndex >= Math.floor(progressionPaces.length * 0.55);
+    const clearLateSurge = (firstAvg - bestPace) / firstAvg >= 0.08;
+    if (lateEnough && clearLateSurge) return 'progression';
   }
 
   const steadyCount = paces.filter((pace) => pace >= avgPace * 0.94 && pace <= avgPace * 1.06).length;
@@ -469,22 +481,6 @@ interface HeartRateAssessment {
   maxZone: 'z1' | 'z2' | 'z3' | 'z4' | 'z5' | 'unknown';
   average: number | null;
   max: number | null;
-}
-
-function getZoneKeyName(zone: PaceZoneLabel): string {
-  switch (zone) {
-    case 'E':
-      return 'easy';
-    case 'M':
-      return 'marathon';
-    case 'T':
-      return 'threshold';
-    case 'I':
-      return 'interval';
-    case 'R':
-      return 'repetition';
-  }
-  return 'easy';
 }
 
 function assessHeartRateForActivity(
