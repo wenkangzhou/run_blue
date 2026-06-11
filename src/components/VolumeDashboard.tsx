@@ -34,6 +34,7 @@ import {
   Route,
   Sparkles,
   Timer,
+  TrendingUp,
   Zap,
 } from 'lucide-react';
 import { formatDuration } from '@/lib/strava';
@@ -70,43 +71,43 @@ function getMetricTone(metric: MetricType) {
       text: 'text-blue-600 dark:text-blue-400',
       soft: 'bg-blue-50 dark:bg-blue-950/30',
       border: 'border-blue-200 dark:border-blue-900',
-      chart: { bar: '#3b82f6', barStroke: '#2563eb', currentBar: '#f97316', currentBarStroke: '#ea580c' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-blue-200 dark:bg-blue-900/40', 'bg-blue-400 dark:bg-blue-700', 'bg-blue-600 dark:bg-blue-500', 'bg-blue-800 dark:bg-blue-400'],
+      chart: { bar: '#3b82f6', barStroke: '#2563eb', currentBar: '#14b8a6', currentBarStroke: '#0f766e' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-sky-100 dark:bg-sky-950/50', 'bg-sky-300 dark:bg-sky-800', 'bg-blue-500 dark:bg-blue-600', 'bg-indigo-600 dark:bg-indigo-400'],
     },
     duration: {
       text: 'text-emerald-600 dark:text-emerald-400',
       soft: 'bg-emerald-50 dark:bg-emerald-950/30',
       border: 'border-emerald-200 dark:border-emerald-900',
-      chart: { bar: '#10b981', barStroke: '#059669', currentBar: '#f97316', currentBarStroke: '#ea580c' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-emerald-200 dark:bg-emerald-900/40', 'bg-emerald-400 dark:bg-emerald-700', 'bg-emerald-600 dark:bg-emerald-500', 'bg-emerald-800 dark:bg-emerald-400'],
+      chart: { bar: '#10b981', barStroke: '#059669', currentBar: '#3b82f6', currentBarStroke: '#1d4ed8' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-emerald-100 dark:bg-emerald-950/50', 'bg-emerald-300 dark:bg-emerald-800', 'bg-emerald-500 dark:bg-emerald-600', 'bg-teal-600 dark:bg-teal-400'],
     },
     count: {
       text: 'text-violet-600 dark:text-violet-400',
       soft: 'bg-violet-50 dark:bg-violet-950/30',
       border: 'border-violet-200 dark:border-violet-900',
-      chart: { bar: '#8b5cf6', barStroke: '#7c3aed', currentBar: '#f97316', currentBarStroke: '#ea580c' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-violet-200 dark:bg-violet-900/40', 'bg-violet-400 dark:bg-violet-700', 'bg-violet-600 dark:bg-violet-500', 'bg-violet-800 dark:bg-violet-400'],
+      chart: { bar: '#8b5cf6', barStroke: '#7c3aed', currentBar: '#14b8a6', currentBarStroke: '#0f766e' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-violet-100 dark:bg-violet-950/50', 'bg-violet-300 dark:bg-violet-800', 'bg-violet-500 dark:bg-violet-600', 'bg-fuchsia-600 dark:bg-fuchsia-400'],
     },
     calories: {
       text: 'text-rose-600 dark:text-rose-400',
       soft: 'bg-rose-50 dark:bg-rose-950/30',
       border: 'border-rose-200 dark:border-rose-900',
-      chart: { bar: '#f43f5e', barStroke: '#e11d48', currentBar: '#f97316', currentBarStroke: '#ea580c' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-rose-200 dark:bg-rose-900/40', 'bg-rose-400 dark:bg-rose-700', 'bg-rose-600 dark:bg-rose-500', 'bg-rose-800 dark:bg-rose-400'],
+      chart: { bar: '#f43f5e', barStroke: '#e11d48', currentBar: '#f59e0b', currentBarStroke: '#d97706' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-rose-100 dark:bg-rose-950/50', 'bg-rose-300 dark:bg-rose-800', 'bg-rose-500 dark:bg-rose-600', 'bg-orange-600 dark:bg-orange-400'],
     },
     elevation: {
       text: 'text-amber-600 dark:text-amber-400',
       soft: 'bg-amber-50 dark:bg-amber-950/30',
       border: 'border-amber-200 dark:border-amber-900',
-      chart: { bar: '#f59e0b', barStroke: '#d97706', currentBar: '#2563eb', currentBarStroke: '#1d4ed8' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-amber-200 dark:bg-amber-900/40', 'bg-amber-400 dark:bg-amber-700', 'bg-amber-600 dark:bg-amber-500', 'bg-amber-800 dark:bg-amber-400'],
+      chart: { bar: '#f59e0b', barStroke: '#d97706', currentBar: '#3b82f6', currentBarStroke: '#1d4ed8' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-amber-100 dark:bg-amber-950/50', 'bg-amber-300 dark:bg-amber-800', 'bg-amber-500 dark:bg-amber-600', 'bg-orange-600 dark:bg-orange-400'],
     },
     pace: {
       text: 'text-cyan-600 dark:text-cyan-400',
       soft: 'bg-cyan-50 dark:bg-cyan-950/30',
       border: 'border-cyan-200 dark:border-cyan-900',
-      chart: { bar: '#06b6d4', barStroke: '#0891b2', currentBar: '#f97316', currentBarStroke: '#ea580c' },
-      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-cyan-200 dark:bg-cyan-900/40', 'bg-cyan-400 dark:bg-cyan-700', 'bg-cyan-600 dark:bg-cyan-500', 'bg-cyan-800 dark:bg-cyan-400'],
+      chart: { bar: '#06b6d4', barStroke: '#0891b2', currentBar: '#8b5cf6', currentBarStroke: '#7c3aed' },
+      calendar: ['bg-zinc-100 dark:bg-zinc-800', 'bg-cyan-100 dark:bg-cyan-950/50', 'bg-cyan-300 dark:bg-cyan-800', 'bg-teal-500 dark:bg-teal-600', 'bg-emerald-600 dark:bg-emerald-400'],
     },
   };
 
@@ -184,6 +185,13 @@ function formatActivityPace(activity: StravaActivity) {
   );
 }
 
+function formatMetricWithUnit(value: number, metric: MetricType) {
+  const formatted = formatMetricValue(value, metric);
+  const unit = getMetricUnit(metric);
+  if (!unit) return formatted;
+  return metric === 'pace' ? `${formatted}${unit}` : `${formatted} ${unit}`;
+}
+
 function getFastestActivity(activities: StravaActivity[]) {
   const valid = activities.filter((activity) => activity.distance > 0 && activity.moving_time > 0);
   if (valid.length === 0) return null;
@@ -213,6 +221,68 @@ function getActivitiesBetween(activities: StravaActivity[], start: Date, end: Da
     const time = getActivityTimestamp(activity);
     return time >= startTime && time < endTime;
   });
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getConsecutiveDayCount(dateKeys: string[], endKey: string) {
+  const dateSet = new Set(dateKeys);
+  let count = 0;
+  const cursor = parseDateKey(endKey);
+
+  while (dateSet.has(formatLocalDateKey(cursor))) {
+    count += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return count;
+}
+
+function getYearProjection(year: number, totalDistance: number) {
+  const now = new Date();
+  if (year < now.getFullYear()) return totalDistance;
+  if (year > now.getFullYear() || totalDistance <= 0) return 0;
+
+  const start = new Date(year, 0, 1);
+  const end = new Date(year + 1, 0, 1);
+  const elapsedMs = Math.max(1, now.getTime() - start.getTime());
+  const totalMs = end.getTime() - start.getTime();
+  return totalDistance / Math.min(1, elapsedMs / totalMs);
+}
+
+function getTrainingRhythm(activities: StravaActivity[], year: number, locale: string) {
+  const weekdayLabels = locale.startsWith('zh')
+    ? ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dateKeys = Array.from(new Set(activities.map((activity) => formatLocalDateKey(getActivityDate(activity))))).sort();
+  const weekdayCounts = Array(7).fill(0) as number[];
+
+  activities.forEach((activity) => {
+    weekdayCounts[getActivityDate(activity).getDay()] += 1;
+  });
+
+  const bestWeekdayIndex = weekdayCounts.reduce(
+    (bestIndex, count, index) => count > weekdayCounts[bestIndex] ? index : bestIndex,
+    0
+  );
+  const longestStreak = dateKeys.reduce((best, key) => Math.max(best, getConsecutiveDayCount(dateKeys, key)), 0);
+  const latestKey = dateKeys[dateKeys.length - 1];
+  const currentStreak = latestKey ? getConsecutiveDayCount(dateKeys, latestKey) : 0;
+  const projectedYearDistance = getYearProjection(
+    year,
+    activities.reduce((sum, activity) => sum + activity.distance, 0)
+  );
+
+  return {
+    longestStreak,
+    currentStreak,
+    bestWeekday: weekdayLabels[bestWeekdayIndex],
+    bestWeekdayCount: weekdayCounts[bestWeekdayIndex],
+    projectedYearDistance,
+  };
 }
 
 function getYearTimeline(year: number) {
@@ -269,9 +339,9 @@ function SummaryTile({
   };
 
   return (
-    <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-3">
+    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-3 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
       <div className="flex items-start gap-2">
-        <div className={`shrink-0 p-1.5 ${toneClasses[tone]}`}>
+        <div className={`shrink-0 rounded-md p-1.5 ${toneClasses[tone]}`}>
           <Icon size={16} />
         </div>
         <div className="min-w-0">
@@ -294,10 +364,10 @@ function SummaryTile({
 
 function SectionHeader({ icon: Icon, title, action }: { icon: LucideIcon; title: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 mb-3">
+    <div className="mb-3 flex items-center justify-between gap-3">
       <div className="flex items-center gap-2 min-w-0">
         <Icon size={15} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
-        <h2 className="font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">
+        <h2 className="font-mono text-sm font-bold text-zinc-800 truncate dark:text-zinc-100">
           {title}
         </h2>
       </div>
@@ -308,7 +378,7 @@ function SectionHeader({ icon: Icon, title, action }: { icon: LucideIcon; title:
 
 function StatLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-zinc-200 dark:border-zinc-800 py-2 first:border-t-0 first:pt-0 last:pb-0">
+    <div className="flex items-center justify-between gap-3 border-t border-zinc-100 py-2 first:border-t-0 first:pt-0 last:pb-0 dark:border-zinc-800">
       <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
       <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100 text-right">{value}</span>
     </div>
@@ -334,7 +404,7 @@ function PeriodInspector({
 
   if (!period || !summary) {
     return (
-      <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+      <div className="rounded-lg border border-dashed border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
           {t('stats.selectPeriodHint', '选择一个有训练记录的周期查看细节')}
         </p>
@@ -350,8 +420,8 @@ function PeriodInspector({
   );
 
   return (
-    <aside className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-      <div className="p-4 border-b-2 border-zinc-200 dark:border-zinc-800">
+    <aside className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+      <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
         <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-1">
           {t('stats.selectedPeriod', '选中周期')}
         </p>
@@ -364,14 +434,14 @@ function PeriodInspector({
               {metricLabel}: <span className="font-bold text-zinc-900 dark:text-zinc-100">{metricValue}</span>
             </p>
           </div>
-          <span className="shrink-0 border border-zinc-200 dark:border-zinc-800 px-2 py-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+          <span className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
             {summary.activityCount}{t('stats.runs')}
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 border-b-2 border-zinc-200 dark:border-zinc-800">
-        <div className="p-3 border-r-2 border-zinc-200 dark:border-zinc-800">
+      <div className="grid grid-cols-2 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="border-r border-zinc-100 p-3 dark:border-zinc-800">
           <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalDistance')}</p>
           <p className="font-mono text-base font-bold">{formatCompactDistance(summary.totalDistance)}</p>
         </div>
@@ -379,17 +449,17 @@ function PeriodInspector({
           <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.avgPace')}</p>
           <p className="font-mono text-base font-bold">{formatPaceFromSeconds(summary.avgPace)}/km</p>
         </div>
-        <div className="p-3 border-t-2 border-r-2 border-zinc-200 dark:border-zinc-800">
+        <div className="border-r border-t border-zinc-100 p-3 dark:border-zinc-800">
           <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalTime')}</p>
           <p className="font-mono text-base font-bold">{formatDuration(summary.totalDuration)}</p>
         </div>
-        <div className="p-3 border-t-2 border-zinc-200 dark:border-zinc-800">
+        <div className="border-t border-zinc-100 p-3 dark:border-zinc-800">
           <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.totalElevation')}</p>
           <p className="font-mono text-base font-bold">{Math.round(summary.totalElevation)} m</p>
         </div>
       </div>
 
-      <div className="p-4 border-b-2 border-zinc-200 dark:border-zinc-800">
+      <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
         <StatLine label={t('stats.longestInPeriod', '本周期最长')} value={longestActivity ? `${formatActivityDistance(longestActivity.distance)} · ${longestActivity.name}` : '--'} />
         <StatLine label={t('stats.fastestInPeriod', '本周期最快')} value={fastestActivity ? `${formatActivityPace(fastestActivity)}/km · ${fastestActivity.name}` : '--'} />
         <StatLine label={t('stats.climbInPeriod', '最高爬升')} value={highestClimbActivity ? `${Math.round(highestClimbActivity.total_elevation_gain)} m · ${highestClimbActivity.name}` : '--'} />
@@ -405,7 +475,7 @@ function PeriodInspector({
               <Link
                 key={activity.id}
                 href={`/activities/${activity.id}`}
-                className="grid grid-cols-[42px_1fr_14px] items-center gap-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
+                className="grid grid-cols-[42px_1fr_14px] items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
               >
                 <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
                   {formatActivityDate(activity, locale)}
@@ -492,6 +562,10 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     [yearRuns]
   );
   const trainingMix = useMemo(() => getTrainingMix(yearRuns, t), [yearRuns, t]);
+  const trainingRhythm = useMemo(
+    () => getTrainingRhythm(yearRuns, selectedYear, locale),
+    [yearRuns, selectedYear, locale]
+  );
 
   const bestPeriod = useMemo(() => getBestPeriod(chartData, metric), [chartData, metric]);
   const trend = useMemo(() => getRecentTrend(chartData, metric), [chartData, metric]);
@@ -527,10 +601,16 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     : yearTimeline.state === 'future'
       ? t('stats.yearNotStarted', '未开始')
       : t('stats.yearRemaining', '还剩 {{percent}}%', { percent: yearTimeline.remainingPercent });
+  const yearProjectionLabel = yearTimeline.state === 'current'
+    ? t('stats.projectedYearEnd', '年终预估')
+    : t('stats.yearTotal', '全年完成');
   const last30DistanceDelta = last30Summary.totalDistance - previous30Summary.totalDistance;
   const last30DistanceDeltaText = previous30Summary.totalDistance > 0
     ? `${last30DistanceDelta >= 0 ? '+' : '-'}${formatCompactDistance(Math.abs(last30DistanceDelta))}`
     : t('stats.newBaseline', '新基线');
+  const last30DeltaLabel = previous30Summary.totalDistance > 0
+    ? t('stats.vsPrevious30Days', '较前 30 天 {{value}}', { value: last30DistanceDeltaText })
+    : last30DistanceDeltaText;
 
   useEffect(() => {
     setSelectedPeriodKey((prev) => {
@@ -573,13 +653,12 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     return t(keys[m]);
   };
 
-  const metricUnitLabel = getMetricUnit(metric);
   const bestPeriodValue = bestPeriod
-    ? `${formatMetricValue(bestPeriod.value, metric)} ${metricUnitLabel}`.trim()
+    ? formatMetricWithUnit(bestPeriod.value, metric)
     : '--';
   const selectedMetricLabel = metricLabel(metric);
   const selectedMetricValue = selectedPeriod
-    ? `${formatMetricValue(selectedPeriod.value, metric)} ${metricUnitLabel}`.trim()
+    ? formatMetricWithUnit(selectedPeriod.value, metric)
     : '--';
   const trendText = trend
     ? trend.isCurrentPeriod
@@ -599,7 +678,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         type="button"
         onClick={handlePrevYear}
         disabled={currentYearIndex <= 0}
-        className="p-2 border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+        className="rounded-md border border-zinc-200 bg-white p-2 transition-colors hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
         title={t('common.previous', '上一项')}
       >
         <ChevronLeft size={16} />
@@ -611,7 +690,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         type="button"
         onClick={handleNextYear}
         disabled={currentYearIndex >= availableYears.length - 1}
-        className="p-2 border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+        className="rounded-md border border-zinc-200 bg-white p-2 transition-colors hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
         title={t('common.next', '下一项')}
       >
         <ChevronRight size={16} />
@@ -621,38 +700,38 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
 
   return (
     <div className="space-y-5">
-      <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="p-4 sm:p-5 lg:p-6 border-b-2 lg:border-b-0 lg:border-r-2 border-zinc-200 dark:border-zinc-800">
+          <div className="border-b border-zinc-100 p-4 sm:p-5 lg:border-b-0 lg:border-r lg:p-6 dark:border-zinc-800">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div className="min-w-0">
-                <p className="font-mono text-[11px] uppercase text-orange-600 dark:text-orange-400 mb-2">
-                  {t('stats.trainingDashboard', '训练统计工作台')}
+                <p className="mb-2 font-mono text-[11px] uppercase text-blue-600 dark:text-blue-400">
+                  {t('stats.trainingDashboard', '训练统计')}
                 </p>
-                <h2 className="font-pixel text-4xl sm:text-5xl leading-none text-zinc-950 dark:text-zinc-50">
+                <h2 className="font-mono text-4xl font-bold leading-none text-zinc-950 sm:text-5xl dark:text-zinc-50">
                   {formatCompactDistance(yearSummary.totalDistance)}
                 </h2>
                 <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-2">
                   {selectedYear}{t('stats.year', '年')} · {yearSummary.activityCount}{t('stats.runs')} · {formatPaceFromSeconds(yearSummary.avgPace)}/km
                 </p>
               </div>
-              <div className="hidden sm:flex size-12 items-center justify-center border-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-                <Sparkles size={20} className="text-orange-600 dark:text-orange-400" />
+              <div className="hidden size-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 sm:flex dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900">
+                <Sparkles size={20} />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 border-y-2 border-zinc-200 dark:border-zinc-800">
-              <div className="py-3 pr-2 border-r-2 border-zinc-200 dark:border-zinc-800">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.last7Days', '近 7 天')}</p>
                 <p className="font-mono text-lg font-bold">{formatCompactDistance(last7Summary.totalDistance)}</p>
                 <p className="font-mono text-[10px] text-zinc-400">{last7Summary.activityCount}{t('stats.runs')}</p>
               </div>
-              <div className="py-3 px-2 border-r-2 border-zinc-200 dark:border-zinc-800">
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.activeDays', '活跃天数')}</p>
                 <p className="font-mono text-lg font-bold">{activeDays}</p>
                 <p className="font-mono text-[10px] text-zinc-400">{yearRemainingText}</p>
               </div>
-              <div className="py-3 pl-2">
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.avgRunDistance', '单次均距')}</p>
                 <p className="font-mono text-lg font-bold">
                   {yearSummary.activityCount > 0 ? formatCompactDistance(yearSummary.totalDistance / yearSummary.activityCount) : '--'}
@@ -664,27 +743,27 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
             <div className="mt-5">
               <div className="flex items-center justify-between mb-2">
                 <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
-                  {t('stats.yearElapsed', '今年已过')}
+                  {t('stats.yearElapsed', '年内时间')}
                 </p>
                 <p className="font-mono text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
                   {yearTimeline.elapsedPercent}% · {yearRemainingText}
                 </p>
               </div>
-              <div className="h-2 bg-zinc-100 dark:bg-zinc-800">
-                <div className="h-full bg-zinc-950 dark:bg-zinc-100" style={{ width: `${yearTimeline.elapsedPercent}%` }} />
+              <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <div className="h-full rounded-full bg-blue-600 dark:bg-blue-400" style={{ width: `${yearTimeline.elapsedPercent}%` }} />
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-50 dark:bg-zinc-950">
+          <div className="bg-zinc-50/70 dark:bg-zinc-950/50">
             <div className="grid grid-cols-2 lg:grid-cols-1">
-              <div className="p-4 sm:p-5 border-r-2 lg:border-r-0 lg:border-b-2 border-zinc-200 dark:border-zinc-800">
+              <div className="border-r border-zinc-100 p-4 sm:p-5 lg:border-b lg:border-r-0 dark:border-zinc-800">
                 <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-1">
                   {t('stats.last30Days', '近 30 天')}
                 </p>
                 <p className="font-mono text-2xl font-bold text-zinc-950 dark:text-zinc-50">{formatCompactDistance(last30Summary.totalDistance)}</p>
                 <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {last30Summary.activityCount}{t('stats.runs')} · {last30DistanceDeltaText}
+                  {last30Summary.activityCount}{t('stats.runs')} · {last30DeltaLabel}
                 </p>
               </div>
               <div className="p-4 sm:p-5">
@@ -701,11 +780,11 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
             </div>
             <div className="px-4 pb-4 sm:px-5 sm:pb-5">
               <div className="grid grid-cols-2 gap-2">
-                <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+                <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
                   <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.longestRun')}</p>
                   <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50 truncate">{longestYearActivity ? formatActivityDistance(longestYearActivity.distance) : '--'}</p>
                 </div>
-                <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+                <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
                   <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.fastestPace')}</p>
                   <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50 truncate">{fastestYearActivity ? `${formatActivityPace(fastestYearActivity)}/km` : '--'}</p>
                 </div>
@@ -715,18 +794,18 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         </div>
       </section>
 
-      <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 sm:p-4">
+      <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 sm:p-4 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800">
+          <div className="grid grid-cols-4 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-950">
             {PERIOD_TYPES.map((type) => (
               <button
                 key={type}
                 type="button"
                 onClick={() => setPeriodType(type)}
                 aria-pressed={periodType === type}
-                className={`px-2 py-1.5 text-xs font-mono transition-colors ${
+                className={`rounded-md px-2 py-1.5 text-xs font-mono transition-colors ${
                   periodType === type
-                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-200 dark:bg-blue-400 dark:text-zinc-950 dark:shadow-none'
                     : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                 }`}
               >
@@ -747,7 +826,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
                   onClick={() => setMetric(value)}
                   aria-pressed={metric === value}
                   className={[
-                    'inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 border-2 font-mono text-[11px] transition-colors',
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-[11px] transition-colors',
                     metric === value
                       ? `${itemTone.soft} ${itemTone.border} ${itemTone.text}`
                       : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
@@ -762,8 +841,8 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_350px] gap-5">
-        <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]">
+        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
           <SectionHeader
             icon={BarChart3}
             title={t('stats.periodTrend', '周期趋势')}
@@ -792,7 +871,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
             locale={locale}
           />
 
-          <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+          <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <SectionHeader icon={Gauge} title={t('stats.trainingMix', '训练结构')} />
             <div className="space-y-3">
               {trainingMix.map((item) => (
@@ -801,29 +880,59 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
                     <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{item.label}</span>
                     <span className="font-mono text-[11px] font-bold">{item.count}{t('stats.runs')} · {item.percent}%</span>
                   </div>
-                  <div className="h-2 bg-zinc-100 dark:bg-zinc-800">
-                    <div className={`h-full ${item.color}`} style={{ width: `${item.percent}%` }} />
+                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                    <div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.percent}%` }} />
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className="border border-zinc-200 dark:border-zinc-800 p-2">
+              <div className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
                 <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.bestPeriod', '最佳周期')}</p>
                 <p className="font-mono text-sm font-bold truncate">{bestPeriod?.label || '--'}</p>
                 <p className={`font-mono text-[10px] ${tone.text}`}>{bestPeriodValue}</p>
               </div>
-              <div className="border border-zinc-200 dark:border-zinc-800 p-2">
+              <div className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
                 <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.activePeriods', '活跃周期')}</p>
                 <p className="font-mono text-sm font-bold">{activePeriods}</p>
                 <p className="font-mono text-[10px] text-zinc-400">{t('stats.periodsCount', '共 {{count}} 个周期', { count: chartData.length })}</p>
               </div>
             </div>
           </section>
+
+          <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+            <SectionHeader
+              icon={TrendingUp}
+              title={t('stats.trainingRhythm', '训练节奏')}
+              action={(
+                <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {selectedYear}{t('stats.year', '年')}
+                </span>
+              )}
+            />
+            <StatLine
+              label={t('stats.longestStreak', '最长连续')}
+              value={trainingRhythm.longestStreak > 0 ? `${trainingRhythm.longestStreak}${t('stats.daysUnit', '天')}` : '--'}
+            />
+            <StatLine
+              label={t('stats.currentStreak', '最近连续')}
+              value={trainingRhythm.currentStreak > 0 ? `${trainingRhythm.currentStreak}${t('stats.daysUnit', '天')}` : '--'}
+            />
+            <StatLine
+              label={t('stats.favoriteWeekday', '最常跑日')}
+              value={trainingRhythm.bestWeekdayCount > 0
+                ? `${trainingRhythm.bestWeekday} · ${trainingRhythm.bestWeekdayCount}${t('stats.runs')}`
+                : '--'}
+            />
+            <StatLine
+              label={yearProjectionLabel}
+              value={trainingRhythm.projectedYearDistance > 0 ? formatCompactDistance(trainingRhythm.projectedYearDistance) : '--'}
+            />
+          </section>
         </div>
       </div>
 
-      <section className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <SectionHeader
           icon={CalendarDays}
           title={t('stats.trainingCalendar', '训练日历')}
@@ -832,8 +941,16 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         <ActivityCalendarHeatmap activities={activities} year={selectedYear} metric={metric} colorClasses={tone.calendar} />
       </section>
 
-      <section>
-        <SectionHeader icon={CalendarCheck} title={t('stats.keyMetrics', '关键指标')} />
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+        <SectionHeader
+          icon={CalendarCheck}
+          title={t('stats.keyMetrics', '关键指标')}
+          action={(
+            <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+              {periodLabel(periodType)} · {metricLabel(metric)}
+            </span>
+          )}
+        />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <SummaryTile
             title={t('stats.totalDistance')}

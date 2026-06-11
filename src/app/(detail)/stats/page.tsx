@@ -79,41 +79,41 @@ export default function StatsPage() {
   })();
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-5xl flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+      <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/85">
+        <div className="container mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/activities"
-            className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
           </Link>
-          <h1 className="font-pixel text-base font-bold">{t('nav.stats', '统计')}</h1>
+          <h1 className="font-mono text-base font-bold">{t('nav.stats', '统计')}</h1>
           <div className="w-16" />
         </div>
       </div>
 
-      <main className="container mx-auto px-3 py-5 md:py-7 max-w-5xl">
+      <main className="container mx-auto max-w-6xl px-3 py-5 md:py-7">
         <div className="mb-5 md:mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="font-mono text-xs uppercase text-orange-600 dark:text-orange-400 mb-2">
+            <p className="mb-2 font-mono text-xs uppercase text-blue-600 dark:text-blue-400">
               {t('stats.pageKicker', '训练数据')}
             </p>
-            <h2 className="font-pixel text-2xl md:text-3xl font-bold tracking-normal">
-              {t('stats.pageTitle', '跑量、节奏与习惯')}
+            <h2 className="font-mono text-2xl font-bold tracking-normal md:text-3xl">
+              {t('stats.pageTitle', '训练趋势总览')}
             </h2>
             <p className="font-mono text-sm text-zinc-500 dark:text-zinc-400 mt-2 max-w-xl">
-              {t('stats.volumeComparisonDesc', '追踪你的跑步数据，按时间维度对比分析')}
+              {t('stats.volumeComparisonDesc', '把年度跑量、近期变化、周期趋势和训练日历放在一个页面里看。')}
             </p>
           </div>
-          <div className="hidden sm:flex size-11 border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 items-center justify-center">
+          <div className="hidden size-11 items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 sm:flex dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <BarChart3 size={20} className="text-zinc-600 dark:text-zinc-300" />
           </div>
         </div>
 
         {syncErrorText && activities.length > 0 && (
-          <div className="mb-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-3 rounded">
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-3 dark:border-red-800 dark:bg-red-900/20">
             <p className="font-mono text-xs text-red-600 dark:text-red-400">
               {syncErrorText}
             </p>
@@ -121,9 +121,9 @@ export default function StatsPage() {
         )}
 
         {isLoading && activities.length === 0 ? (
-          <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 min-h-[360px] flex items-center justify-center">
+          <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <div className="text-center px-6">
-              <div className="mx-auto mb-4 size-12 border-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
+              <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
                 <Loader2 className="animate-spin text-orange-600" size={22} />
               </div>
               <p className="font-mono text-base font-bold">{progressText}</p>
@@ -133,9 +133,9 @@ export default function StatsPage() {
             </div>
           </div>
         ) : activities.length === 0 ? (
-          <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 min-h-[360px] flex items-center justify-center">
+          <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <div className="text-center px-6 max-w-sm">
-              <div className="mx-auto mb-4 size-12 border-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
+              <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
                 <Route size={22} className="text-zinc-500" />
               </div>
               <p className="font-mono text-base font-bold">{t('stats.emptyTitle', '还没有可统计的跑步')}</p>

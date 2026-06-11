@@ -127,12 +127,22 @@ function normalizeHydrationText(text: string, activity: StravaActivity, locale: 
   return normalized;
 }
 
-function normalizeWorkoutSpecificSuggestion(
+function normalizeWorkoutSpecificText(
   text: string,
   classification: ActivityClassification,
   locale: string
 ): string {
   if (!text || locale.startsWith('en')) return text;
+  if (classification.workoutType === 'interval' || classification.workoutType === 'fartlek') {
+    return text
+      .replace(/全程平均配速(?:偏慢|太慢|不达标|慢于[^，。；]*)/g, '全程平均配速仅作参考')
+      .replace(/平均配速(?:偏慢|太慢|不达标|慢于[^，。；]*)/g, '平均配速仅作参考')
+      .replace(/平均配速是否慢于目标/g, '快段是否稳定')
+      .replace(/恢复(?:圈|段)(?:太慢|偏慢|过慢|拖累[^，。；]*)/g, '恢复段慢是设计的一部分')
+      .replace(/(?:提高|加快|提升)恢复(?:圈|段)配速/g, '保证恢复段能让下一组快段质量稳定')
+      .replace(/恢复(?:圈|段)(?:也要|需要|应当)?跑快/g, '恢复段以恢复质量为先');
+  }
+
   if (classification.workoutType !== 'long-run') return text;
 
   return text
@@ -144,6 +154,19 @@ function normalizeWorkoutSpecificSuggestion(
       /可考虑在下周长距离中尝试穿插[^。；]*M区[^。；]*/g,
       '下周长距离默认仍以E区稳定为主；若要加入M区穿插，应把它明确安排为质量长距离并保证恢复'
     );
+}
+
+function normalizeMissingDataText(text: string, activity: StravaActivity, locale: string): string {
+  if (!text || locale.startsWith('en')) return text;
+
+  const hasHeartRate = Boolean(activity.has_heartrate && activity.average_heartrate);
+  if (hasHeartRate) return text;
+
+  return text
+    .replace(/心率控制(?:稳定|精准|良好|优秀|到位)/g, '缺少心率数据，强度判断需参考体感')
+    .replace(/(?:没有|未出现|无)明显?心率漂移/g, '缺少心率数据，暂不判断漂移')
+    .replace(/心率漂移[^，。；]*/g, '缺少心率数据，暂不判断漂移')
+    .replace(/心率(?:上升|下降|回落|攀升|骤降|维持|落在|处于)[^，。；]*/g, '心率数据缺失');
 }
 
 function normalizeLowIntensityText(
@@ -208,15 +231,26 @@ function normalizeAnalysisText(
   classification: ActivityClassification,
   locale: string
 ): string {
-  return normalizeUnplannedTargetText(normalizeLowIntensityText(
-    normalizeHydrationText(
-      normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
-      activity,
+  return normalizeUnplannedTargetText(
+    normalizeWorkoutSpecificText(
+      normalizeMissingDataText(
+        normalizeLowIntensityText(
+          normalizeHydrationText(
+            normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
+            activity,
+            locale
+          ),
+          classification,
+          locale
+        ),
+        activity,
+        locale
+      ),
+      classification,
       locale
     ),
-    classification,
     locale
-  ), locale);
+  );
 }
 
 export function normalizeAIAnalysisForDisplay(
@@ -230,7 +264,7 @@ export function normalizeAIAnalysisForDisplay(
     ? analysis.suggestions
         .map((suggestion) => normalizeForDisplay(suggestion))
         .map((suggestion) => normalizeLowIntensitySuggestion(suggestion, activity, classification, locale))
-        .map((suggestion) => suggestion ? normalizeWorkoutSpecificSuggestion(suggestion, classification, locale) : suggestion)
+        .map((suggestion) => suggestion ? normalizeWorkoutSpecificText(suggestion, classification, locale) : suggestion)
         .filter((suggestion): suggestion is string => Boolean(suggestion))
     : [];
 
@@ -244,7 +278,71 @@ export function normalizeAIAnalysisForDisplay(
     warnings: Array.isArray(analysis.warnings)
       ? analysis.warnings.map((warning) => normalizeForDisplay(warning))
       : [],
+    paceZoneAnalysis: analysis.paceZoneAnalysis
+      ? {
+          ...analysis.paceZoneAnalysis,
+          description: normalizeForDisplay(analysis.paceZoneAnalysis.description || ''),
+        }
+      : null,
   };
+}
+
+function sanitizeJsonCandidate(candidate: string): string {
+  return candidate
+    .trim()
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/(\d'\d{2})"(?=\/km)/g, '$1\\"');
+}
+
+function extractBalancedJsonObject(content: string): string | null {
+  const start = content.indexOf('{');
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractAIJson(content: string): string {
+  const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) ||
+                    content.match(/```\n?([\s\S]*?)\n?```/);
+  const firstBrace = content.indexOf('{');
+  const lastBrace = content.lastIndexOf('}');
+  const looseObject =
+    firstBrace >= 0 && lastBrace > firstBrace ? content.slice(firstBrace, lastBrace + 1) : null;
+  const candidate = jsonMatch?.[1] ?? extractBalancedJsonObject(content) ?? looseObject ?? content;
+  return sanitizeJsonCandidate(candidate);
 }
 
 /**
@@ -257,11 +355,7 @@ export function parseAIResponse(
   classification: ActivityClassification,
   locale: string = 'zh'
 ): AIAnalysis {
-  // Extract JSON if wrapped in markdown
-  const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) ||
-                    content.match(/```\n?([\s\S]*?)\n?```/) ||
-                    [null, content];
-  const jsonStr = jsonMatch[1].trim();
+  const jsonStr = extractAIJson(content);
   const result = JSON.parse(jsonStr);
 
   // Override intensity for races
@@ -282,13 +376,19 @@ export function parseAIResponse(
     ? result.suggestions
         .map((suggestion: string) => normalizeForDisplay(suggestion))
         .map((suggestion: string) => normalizeLowIntensitySuggestion(suggestion, activity, classification, locale))
-        .map((suggestion: string | null) => suggestion ? normalizeWorkoutSpecificSuggestion(suggestion, classification, locale) : suggestion)
+        .map((suggestion: string | null) => suggestion ? normalizeWorkoutSpecificText(suggestion, classification, locale) : suggestion)
         .filter((suggestion: string | null): suggestion is string => Boolean(suggestion))
     : [];
   const normalizedWarnings = Array.isArray(result.warnings)
     ? result.warnings.map((warning: string) => normalizeForDisplay(warning))
     : (classification.isRace ? ['这是高强度比赛，需要充分恢复'] : []);
   const normalizedAIInsight = normalizeForDisplay(result.similarActivitiesInsight || '');
+  const normalizedPaceZoneAnalysis = result.paceZoneAnalysis
+    ? {
+        ...result.paceZoneAnalysis,
+        description: normalizeForDisplay(result.paceZoneAnalysis.description || ''),
+      }
+    : null;
 
   return {
     summary: normalizedSummary,
@@ -297,7 +397,7 @@ export function parseAIResponse(
     comparisonToAverage: comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
     suggestions: normalizedSuggestions,
     generatedAt: Date.now(),
-    paceZoneAnalysis: result.paceZoneAnalysis || null,
+    paceZoneAnalysis: normalizedPaceZoneAnalysis,
     trainingLoadContext: normalizedTrainingLoadContext,
     similarActivitiesInsight: comparisonOverride && shouldUseSystemInsight(normalizedAIInsight, trainingProfile)
       ? comparisonOverride.similarActivitiesInsight

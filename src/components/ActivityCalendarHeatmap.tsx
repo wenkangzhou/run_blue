@@ -17,19 +17,19 @@ const DAY_LABELS_ZH = ['一', '二', '三', '四', '五', '六', '日'];
 const DAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const DEFAULT_COLOR_CLASSES = [
-  'bg-zinc-100 dark:bg-zinc-800',                           // 0
-  'bg-blue-200 dark:bg-blue-900/40',                        // 1
-  'bg-blue-400 dark:bg-blue-700',                           // 2
-  'bg-blue-600 dark:bg-blue-500',                           // 3
-  'bg-blue-800 dark:bg-blue-400',                           // 4
+  'bg-zinc-100 dark:bg-zinc-800',
+  'bg-sky-100 dark:bg-sky-950/50',
+  'bg-sky-300 dark:bg-sky-800',
+  'bg-blue-500 dark:bg-blue-600',
+  'bg-indigo-600 dark:bg-indigo-400',
 ];
 
 const REVERSE_COLOR_CLASSES = [
-  'bg-zinc-100 dark:bg-zinc-800',                           // 0
-  'bg-blue-200 dark:bg-blue-900/40',                        // 1
-  'bg-blue-400 dark:bg-blue-700',                           // 2
-  'bg-blue-600 dark:bg-blue-500',                           // 3
-  'bg-blue-800 dark:bg-blue-400',                           // 4
+  'bg-zinc-100 dark:bg-zinc-800',
+  'bg-cyan-100 dark:bg-cyan-950/50',
+  'bg-cyan-300 dark:bg-cyan-800',
+  'bg-teal-500 dark:bg-teal-600',
+  'bg-emerald-600 dark:bg-emerald-400',
 ];
 
 export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses }: ActivityCalendarHeatmapProps) {
@@ -115,18 +115,14 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
 
   return (
     <div className="relative">
-      {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-300">
           {t('stats.yearRunCount', '{{year}} · {{count}} 次跑步', { year, count: totalRuns })}
         </span>
       </div>
 
-      {/* Grid with month labels */}
       <div className="overflow-x-auto pb-1">
-        {/* Month labels row - aligned with week columns */}
         <div className="flex gap-[3px] ml-5 mb-1">
-          {/* Spacer for day labels */}
           <div className="w-4 flex-shrink-0" />
           {weeks.map((week, wi) => {
             const midDay = week[3];
@@ -146,9 +142,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
           })}
         </div>
 
-        {/* Day labels + grid */}
         <div className="flex gap-[3px]">
-          {/* Day labels */}
           <div className="flex flex-col gap-[3px] mr-1 flex-shrink-0">
             {(isZh ? DAY_LABELS_ZH : DAY_LABELS_EN).map((label, i) => (
               <div key={i} className="h-[10px] flex items-center">
@@ -157,7 +151,6 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
             ))}
           </div>
 
-          {/* Weeks */}
           {weeks.map((week, wi) => (
             <div key={wi} className="flex flex-col gap-[3px] flex-shrink-0">
               {week.map((date, di) => {
@@ -168,7 +161,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
                 return (
                   <div
                     key={di}
-                    className={`w-[10px] h-[10px] rounded-[2px] ${isInYear ? COLOR_CLASSES[level] : 'bg-transparent'} cursor-pointer`}
+                    className={`h-[11px] w-[11px] rounded-[3px] ${isInYear ? COLOR_CLASSES[level] : 'bg-transparent'} cursor-pointer ring-1 ring-transparent transition-transform hover:scale-125 hover:ring-white dark:hover:ring-zinc-950`}
                     onMouseEnter={(e) => isInYear && handleMouseEnter(date, value, e)}
                     onMouseLeave={() => setHovered(null)}
                   />
@@ -179,32 +172,30 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
         </div>
       </div>
 
-      {/* Tooltip */}
       {hovered && (
         <div
-          className="fixed z-50 bg-zinc-800 text-white text-[10px] font-mono px-2 py-1 rounded shadow-lg pointer-events-none whitespace-nowrap"
+          className="fixed z-50 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 font-mono text-[10px] text-zinc-700 shadow-lg shadow-zinc-200/70 pointer-events-none whitespace-nowrap dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:shadow-black/30"
           style={{
             left: hovered.x,
-            top: hovered.y - 32,
+            top: hovered.y - 38,
             transform: 'translateX(-50%)',
           }}
         >
           {hovered.date}
           {hovered.value > 0 && (
-            <span className="ml-1 text-blue-300">
+            <span className="ml-1 text-blue-600 dark:text-blue-300">
               · {formatMetricValue(hovered.value, metric)} {getMetricUnit(metric)}
             </span>
           )}
         </div>
       )}
 
-      {/* Legend */}
       <div className="flex items-center gap-1.5 mt-3">
         <span className="font-mono text-[9px] text-zinc-400">
           {isReverseMetric ? (isZh ? '慢' : 'Slow') : (isZh ? '少' : 'Less')}
         </span>
         {COLOR_CLASSES.map((cls, i) => (
-          <div key={i} className={`w-[10px] h-[10px] rounded-[2px] ${cls}`} />
+          <div key={i} className={`h-[11px] w-[11px] rounded-[3px] ${cls}`} />
         ))}
         <span className="font-mono text-[9px] text-zinc-400">
           {isReverseMetric ? (isZh ? '快' : 'Fast') : (isZh ? '多' : 'More')}

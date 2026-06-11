@@ -200,6 +200,38 @@ test('parseAIResponse extracts markdown JSON and overrides comparison with compu
   assert.equal(typeof result.generatedAt, 'number');
 });
 
+test('parseAIResponse tolerates prose wrappers and common unescaped pace quotes', () => {
+  const content = [
+    '下面是结构化分析：',
+    '```json',
+    '{',
+    `  "summary": "第1公里5'05"/km后进入稳定节奏。",`,
+    '  "intensity": "moderate",',
+    '  "recoveryHours": 24,',
+    `  "suggestions": ["第2公里4'55"/km可以作为参考配速。"],`,
+    '  "paceZoneAnalysis": { "zone": "M", "description": "落在目标区间", "appropriateness": "appropriate" },',
+    '  "trainingLoadContext": "负荷适中",',
+    '  "similarActivitiesInsight": "样本较少",',
+    '  "nextWorkoutSuggestion": "轻松跑恢复",',
+    '  "warnings": []',
+    '}',
+    '```',
+  ].join('\n');
+
+  const result = parseAIResponse(
+    content,
+    makeActivity({ moving_time: 1525 }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'tempo', paceZone: 'M' }),
+    'zh'
+  );
+
+  assert.match(result.summary, /5'05"\/km/);
+  assert.doesNotMatch(result.suggestions.join(' '), /目标配速/);
+  assert.match(result.suggestions[0], /参考配速/);
+  assert.equal(result.paceZoneAnalysis.description, '落在训练区间');
+});
+
 test('parseAIResponse localizes confidence wording and uses system comparison insight on weak samples', () => {
   const content = JSON.stringify({
     summary: '本次训练识别为恢复跑（置信度: medium），整体控制稳定。',
@@ -239,6 +271,76 @@ test('parseAIResponse localizes confidence wording and uses system comparison in
   assert.match(result.comparisonToAverage, /只是一条配速参考|只作参考|优先看是否低负荷完成/);
   assert.doesNotMatch(result.similarActivitiesInsight, /0%|历史最差/);
   assert.match(result.similarActivitiesInsight, /后段|方向性提示|低压力训练/);
+});
+
+test('parseAIResponse protects interval workouts from average-pace and recovery-lap criticism', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '本次间歇训练全程平均配速偏慢，恢复圈太慢拖累整体质量。',
+      intensity: 'hard',
+      recoveryHours: 36,
+      suggestions: [
+        '下次需要提高恢复段配速，恢复段也要跑快。',
+        '重点看平均配速是否慢于目标。',
+      ],
+    }),
+    makeActivity({
+      distance: 7600,
+      moving_time: 2500,
+      laps: [
+        { distance: 1600, moving_time: 520 },
+        { distance: 400, moving_time: 88 },
+        { distance: 200, moving_time: 82 },
+        { distance: 400, moving_time: 87 },
+        { distance: 200, moving_time: 80 },
+        { distance: 1600, moving_time: 560 },
+      ],
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({
+      workoutType: 'interval',
+      workoutTypeConfidence: 'high',
+      intensity: 'hard',
+      paceZone: 'I',
+      structure: {
+        source: 'laps',
+        lapCount: 6,
+        medianLapDistance: 400,
+        shortRepCount: 4,
+        fastRepCount: 2,
+        recoveryRepCount: 2,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'interval',
+        paceVariability: 0.18,
+      },
+    }),
+    'zh'
+  );
+
+  const joined = [result.summary, ...result.suggestions].join(' ');
+  assert.doesNotMatch(joined, /平均配速偏慢|恢复圈太慢|恢复段也要跑快|目标/);
+  assert.match(joined, /平均配速仅作参考|恢复段慢是设计的一部分|恢复段能让下一组快段质量稳定|恢复段以恢复质量为先/);
+});
+
+test('parseAIResponse avoids heart-rate conclusions when heart-rate data is missing', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '心率控制稳定，未出现明显心率漂移。',
+      intensity: 'moderate',
+      recoveryHours: 24,
+      suggestions: ['继续保持心率控制稳定。'],
+      trainingLoadContext: '心率下降说明恢复很好。',
+    }),
+    makeActivity({ has_heartrate: false, average_heartrate: undefined, max_heartrate: undefined }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'unknown', workoutTypeConfidence: 'low', paceZone: 'unknown' }),
+    'zh'
+  );
+
+  const joined = [result.summary, ...result.suggestions, result.trainingLoadContext].join(' ');
+  assert.doesNotMatch(joined, /心率控制稳定|心率漂移|心率下降/);
+  assert.match(joined, /缺少心率数据|心率数据缺失/);
 });
 
 test('parseAIResponse softens heat-stress wording in merely muggy conditions', () => {
@@ -322,6 +424,8 @@ test('parseAIResponse softens overconfident hydration speculation on short runs'
       moving_time: 2040,
       average_temp: 25,
       description: 'Humidity 77%',
+      has_heartrate: true,
+      average_heartrate: 146,
     }),
     makeProfile({ similarStats: null }),
     makeClassification({ workoutType: 'progression', paceZone: 'E' }),

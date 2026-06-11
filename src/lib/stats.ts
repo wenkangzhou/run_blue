@@ -75,6 +75,7 @@ export function formatMetricValue(value: number, metric: MetricType): string {
 function formatMetricDisplay(value: number, metric: MetricType): string {
   const num = formatMetricValue(value, metric);
   const unit = getMetricUnit(metric);
+  if (metric === 'pace') return `${num}${unit}`;
   return unit ? `${num} ${unit}` : num;
 }
 

@@ -50,22 +50,21 @@ export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: 
     return formatMetricValue(value, metric);
   };
 
-  // For many bars, enable horizontal scroll on mobile
   const needsScroll = data.length > 20;
   const minChartWidth = needsScroll ? Math.max(data.length * 24, 320) : '100%';
 
   return (
     <div className={needsScroll ? 'overflow-x-auto pb-2' : undefined}>
       <div className="[&_rect]:focus:outline-none" style={{ minWidth: typeof minChartWidth === 'number' ? minChartWidth : undefined }}>
-        <ResponsiveContainer width="100%" height={280} minWidth={typeof minChartWidth === 'number' ? minChartWidth : undefined}>
+        <ResponsiveContainer width="100%" height={300} minWidth={typeof minChartWidth === 'number' ? minChartWidth : undefined}>
           <BarChart style={{ outline: 'none' }}
             data={data}
-            margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
-            barCategoryGap="20%"
+            margin={{ top: 12, right: 8, left: -4, bottom: 4 }}
+            barCategoryGap="28%"
           >
             <CartesianGrid
-              strokeDasharray="4 4"
-              stroke="#e4e4e7"
+              strokeDasharray="3 8"
+              stroke="#e5e7eb"
               vertical={false}
             />
             <XAxis
@@ -84,13 +83,13 @@ export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: 
               width={50}
             />
             <Tooltip
-              cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+              cursor={{ fill: 'rgba(59,130,246,0.08)' }}
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   const item = payload[0].payload as ChartDataPoint;
                   const summary = calculateSummaryStats([item]);
                   return (
-                    <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-800 dark:border-zinc-200 px-3 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] min-w-[180px]">
+                    <div className="min-w-[190px] rounded-lg border border-zinc-200 bg-white/95 px-3 py-2 shadow-xl shadow-zinc-200/70 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95 dark:shadow-black/30">
                       <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                         {item.label}
                       </p>
@@ -115,8 +114,8 @@ export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: 
             />
             <Bar
               dataKey="value"
-              radius={[0, 0, 0, 0]}
-              maxBarSize={40}
+              radius={[5, 5, 2, 2]}
+              maxBarSize={34}
               animationDuration={600}
               tabIndex={-1}
             >
@@ -126,8 +125,8 @@ export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: 
                   fill={entry.isCurrent ? (colors?.currentBar || '#f97316') : (colors?.bar || '#3b82f6')}
                   className={`${entry.activities.length > 0 ? 'cursor-pointer' : 'cursor-default'} transition-opacity hover:opacity-80`}
                   onClick={() => entry.activities.length > 0 && onSelect?.(entry)}
-                  stroke={selectedKey === entry.key ? '#18181b' : entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
-                  strokeWidth={selectedKey === entry.key ? 2 : 1}
+                  stroke={selectedKey === entry.key ? '#0f172a' : entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
+                  strokeWidth={selectedKey === entry.key ? 2 : 0}
                 />
               ))}
             </Bar>
