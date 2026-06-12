@@ -4,8 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { TrajectoryCanvas } from './TrajectoryCanvas';
-import { GlitchText } from './GlitchText';
 import { formatLocalDateKey, getActivityDate, parseStravaLocalDateParts } from '@/lib/dates';
+import { CalendarDays, Clock3, MapPinned, Route, Sparkles } from 'lucide-react';
 
 interface HeroSectionProps {
   activities: StravaActivity[];
@@ -66,76 +66,93 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
   const maxElevation = activities.reduce((max, a) => ((a.total_elevation_gain || 0) > (max.total_elevation_gain || 0) ? a : max), activities[0]);
   const firstYear = getYearFromDateString(stats.firstRunDate);
   const latestYear = getYearFromDateString(stats.latestRunDate);
+  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  const recentRuns = activities.filter((activity) => {
+    const days = (now.getTime() - getActivityDate(activity).getTime()) / (24 * 60 * 60 * 1000);
+    return days >= 0 && days <= 30;
+  });
+  const currentYearRuns = activities.filter((activity) => getActivityDate(activity).getFullYear() === currentYear);
+  const recentDistance = recentRuns.reduce((sum, activity) => sum + activity.distance, 0);
+  const currentYearDistance = currentYearRuns.reduce((sum, activity) => sum + activity.distance, 0);
+  const avgRunDistance = stats.totalRuns > 0 ? stats.totalDistance / stats.totalRuns : 0;
 
   return (
-    <section className="relative px-4 py-12 sm:py-20 overflow-hidden">
-      {/* Background trajectory animation */}
-      <TrajectoryCanvas activities={activities} />
+    <section className="relative px-4 pb-10 pt-10 sm:pb-14 sm:pt-16">
+      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80 shadow-2xl shadow-black/30">
+        <TrajectoryCanvas activities={activities} />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,9,11,0.98),rgba(8,9,11,0.88),rgba(8,9,11,0.7))]" />
+        <div className="relative grid min-h-[560px] gap-8 p-5 sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_380px] lg:p-10">
+          <div className="flex flex-col justify-between gap-8">
+            <div>
+              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+                <Sparkles size={13} />
+                RUN BLUE PROFILE
+              </div>
+              <h1 className="max-w-3xl text-4xl font-black leading-none tracking-normal text-zinc-50 sm:text-6xl">
+                跑步档案
+              </h1>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
+                从 {firstYear ?? '--'} 到 {latestYear ?? '--'}，把每一次训练留下的路线、跑量和节奏变化整理成一份可浏览的个人记录。
+              </p>
+            </div>
 
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-        backgroundSize: '40px 40px',
-      }} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <QuickStat icon={<Route size={15} />} label="今年跑量" value={formatDistance(currentYearDistance)} />
+              <QuickStat icon={<CalendarDays size={15} />} label="近30天" value={formatDistance(recentDistance)} />
+              <QuickStat icon={<Clock3 size={15} />} label="总时长" value={formatDuration(stats.totalTime)} />
+              <QuickStat icon={<MapPinned size={15} />} label="平均单次" value={formatDistance(avgRunDistance)} />
+            </div>
+          </div>
 
-      <div className="max-w-6xl mx-auto relative">
-        {/* Glitch Title */}
-        <div className="mb-8 sm:mb-12">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">
-            <GlitchText text="RUNNER ARCHIVE" className="text-zinc-100" />
-          </h1>
-          <div className="h-px w-24 bg-green-400/50 mt-3" />
-        </div>
-
-        {/* Main Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid content-end gap-3">
           <BigStat
-            label="TOTAL DISTANCE"
+            label="累计距离"
             value={Math.round(stats.totalDistance / 1000)}
             suffix=" km"
             sub={formatDistance(stats.totalDistance)}
           />
           <BigStat
-            label="TOTAL RUNS"
+            label="累计跑步"
             value={stats.totalRuns}
             suffix=""
-            sub={firstYear ? `Since ${firstYear}` : 'Since --'}
+            sub={firstYear ? `始于 ${firstYear}` : '始于 --'}
           />
           <BigStat
-            label="TOTAL TIME"
+            label="累计时长"
             value={Math.round(stats.totalTime / 3600)}
             suffix=" h"
             sub={formatDuration(stats.totalTime)}
           />
           <BigStat
-            label="ELEVATION"
+            label="累计爬升"
             value={Math.round(stats.totalElevation)}
             suffix=" m"
-            sub={`Max ${Math.round(maxElevation.total_elevation_gain || 0)}m`}
+            sub={`单次最高 ${Math.round(maxElevation.total_elevation_gain || 0)}m`}
           />
+          </div>
         </div>
+      </div>
 
-        {/* Secondary Stats */}
-        <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <InfoCard
-            label="LONGEST RUN"
-            value={formatDistance(longestRun.distance)}
-            sub={longestRun.name}
-            date={formatLocalDateKey(getActivityDate(longestRun))}
-          />
-          <InfoCard
-            label="HIGHEST CLIMB"
-            value={`${Math.round(maxElevation.total_elevation_gain || 0)}m`}
-            sub={maxElevation.name}
-            date={formatLocalDateKey(getActivityDate(maxElevation))}
-          />
-          <InfoCard
-            label="ACTIVE YEARS"
-            value={`${stats.yearCount}`}
-            sub={firstYear && latestYear ? `${firstYear} — ${latestYear}` : '--'}
-            date=""
-          />
-        </div>
+      <div className="relative mx-auto mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-3">
+        <InfoCard
+          label="最长单次"
+          value={formatDistance(longestRun.distance)}
+          sub={longestRun.name}
+          date={formatLocalDateKey(getActivityDate(longestRun))}
+        />
+        <InfoCard
+          label="最高爬升"
+          value={`${Math.round(maxElevation.total_elevation_gain || 0)}m`}
+          sub={maxElevation.name}
+          date={formatLocalDateKey(getActivityDate(maxElevation))}
+        />
+        <InfoCard
+          label="活跃年份"
+          value={`${stats.yearCount} 年`}
+          sub={firstYear && latestYear ? `${firstYear} - ${latestYear}` : '--'}
+          date={`${activities.length} 条跑步记录`}
+        />
       </div>
     </section>
   );
@@ -149,26 +166,35 @@ function getYearFromDateString(dateString?: string): number | null {
 
 function BigStat({ label, value, suffix, sub }: { label: string; value: number; suffix: string; sub: string }) {
   return (
-    <div className="group relative border border-zinc-800 bg-zinc-950 p-4 sm:p-6 hover:border-green-400/30 transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,222,128,0.05)]">
-      <div className="text-[10px] text-zinc-500 mb-2 tracking-widest">{label}</div>
-      <div className="text-3xl sm:text-5xl font-bold text-zinc-100 tracking-tight group-hover:text-green-400/90 transition-colors">
+    <div className="group relative rounded-lg border border-zinc-800 bg-zinc-950/80 p-4 transition-all duration-300 hover:border-cyan-400/30 sm:p-5">
+      <div className="mb-2 text-[10px] text-zinc-500">{label}</div>
+      <div className="text-3xl font-black tracking-normal text-zinc-100 transition-colors group-hover:text-cyan-200 sm:text-4xl">
         <AnimatedNumber value={value} suffix={suffix} />
       </div>
-      <div className="text-xs text-zinc-600 mt-1">{sub}</div>
-      {/* Corner accent */}
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-700 group-hover:border-green-400/50 transition-colors" />
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-zinc-700 group-hover:border-green-400/50 transition-colors" />
+      <div className="mt-1 text-xs text-zinc-600">{sub}</div>
     </div>
   );
 }
 
 function InfoCard({ label, value, sub, date }: { label: string; value: string; sub: string; date: string }) {
   return (
-    <div className="border border-zinc-800/60 bg-zinc-900/20 p-4">
-      <div className="text-[10px] text-zinc-500 tracking-widest mb-1">{label}</div>
-      <div className="text-lg sm:text-xl font-bold text-zinc-200">{value}</div>
-      <div className="text-xs text-zinc-500 mt-1 truncate">{sub}</div>
-      {date && <div className="text-[10px] text-zinc-600 mt-1">{date}</div>}
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+      <div className="mb-1 text-[10px] text-zinc-500">{label}</div>
+      <div className="text-lg font-black text-zinc-100 sm:text-xl">{value}</div>
+      <div className="mt-1 truncate text-xs text-zinc-500">{sub}</div>
+      {date && <div className="mt-1 text-[10px] text-zinc-600">{date}</div>}
+    </div>
+  );
+}
+
+function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-black/30 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-cyan-300">
+        {icon}
+        <span className="text-[10px] text-zinc-500">{label}</span>
+      </div>
+      <div className="truncate text-sm font-bold text-zinc-100">{value}</div>
     </div>
   );
 }

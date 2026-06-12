@@ -143,6 +143,21 @@ function normalizeWorkoutSpecificText(
       .replace(/恢复(?:圈|段)(?:也要|需要|应当)?跑快/g, '恢复段以恢复质量为先');
   }
 
+  if (classification.workoutType === 'progression') {
+    return text
+      .replace(/心率-配速双降提示监控不足/g, '快段后的降速更可能是主动冷身或结构调整')
+      .replace(/心率和配速双降提示监控不足/g, '快段后的降速更可能是主动冷身或结构调整')
+      .replace(/心率反常(?:跌至|下降至|回落至)/g, '心率回落至')
+      .replace(/主动降速冷身或主动降速或短暂疲劳/g, '主动冷身或短暂疲劳')
+      .replace(/主动冷身或主动降速或短暂疲劳/g, '主动冷身或短暂疲劳')
+      .replace(/主动降速冷身/g, '主动冷身')
+      .replace(/配速骤降至/g, '配速回落至')
+      .replace(/监控不足/g, '执行反馈需要结合训练目的复盘')
+      .replace(/短暂脱力/g, '主动降速或短暂疲劳')
+      .replace(/体能储备不足/g, '后程负荷变化需要结合训练结构判断')
+      .replace(/执行失败/g, '执行可继续优化');
+  }
+
   if (classification.workoutType !== 'long-run') return text;
 
   return text
@@ -215,6 +230,15 @@ function normalizeUnplannedTargetText(text: string, locale: string): string {
     .replace(/目标区间/g, '训练区间');
 }
 
+function normalizeFinalTextPolish(text: string, locale: string): string {
+  if (!text || locale.startsWith('en')) return text;
+
+  return text
+    .replace(/主动冷身或主动降速或短暂疲劳/g, '主动冷身、结构调整或短暂疲劳')
+    .replace(/主动冷身或短暂疲劳/g, '主动冷身或短暂疲劳')
+    .replace(/主动降速或短暂疲劳/g, '主动冷身或短暂疲劳');
+}
+
 function shouldUseSystemInsight(text: string, trainingProfile: TrainingProfile): boolean {
   const similarStats = trainingProfile.similarStats;
   if (!similarStats) return false;
@@ -231,22 +255,25 @@ function normalizeAnalysisText(
   classification: ActivityClassification,
   locale: string
 ): string {
-  return normalizeUnplannedTargetText(
-    normalizeWorkoutSpecificText(
-      normalizeMissingDataText(
-        normalizeLowIntensityText(
-          normalizeHydrationText(
-            normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
-            activity,
+  return normalizeFinalTextPolish(
+    normalizeUnplannedTargetText(
+      normalizeWorkoutSpecificText(
+        normalizeMissingDataText(
+          normalizeLowIntensityText(
+            normalizeHydrationText(
+              normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
+              activity,
+              locale
+            ),
+            classification,
             locale
           ),
-          classification,
+          activity,
           locale
         ),
-        activity,
+        classification,
         locale
       ),
-      classification,
       locale
     ),
     locale

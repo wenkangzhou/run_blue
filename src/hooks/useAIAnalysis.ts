@@ -68,6 +68,7 @@ type AIHistoryActivity = Pick<
 const AI_ANALYSIS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 const AI_ANALYSIS_QUOTA_TTL = 60 * 60 * 1000;
 const AI_HISTORY_LIMIT = 1000;
+const aiAnalysisRequestsInFlight = new Map<string, Promise<AIAnalyzeResponse>>();
 
 function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
   return {
@@ -96,7 +97,8 @@ function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
 
 export function useAIAnalysis(
   activity: StravaActivity,
-  streams: Record<string, ActivityStream> | null
+  streams: Record<string, ActivityStream> | null,
+  enabled = true
 ) {
   const { t, i18n } = useTranslation();
   const { activities } = useActivitiesStore();
@@ -165,6 +167,12 @@ export function useAIAnalysis(
   }, [normalizeCachedPayload]);
 
   const refreshAnalysis = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      setError('AUTH_REQUIRED');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -173,26 +181,32 @@ export function useAIAnalysis(
     const physique = profile ? { height: profile.height, weight: profile.weight } : undefined;
 
     try {
-      const response = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          activity,
-          streams,
-          userProfilePBs,
-          recentActivities: analysisHistoryActivities,
-          locale: i18n.language,
-          physique,
-          lthr: profile?.lthr,
-        }),
-      });
+      let request = aiAnalysisRequestsInFlight.get(cacheKey);
+      if (!request) {
+        request = fetch('/api/ai/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            activity,
+            streams,
+            userProfilePBs,
+            recentActivities: analysisHistoryActivities,
+            locale: i18n.language,
+            physique,
+            lthr: profile?.lthr,
+          }),
+        }).then(async (response) => {
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || t('errors.aiAnalysisFailed', 'AI analysis failed'));
+          }
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || t('errors.aiAnalysisFailed', 'AI analysis failed'));
+          return response.json() as Promise<AIAnalyzeResponse>;
+        });
+        aiAnalysisRequestsInFlight.set(cacheKey, request);
       }
 
-      const data = (await response.json()) as AIAnalyzeResponse;
+      const data = await request;
       applyAnalysisPayload({
         analysis: data.analysis,
         streamAnalysis: data.streamAnalysis,
@@ -210,9 +224,10 @@ export function useAIAnalysis(
       const message = err instanceof Error ? err.message : '';
       setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
+      aiAnalysisRequestsInFlight.delete(cacheKey);
       setLoading(false);
     }
-  }, [activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
+  }, [enabled, activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +254,12 @@ export function useAIAnalysis(
       }
 
       if (!cancelled) {
+        if (!enabled) {
+          setLoading(false);
+          setError('AUTH_REQUIRED');
+          return;
+        }
+
         refreshAnalysis();
       }
     }
@@ -252,9 +273,15 @@ export function useAIAnalysis(
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
+  }, [enabled, cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');
+  const isAuthError =
+    error?.includes('Unauthorized') ||
+    error?.includes('AUTH_REQUIRED') ||
+    error?.includes('401') ||
+    error?.includes('登录') ||
+    error?.toLowerCase().includes('auth');
 
   return {
     analysis,
@@ -264,6 +291,7 @@ export function useAIAnalysis(
     loading,
     error,
     isQuotaError,
+    isAuthError,
     refreshAnalysis,
   };
 }

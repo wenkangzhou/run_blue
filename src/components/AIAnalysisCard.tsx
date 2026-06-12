@@ -14,6 +14,7 @@ import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 interface AIAnalysisCardProps {
   activity: StravaActivity;
   streams: Record<string, ActivityStream> | null;
+  enabled?: boolean;
 }
 
 const intensityColors: Record<string, { color: string; bg: string }> = {
@@ -63,7 +64,7 @@ function getAppropriatePaceProLabel(workoutType: ActivityClassification['workout
   }
 }
 
-export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
+export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysisCardProps) {
   const { t, i18n } = useTranslation();
   const {
     analysis,
@@ -73,8 +74,9 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
     loading,
     error,
     isQuotaError,
+    isAuthError,
     refreshAnalysis,
-  } = useAIAnalysis(activity, streams);
+  } = useAIAnalysis(activity, streams, enabled);
   const [expanded, setExpanded] = useState(false);
 
   const intensity = analysis?.intensity
@@ -238,6 +240,10 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
   const structureSummary = formatStructureSummary();
   const lowIntensityExecution = getLowIntensityExecution();
+  const pacePatternExplainsHRDrift =
+    streamAnalysis?.pacePattern === 'interval' ||
+    streamAnalysis?.pacePattern === 'progression' ||
+    streamAnalysis?.pacePattern === 'warmup-cooldown';
 
   // Coach verdict: structured evaluation
   const verdict = useMemo(() => {
@@ -265,7 +271,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       } else if (z1 + z2 >= 85) {
         effect = 'good';
         effectLabel = '控制良好';
-      } else if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
+      } else if ((streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) || hardShare >= 15 || drift >= 10) {
         effect = 'fair';
         effectLabel = '略偏顶';
       } else {
@@ -276,7 +282,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       if (classification.paceZoneExactMatch) {
         effect = 'good';
         effectLabel = '配速精准';
-      } else if (streamAnalysis?.hasHRDrift) {
+      } else if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) {
         effect = 'fair';
         effectLabel = '后程掉速';
       } else {
@@ -305,10 +311,14 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
     }
 
     // From stream analysis
-    if (streamAnalysis?.hasHRDrift) {
-      cons.push(`后程心率漂移 ${Math.round(streamAnalysis.avgHRDrift)}%，体能储备不足`);
+    if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) {
+      cons.push(`后程心率上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm，需要留意疲劳或补给`);
     } else if (streamAnalysis?.avgHRDrift && streamAnalysis.avgHRDrift > 5) {
-      cons.push(`后程心率有小幅漂移`);
+      if (pacePatternExplainsHRDrift) {
+        pros.push('心率变化与训练结构匹配');
+      } else {
+        cons.push(`后程心率小幅上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm`);
+      }
     } else if (streamAnalysis?.avgHRDrift !== undefined && streamAnalysis.avgHRDrift <= 5) {
       pros.push('心率控制稳定');
     }
@@ -339,7 +349,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
     }
 
     return { type, effect, effectLabel, pros, cons, advice };
-  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, comparisonIsReferenceOnly, t]);
+  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, comparisonIsReferenceOnly, pacePatternExplainsHRDrift, t]);
 
   const effectStyles: Record<string, { color: string; bg: string; border: string }> = {
     excellent: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-400' },
@@ -359,21 +369,25 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
   const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
 
   return (
-    <div className="border-4 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       {/* Header */}
-      <div className={`p-4 border-b-4 border-zinc-800 dark:border-zinc-200 ${
+      <div className={`border-b border-zinc-200 p-4 dark:border-zinc-800 ${
         isRace
-          ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20'
-          : 'bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20'
+          ? 'bg-amber-50/70 dark:bg-amber-950/20'
+          : 'bg-white dark:bg-zinc-900'
       }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isRace ? <Trophy className="w-5 h-5 text-amber-600" /> : <Sparkles className="w-5 h-5 text-purple-600" />}
-            <h2 className="font-pixel text-lg font-bold">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+              isRace ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
+            }`}>
+              {isRace ? <Trophy className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+            </span>
+            <h2 className="min-w-0 truncate font-mono text-sm font-black uppercase tracking-normal text-zinc-950 dark:text-zinc-50">
               {isRace ? `${classification.raceType || t('aiAnalysis.raceAnalysis')} ${t('aiAnalysis.title')}` : t('aiAnalysis.title')}
             </h2>
             {trainingStats && (
-              <span className="font-mono text-[10px] text-zinc-500">
+              <span className="rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                 {t('aiAnalysis.basedOnRuns', { count: trainingStats.totalRunsAnalyzed })}
               </span>
             )}
@@ -381,7 +395,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
           <button
             onClick={refreshAnalysis}
             disabled={loading}
-            className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded transition-colors disabled:opacity-50"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-zinc-400 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             title="重新分析"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -392,20 +406,29 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
       {/* Content */}
       <div className="p-4">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-pulse font-mono text-sm text-zinc-500">◼◼◼ {t('aiAnalysis.analyzing')}</div>
+          <div className="space-y-3">
+            <div className="h-20 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+              <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+            </div>
+            <p className="font-mono text-xs text-zinc-500">{t('aiAnalysis.analyzing')}</p>
           </div>
         ) : error ? (
-          <div className="text-center py-4 px-2">
-            <p className={`font-mono text-xs mb-2 break-all max-w-full ${isQuotaError ? 'text-amber-600' : 'text-red-500'}`}>{error}</p>
-            {!isQuotaError && (
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-4 text-center dark:border-zinc-800 dark:bg-zinc-950/40">
+            <p className={`mx-auto mb-2 max-w-full break-words font-mono text-xs ${isQuotaError || isAuthError ? 'text-amber-600' : 'text-red-500'}`}>
+              {isAuthError
+                ? t('aiAnalysis.loginRequiredForAnalysis', '登录后可重新生成 AI 分析；当前仍可查看缓存的活动详情。')
+                : error}
+            </p>
+            {!isQuotaError && !isAuthError && (
               <button onClick={refreshAnalysis} className="font-mono text-xs text-blue-600 hover:underline">{t('common.retry')}</button>
             )}
           </div>
         ) : analysis ? (
           <div className="space-y-4">
             {analysis.isFallback && (
-              <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
                 <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
                 <span className="font-mono text-[10px] text-amber-700 dark:text-amber-300 flex-1">
                   {t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
@@ -415,12 +438,12 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
             {/* Coach Verdict */}
             {verdict && (
-              <div className={`border-2 ${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg} p-3`}>
+              <div className={`rounded-lg border ${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg} p-3`}>
                 {/* Header: Type + Effect */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{verdict.type}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} border ${effectStyles[verdict.effect].border}`}>
+                    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} ${effectStyles[verdict.effect].border}`}>
                       {verdict.effectLabel}
                     </span>
                   </div>
@@ -432,7 +455,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                     <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">优点</p>
                     <div className="flex flex-wrap gap-1.5">
                       {verdict.pros.map((pro, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
                           <span className="text-emerald-500">+</span>
                           {pro}
                         </span>
@@ -447,7 +470,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                     <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">不足</p>
                     <div className="flex flex-wrap gap-1.5">
                       {verdict.cons.map((con, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 font-mono text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
                           <span className="text-red-500">−</span>
                           {con}
                         </span>
@@ -474,20 +497,20 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
             )}
 
             {/* Summary */}
-            <div className={`p-3 border-l-4 ${isRace ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-500' : 'bg-zinc-50 dark:bg-zinc-800 border-purple-500'}`}>
+            <div className={`rounded-lg border p-3 ${isRace ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60'}`}>
               <p className="font-mono text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">{analysis.summary}</p>
             </div>
 
             {classification && (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                   <div className="flex items-center gap-1 mb-1">
                     <Brain className="w-3 h-3 text-zinc-400" />
                     <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.workoutRead', '训练识别')}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-base font-bold text-zinc-900 dark:text-zinc-100">{workoutTypeLabel}</span>
-                    <span className="inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                    <span className="inline-flex items-center rounded-md bg-zinc-200 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
                       {confidenceLabel}
                     </span>
                   </div>
@@ -495,7 +518,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                     <p className="mt-1 font-mono text-[11px] text-zinc-500">{structureSummary}</p>
                   )}
                 </div>
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                   <div className="flex items-center gap-1 mb-1">
                     <Radar className="w-3 h-3 text-zinc-400" />
                     <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.whyItThinksSo', '判断依据')}</span>
@@ -513,7 +536,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
             {/* Key Metrics Grid */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-1 mb-1">
                   <Target className="w-3 h-3 text-zinc-400" />
                   <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.paceZone')}</span>
@@ -529,25 +552,25 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
                   </div>
                 ) : <span className="font-mono text-sm text-zinc-400">--</span>}
               </div>
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-1 mb-1">
                   <Zap className="w-3 h-3 text-zinc-400" />
                   <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.intensity')}</span>
                 </div>
                 {intensity && (
-                  <span className={`inline-block px-2 py-0.5 text-sm font-mono font-bold ${intensity.color} ${intensity.bg}`}>
+                  <span className={`inline-block rounded-md px-2 py-0.5 font-mono text-sm font-bold ${intensity.color} ${intensity.bg}`}>
                     {isRace ? t('aiAnalysis.extremeRace') : intensity.label}
                   </span>
                 )}
               </div>
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-1 mb-1">
                   <Clock className="w-3 h-3 text-zinc-400" />
                   <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.recovery')}</span>
                 </div>
                 <span className={`font-mono text-lg font-bold ${isRace ? 'text-red-600' : ''}`}>{analysis.recoveryHours}h</span>
               </div>
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-1 mb-1">
                   <TrendingUp className="w-3 h-3 text-zinc-400" />
                   <span className="font-mono text-[10px] text-zinc-500 uppercase">
@@ -580,7 +603,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
             {/* HR Zone Distribution */}
             {hrDist && Object.keys(hrDist).length > 0 && (
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-1 mb-2">
                   <Activity className="w-3 h-3 text-zinc-400" />
                   <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.hrZoneDistribution')}</span>
@@ -612,10 +635,10 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
             )}
 
             {/* Expandable Details */}
-            <div className="border border-zinc-200 dark:border-zinc-700">
+            <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="w-full p-3 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                className="flex w-full items-center justify-between p-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
                 <span className="font-mono text-xs font-bold uppercase text-zinc-500">{t('aiAnalysis.deepInsights')}</span>
                 <ChevronRight className={`w-4 h-4 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
@@ -692,7 +715,7 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
             {/* Warnings */}
             {analysis.warnings && analysis.warnings.length > 0 && (
-              <div className={`p-3 border-l-4 ${isRace ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-500' : 'bg-red-50 dark:bg-red-900/20 border-red-500'}`}>
+              <div className={`rounded-lg border p-3 ${isRace ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle className={`w-4 h-4 ${isRace ? 'text-amber-600' : 'text-red-600'}`} />
                   <span className={`font-mono text-xs font-bold ${isRace ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
@@ -711,11 +734,11 @@ export function AIAnalysisCard({ activity, streams }: AIAnalysisCardProps) {
 
             {/* Suggestions */}
             {analysis.suggestions.length > 0 && (
-              <div className="space-y-2">
+              <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <h3 className="font-mono text-xs font-bold uppercase text-zinc-500">
                   {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.suggestions')}
                 </h3>
-                <ul className="space-y-1">
+                <ul className="mt-2 space-y-1">
                   {analysis.suggestions.map((suggestion, i) => (
                     <li key={i} className="font-mono text-sm text-zinc-600 dark:text-zinc-400 flex items-start gap-2">
                       <span className={`mt-1 ${isRace ? 'text-amber-500' : 'text-purple-500'}`}>◼</span>

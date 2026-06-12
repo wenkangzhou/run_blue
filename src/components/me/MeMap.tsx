@@ -4,8 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { StravaActivity } from '@/types';
 import { getAvailableYears } from '@/lib/stats';
 import { decodePolyline } from '@/lib/strava';
-import { ChevronLeft, ChevronRight, Globe } from 'lucide-react';
-import { RadarScan } from './RadarScan';
+import { ChevronLeft, ChevronRight, MapPinned, Route } from 'lucide-react';
 import { getActivityDate } from '@/lib/dates';
 import type { LayerGroup, Map as LeafletMap } from 'leaflet';
 
@@ -104,8 +103,11 @@ export function MeMap({ activities }: MeMapProps) {
         }
       });
 
-      if (hasValid && bounds.isValid && bounds.isValid() && selectedYear !== 'all') {
-        leafletMapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+      if (hasValid && bounds.isValid && bounds.isValid()) {
+        leafletMapRef.current.fitBounds(bounds, {
+          padding: [28, 28],
+          maxZoom: selectedYear === 'all' ? 12 : 16,
+        });
       }
     });
   }, [filteredActs, isReady, selectedYear]);
@@ -132,68 +134,70 @@ export function MeMap({ activities }: MeMapProps) {
   };
 
   return (
-    <section className="px-4 py-8 sm:py-12">
-      <div className="max-w-6xl mx-auto">
-        {/* Terminal Window */}
-        <div className="border border-zinc-700 bg-zinc-950/80">
-          {/* Title Bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/50">
-            <div className="flex items-center gap-2">
-              <Globe size={14} className="text-zinc-500" />
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                route_visualization — {filteredActs.length} traces
-              </span>
+    <section className="px-4 py-6 sm:py-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-4 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase text-cyan-300">
+                <MapPinned size={14} />
+                route atlas
+              </div>
+              <h2 className="text-lg font-black text-zinc-100">路线足迹</h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                {selectedYear === 'all' ? '全部年份' : `${selectedYear} 年`} · {filteredActs.length} 条路线
+              </p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 onClick={prevYear}
-                className="p-1 hover:bg-zinc-800 text-zinc-500 transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+                aria-label="上一个年份"
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-xs text-zinc-300 font-bold min-w-[60px] text-center">
-                {selectedYear === 'all' ? 'ALL YEARS' : selectedYear}
+              <span className="min-w-[78px] rounded-md border border-zinc-800 bg-black/30 px-3 py-1.5 text-center text-xs font-bold text-zinc-200">
+                {selectedYear === 'all' ? '全部' : selectedYear}
               </span>
               <button
                 onClick={nextYear}
-                className="p-1 hover:bg-zinc-800 text-zinc-500 transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+                aria-label="下一个年份"
               >
                 <ChevronRight size={14} />
               </button>
             </div>
           </div>
 
-          {/* Map Area */}
           <div className="relative">
-            <RadarScan />
-            <div ref={mapRef} className="w-full h-[50vh] sm:h-[60vh] bg-zinc-900" />
+            <div ref={mapRef} className="h-[440px] w-full bg-zinc-900 sm:h-[560px]" />
             {!isReady && (
               <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
-                <div className="text-xs text-zinc-600">Initializing map engine...</div>
+                <div className="text-xs text-zinc-600">正在加载路线地图...</div>
               </div>
             )}
           </div>
 
-          {/* Year Chips */}
-          <div className="px-3 py-2 border-t border-zinc-800 flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 border-t border-zinc-800 px-4 py-3">
             <button
               onClick={() => setSelectedYear('all')}
-              className={`text-[10px] px-2 py-1 border transition-colors ${
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${
                 selectedYear === 'all'
-                  ? 'border-green-400/50 text-green-400 bg-green-400/10'
-                  : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                  ? 'border-cyan-400/50 bg-cyan-400/10 text-cyan-200'
+                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
               }`}
             >
-              ALL
+              <Route size={11} />
+              全部
             </button>
             {years.map((y) => (
               <button
                 key={y}
                 onClick={() => setSelectedYear(y)}
-                className={`text-[10px] px-2 py-1 border transition-colors ${
+                className={`rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${
                   selectedYear === y
-                    ? 'border-green-400/50 text-green-400 bg-green-400/10'
-                    : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                    ? 'border-cyan-400/50 bg-cyan-400/10 text-cyan-200'
+                    : 'border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                 }`}
               >
                 {y}

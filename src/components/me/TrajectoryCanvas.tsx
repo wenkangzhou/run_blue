@@ -39,6 +39,7 @@ export function TrajectoryCanvas({ activities }: TrajectoryCanvasProps) {
       if (!parent) return;
       canvas.width = parent.offsetWidth * window.devicePixelRatio;
       canvas.height = parent.offsetHeight * window.devicePixelRatio;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     };
 
@@ -82,7 +83,7 @@ export function TrajectoryCanvas({ activities }: TrajectoryCanvasProps) {
         }
 
         const alpha = 0.08 + Math.sin(progress * 2 + idx) * 0.03;
-        ctx.strokeStyle = `rgba(74, 222, 128, ${alpha})`;
+        ctx.strokeStyle = `rgba(34, 211, 238, ${alpha})`;
         ctx.lineWidth = 1;
         ctx.stroke();
       });

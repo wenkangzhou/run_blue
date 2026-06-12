@@ -26,6 +26,9 @@ export function ActivityCard({ activity, showMap = false, compact = false }: Act
   const { t, i18n } = useTranslation();
   const { unit } = useSettingsStore();
   const selectActivity = useActivitiesStore((state) => state.selectActivity);
+  const primeActivity = React.useCallback(() => {
+    selectActivity(activity);
+  }, [activity, selectActivity]);
 
   const isRun = activity.type === 'Run';
   const pace = unit === 'imperial' 
@@ -37,8 +40,10 @@ export function ActivityCard({ activity, showMap = false, compact = false }: Act
       <Link
         href={`/activities/${activity.id}`}
         className="block"
-        onClick={() => selectActivity(activity)}
-        onPointerEnter={() => selectActivity(activity)}
+        onClick={primeActivity}
+        onFocus={primeActivity}
+        onPointerDown={primeActivity}
+        onPointerEnter={primeActivity}
         prefetch
       >
         <div className="flex items-center gap-3 p-3 border-2 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">

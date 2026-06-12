@@ -186,6 +186,7 @@ export function analyzeActivityStreams(
     hrDrift > (lthr * 0.05) &&
     !hasPaceSurges &&
     pattern !== 'interval' &&
+    pattern !== 'progression' &&
     pattern !== 'warmup-cooldown';
 
   return {
@@ -217,7 +218,7 @@ export function formatStreamAnalysisForPrompt(
     ? {
         'warmup-cooldown': 'Warmup + Cooldown structure detected. Slow segments at start/end are NORMAL — do NOT flag as poor performance.',
         'interval': 'Interval/Fartlek structure detected. Alternating fast/slow segments are INTENTIONAL — do NOT flag pace variation as a problem.',
-        'progression': 'Progression run detected. Overall pace trend is by design.',
+        'progression': 'Progression run detected. Overall pace trend is by design. A slow final segment after the fastest part is often cooldown or deliberate structure adjustment, not automatic failure.',
         'steady': 'Steady pace throughout. Good aerobic control.',
         'bonk': 'Sustained slowdown in latter half with no recovery. In a race this strongly suggests glycogen depletion / bonk.',
         'mixed': 'Complex pace pattern.',
@@ -226,7 +227,7 @@ export function formatStreamAnalysisForPrompt(
     : {
         'warmup-cooldown': '检测到热身+冷身结构。开头/结尾的慢速段是正常的——禁止标记为表现差。',
         'interval': '检测到间歇/法特莱克结构。快慢交替是训练设计——禁止将配速波动判定为问题。',
-        'progression': '检测到渐进跑结构。整体配速趋势是有意设计。',
+        'progression': '检测到渐进跑结构。整体配速趋势是有意设计；快段后的末段降速通常是主动冷身或结构调整，不应自动判为执行失败。',
         'steady': '全程配速稳定。有氧控制良好。',
         'bonk': '后程持续掉速且无回升。比赛中高度疑似糖原耗竭/跑崩。',
         'mixed': '配速模式较复杂。',

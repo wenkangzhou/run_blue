@@ -15,6 +15,9 @@ interface ActivityGridCardProps {
 export function ActivityGridCard({ activity }: ActivityGridCardProps) {
   const selectActivity = useActivitiesStore((state) => state.selectActivity);
   const date = getActivityDate(activity);
+  const primeActivity = React.useCallback(() => {
+    selectActivity(activity);
+  }, [activity, selectActivity]);
   
   // Format month manually to avoid SSR issues
   const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -25,8 +28,10 @@ export function ActivityGridCard({ activity }: ActivityGridCardProps) {
     <Link
       href={`/activities/${activity.id}`}
       className="block"
-      onClick={() => selectActivity(activity)}
-      onPointerEnter={() => selectActivity(activity)}
+      onClick={primeActivity}
+      onFocus={primeActivity}
+      onPointerDown={primeActivity}
+      onPointerEnter={primeActivity}
       prefetch
     >
       <div className="relative bg-zinc-100 dark:bg-zinc-800 rounded-sm overflow-hidden aspect-[3/4] hover:ring-2 hover:ring-blue-500 transition-all">

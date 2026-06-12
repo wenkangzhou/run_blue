@@ -47,19 +47,22 @@ export default function ActivityDetailPage() {
   const { resolvedTheme } = useTheme();
   const { t } = useTranslation();
   const isDark = resolvedTheme === 'dark';
-  const [activity, setActivity] = useState<StravaActivity | null>(null);
+  const activityId = parseInt(params.id as string, 10);
+  const { activities: allActivities, selectedActivity } = useActivitiesStore();
+  const selectedSeedActivity = selectedActivity?.id === activityId ? selectedActivity : null;
+  const [activity, setActivity] = useState<StravaActivity | null>(() => selectedSeedActivity);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !selectedSeedActivity);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [splitsExpanded, setSplitsExpanded] = useState(false);
   const [lapsExpanded, setLapsExpanded] = useState(false);
-  const [isFromCache, setIsFromCache] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(() => Boolean(selectedSeedActivity));
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [forceShow, setForceShow] = useState(false);
-  const [hasShownContent, setHasShownContent] = useState(false);
+  const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   const handleBack = useCallback(() => {
@@ -84,7 +87,6 @@ export default function ActivityDetailPage() {
   }, [router]);
 
   // Pace trend data
-  const { activities: allActivities, selectedActivity } = useActivitiesStore();
   const paceTrend = useMemo(() => {
     if (!activity) return null;
     return calculatePaceTrend(allActivities, activity.id);
@@ -164,8 +166,6 @@ export default function ActivityDetailPage() {
       return () => clearTimeout(timeout);
     }
   }, [activity, forceShow]);
-
-  const activityId = parseInt(params.id as string, 10);
 
   useEffect(() => {
     if (activity || !selectedActivity || selectedActivity.id !== activityId) return;
@@ -632,7 +632,11 @@ export default function ActivityDetailPage() {
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
             <main className="min-w-0 space-y-5">
               <div className="min-w-0">
-                <AIAnalysisCard activity={activity} streams={streams} />
+                <AIAnalysisCard
+                  activity={activity}
+                  streams={streams}
+                  enabled={isAuthenticated && Boolean(user?.accessToken) && !needsReauth}
+                />
               </div>
 
               {streams && (

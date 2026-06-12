@@ -1,0 +1,190 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
+import { isActivitiesCacheStale, useActivitiesStore } from '@/store/activities';
+import { getActivityTimestamp } from '@/lib/dates';
+import type { StravaActivity } from '@/types';
+
+interface UseProfileActivitiesResult {
+  activities: StravaActivity[];
+  canRefresh: boolean;
+  error: string | null;
+  isLoading: boolean;
+  isSyncing: boolean;
+  lastFetchedAt: number | null;
+  refresh: () => Promise<void>;
+  source: 'strava' | 'demo';
+  syncError: string | null;
+}
+
+let cachedDemoActivities: StravaActivity[] | null = null;
+
+function getSyncErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('401') || message.includes('Unauthorized') || message.includes('auth_required')) {
+    return '登录已过期，正在使用本地缓存';
+  }
+  if (message.includes('429')) {
+    return 'Strava 限流中，正在使用本地缓存';
+  }
+  return '同步失败，正在使用本地缓存';
+}
+
+function sortRuns(activities: StravaActivity[]) {
+  return activities
+    .filter((activity) => activity.type === 'Run' || activity.sport_type === 'Run')
+    .sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a));
+}
+
+async function loadDemoActivities() {
+  if (cachedDemoActivities) return cachedDemoActivities;
+
+  const res = await fetch('/data/activities.json');
+  if (!res.ok) throw new Error('Failed to fetch demo activities');
+  const activities = (await res.json()) as StravaActivity[];
+  cachedDemoActivities = sortRuns(activities);
+  return cachedDemoActivities;
+}
+
+function useActivitiesStoreHydrated() {
+  const [hasHydrated, setHasHydrated] = useState(() => useActivitiesStore.persist.hasHydrated());
+
+  useEffect(() => {
+    if (useActivitiesStore.persist.hasHydrated()) {
+      setHasHydrated(true);
+      return;
+    }
+
+    return useActivitiesStore.persist.onFinishHydration(() => {
+      setHasHydrated(true);
+    });
+  }, []);
+
+  return hasHydrated;
+}
+
+export function useProfileActivities(): UseProfileActivitiesResult {
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const cachedActivities = useActivitiesStore((state) => state.activities);
+  const hasMore = useActivitiesStore((state) => state.hasMore);
+  const lastFetchedAt = useActivitiesStore((state) => state.lastFetchedAt);
+  const hasHydrated = useActivitiesStoreHydrated();
+  const {
+    isSyncing: historySyncing,
+    syncHistory,
+    reset: resetHistorySync,
+  } = useActivityHistorySync(user?.accessToken);
+
+  const [demoActivities, setDemoActivities] = useState<StravaActivity[]>(cachedDemoActivities || []);
+  const [demoLoading, setDemoLoading] = useState(!cachedDemoActivities);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [manualSyncing, setManualSyncing] = useState(false);
+  const autoSyncTokenRef = useRef<string | null>(null);
+
+  const stravaRuns = useMemo(() => sortRuns(cachedActivities), [cachedActivities]);
+  const shouldUseStrava = isAuthenticated && Boolean(user?.accessToken);
+
+  useEffect(() => {
+    if (authLoading || shouldUseStrava) return;
+
+    let cancelled = false;
+    setDemoLoading(!cachedDemoActivities);
+    setDemoError(null);
+
+    loadDemoActivities()
+      .then((activities) => {
+        if (!cancelled) setDemoActivities(activities);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDemoError('Failed to load activities data');
+          console.error(error);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDemoLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, shouldUseStrava]);
+
+  useEffect(() => {
+    if (!user?.accessToken || !shouldUseStrava || authLoading || !hasHydrated) return;
+    if (autoSyncTokenRef.current === user.accessToken) return;
+
+    const shouldSyncRecent = stravaRuns.length === 0 || isActivitiesCacheStale(lastFetchedAt);
+    const shouldSyncHistory = hasMore;
+    if (!shouldSyncRecent && !shouldSyncHistory) return;
+
+    autoSyncTokenRef.current = user.accessToken;
+    setSyncError(null);
+    resetHistorySync();
+
+    syncHistory({
+      forceRecent: shouldSyncRecent,
+      syncRecent: shouldSyncRecent,
+    }).catch((error) => {
+      setSyncError(getSyncErrorMessage(error));
+    });
+  }, [
+    authLoading,
+    hasHydrated,
+    hasMore,
+    lastFetchedAt,
+    resetHistorySync,
+    shouldUseStrava,
+    stravaRuns.length,
+    syncHistory,
+    user?.accessToken,
+  ]);
+
+  const refresh = useCallback(async () => {
+    if (!user?.accessToken || !shouldUseStrava) return;
+
+    setManualSyncing(true);
+    setSyncError(null);
+    resetHistorySync();
+
+    try {
+      await syncHistory({
+        forceRecent: true,
+        syncRecent: true,
+      });
+    } catch (error) {
+      setSyncError(getSyncErrorMessage(error));
+    } finally {
+      setManualSyncing(false);
+    }
+  }, [resetHistorySync, shouldUseStrava, syncHistory, user?.accessToken]);
+
+  if (shouldUseStrava) {
+    return {
+      activities: stravaRuns,
+      canRefresh: true,
+      error: stravaRuns.length === 0 ? syncError : null,
+      isLoading: authLoading || !hasHydrated || (stravaRuns.length === 0 && historySyncing),
+      isSyncing: historySyncing || manualSyncing,
+      lastFetchedAt,
+      refresh,
+      source: 'strava',
+      syncError,
+    };
+  }
+
+  return {
+    activities: demoActivities,
+    canRefresh: false,
+    error: demoError,
+    isLoading: authLoading || demoLoading,
+    isSyncing: false,
+    lastFetchedAt: null,
+    refresh,
+    source: 'demo',
+    syncError: null,
+  };
+}

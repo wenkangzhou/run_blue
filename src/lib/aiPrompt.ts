@@ -751,6 +751,9 @@ export function buildProfessionalPrompt(
       ? `\n2a. Respect the supplied workout type. If it is interval/fartlek, analyze rep quality, recovery contrast, and execution consistency instead of judging the whole run by average pace. If it is progression, focus on pacing build. If it is recovery/easy but heart rate looks high, discuss heat/fatigue possibilities before calling it underperformance. If confidence is low, explicitly acknowledge uncertainty.`
       : `\n2a. 请尊重上面给出的训练类型。如果是间歇/法特莱克，要重点分析重复段质量、恢复段对比和执行一致性，不要只拿全程平均配速下结论。如果是渐进跑，重点看配速构建。如果是恢复跑/轻松跑但心率偏高，先讨论高温或疲劳可能，再决定是否表现不佳。如果识别置信度低，要明确说明不确定性。`;
     prompt += en
+      ? `\n2b. For progression or warmup/cooldown structures, a slower final segment after a fast segment is usually cooldown or a deliberate structure change. Do NOT write overconfident phrases like "monitoring failure", "poor execution", or "insufficient reserves" solely because pace and heart rate dropped together.`
+      : `\n2b. 对渐进跑或热身/冷身结构，快段之后的末段降速通常是主动冷身或结构调整。不要仅因为配速和心率同时下降，就写出“监控不足”“执行失败”“体能储备不足”等过度笃定结论。`;
+    prompt += en
       ? `\n3. Load assessment: Judge based on (a) this workout's intensity and distance ratio to current week volume, (b) week-over-week change. If current week volume jumped >15% vs last week, FLAG it as "volume increase too fast, injury risk". If the workout itself is hard (T/I/R zone) and >15% of weekly volume, FLAG it as "high single-session load". Do NOT mechanically say "volume is too low" when weekly volume is actually rising.`
       : `\n3. 负荷评估: 基于以下两点判断：(a)本次训练强度及占本周跑量比例，(b)本周 vs 上周跑量环比变化。如果本周跑量环比上周增长>15%，必须标记为"跑量增加过快，注意受伤风险"。如果单次高强度训练（T/I/R区）占本周跑量>15%，标记为"单次负荷较大"。不要在周跑量实际处于上升期时机械地说"跑量偏低"。`;
     if (similarStats) {
