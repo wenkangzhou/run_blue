@@ -14,6 +14,10 @@ export interface RouteCanvasOptions {
   markerBorderWidth?: number;
   markerBorderColor?: string;
   stats?: Array<{ label: string; value: string }> | null;
+  mode?: 'transparent' | 'poster';
+  title?: string;
+  subtitle?: string;
+  brand?: string;
 }
 
 const DEFAULT_OPTIONS: Required<Omit<RouteCanvasOptions, 'stats'>> & { stats: RouteCanvasOptions['stats'] } = {
@@ -30,7 +34,133 @@ const DEFAULT_OPTIONS: Required<Omit<RouteCanvasOptions, 'stats'>> & { stats: Ro
   markerBorderWidth: 5,
   markerBorderColor: '#ffffff',
   stats: null,
+  mode: 'transparent',
+  title: '',
+  subtitle: '',
+  brand: 'RUN BLUE',
 };
+
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function drawGridBackground(ctx: CanvasRenderingContext2D, size: number) {
+  ctx.save();
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.07)';
+  ctx.lineWidth = 2;
+  for (let x = 0; x <= size; x += 64) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, size);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= size; y += 64) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(size, y);
+    ctx.stroke();
+  }
+
+  const gradient = ctx.createRadialGradient(size * 0.7, size * 0.22, 80, size * 0.7, size * 0.22, size * 0.78);
+  gradient.addColorStop(0, 'rgba(59, 130, 246, 0.18)');
+  gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  ctx.restore();
+}
+
+function drawPosterHeader(
+  ctx: CanvasRenderingContext2D,
+  opts: Required<Omit<RouteCanvasOptions, 'stats'>> & { stats: RouteCanvasOptions['stats'] }
+) {
+  const title = opts.title || 'Running Route';
+  const subtitle = opts.subtitle || '';
+
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(opts.brand, opts.padding, 82);
+
+  ctx.fillStyle = '#2563eb';
+  drawRoundRect(ctx, opts.size - opts.padding - 148, 54, 148, 56, 18);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ROUTE', opts.size - opts.padding - 74, 82);
+
+  ctx.fillStyle = '#020617';
+  ctx.font = '900 74px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(title.slice(0, 22), opts.padding, 184);
+
+  if (subtitle) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '28px monospace';
+    ctx.fillText(subtitle.slice(0, 42), opts.padding, 236);
+  }
+  ctx.restore();
+}
+
+function drawPosterStats(
+  ctx: CanvasRenderingContext2D,
+  items: Array<{ label: string; value: string }>,
+  opts: Required<Omit<RouteCanvasOptions, 'stats'>> & { stats: RouteCanvasOptions['stats'] }
+) {
+  if (items.length === 0) return;
+
+  const y = opts.size - opts.padding - 150;
+  const gap = 22;
+  const cardWidth = (opts.size - opts.padding * 2 - gap * 2) / 3;
+  const cardHeight = 150;
+
+  ctx.save();
+  items.slice(0, 3).forEach((item, index) => {
+    const x = opts.padding + index * (cardWidth + gap);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 12;
+    drawRoundRect(ctx, x, y, cardWidth, cardHeight, 26);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+    ctx.lineWidth = 2;
+    drawRoundRect(ctx, x, y, cardWidth, cardHeight, 26);
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 24px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item.label, x + cardWidth / 2, y + 48);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '900 44px monospace';
+    ctx.fillText(item.value, x + cardWidth / 2, y + 104);
+  });
+  ctx.restore();
+}
 
 function drawTextBlock(
   ctx: CanvasRenderingContext2D,
@@ -92,9 +222,22 @@ export function drawRouteToCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
+  const isPoster = opts.mode === 'poster';
   const hasStats = Array.isArray(opts.stats) && opts.stats.length > 0;
-  const statsAreaHeight = hasStats ? 380 : 0;
-  const routeAreaTop = hasStats ? statsAreaHeight + 20 : opts.padding;
+
+  if (isPoster) {
+    drawGridBackground(ctx, opts.size);
+    drawPosterHeader(ctx, opts);
+  }
+
+  const routeAreaTop = isPoster
+    ? 280
+    : hasStats
+      ? 400
+      : opts.padding;
+  const routeAreaBottom = isPoster
+    ? opts.size - opts.padding - (hasStats ? 190 : 40)
+    : opts.size - opts.padding;
 
   // Compute bounding box
   let minLat = Infinity;
@@ -125,29 +268,44 @@ export function drawRouteToCanvas(
 
   // Determine scale to fit inside the route area only, preserving aspect ratio
   const availableWidth = opts.size - opts.padding * 2;
-  const routeAreaHeight = opts.size - opts.padding - routeAreaTop;
+  const routeAreaHeight = Math.max(routeAreaBottom - routeAreaTop, 100);
   const scale = Math.min(
     availableWidth / expandedLngRange,
-    Math.max(routeAreaHeight, 100) / expandedLatRange
+    routeAreaHeight / expandedLatRange
   );
 
   const routeWidth = expandedLngRange * scale;
   const routeHeight = expandedLatRange * scale;
   const offsetX = (opts.size - routeWidth) / 2;
   // Center the route vertically within the route area
-  const offsetY = opts.padding + (routeAreaHeight - routeHeight) / 2;
+  const offsetY = routeAreaTop + (routeAreaHeight - routeHeight) / 2;
 
   const project = (lat: number, lng: number) => ({
     x: offsetX + (lng - minLng) * scale,
-    y: opts.size - (offsetY + (lat - minLat) * scale),
+    y: offsetY + (maxLat - lat) * scale,
   });
 
   const projected = points.map(([lat, lng]) => project(lat, lng));
 
   // Draw stats text first
-  if (hasStats && opts.stats) {
+  if (!isPoster && hasStats && opts.stats) {
     const startY = opts.padding + 40;
     drawTextBlock(ctx, opts.stats, opts.size / 2, startY);
+  }
+
+  if (isPoster) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(37, 99, 235, 0.12)';
+    ctx.lineWidth = 38;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(projected[0].x, projected[0].y);
+    for (let i = 1; i < projected.length; i++) {
+      ctx.lineTo(projected[i].x, projected[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Draw glow
@@ -202,6 +360,20 @@ export function drawRouteToCanvas(
 
     drawMarker(projected[0], opts.startColor);
     drawMarker(projected[projected.length - 1], opts.endColor);
+  }
+
+  if (isPoster && hasStats && opts.stats) {
+    drawPosterStats(ctx, opts.stats, opts);
+  }
+
+  if (isPoster) {
+    ctx.save();
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '22px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('runblue.app', opts.size / 2, opts.size - 30);
+    ctx.restore();
   }
 
   return canvas.toDataURL('image/png');

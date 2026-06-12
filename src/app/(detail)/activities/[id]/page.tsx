@@ -20,7 +20,20 @@ import { SimpleLineChart } from '@/components/charts/SimpleLineChart';
 import { SharePosterModal } from '@/components/SharePosterModal';
 import { SaveRouteButton } from '@/components/SaveRouteButton';
 import { calculatePaceTrend } from '@/lib/paceTrend';
-import { ChevronLeft, Loader2, RefreshCw, Share2, TrendingUp, MapPin, Trophy } from 'lucide-react';
+import {
+  BarChart3,
+  CalendarDays,
+  ChevronLeft,
+  Clock3,
+  Gauge,
+  MapPin,
+  RefreshCw,
+  Route,
+  Share2,
+  Timer,
+  TrendingUp,
+  Trophy,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // 20km threshold for collapsing
@@ -49,8 +62,29 @@ export default function ActivityDetailPage() {
   const [hasShownContent, setHasShownContent] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
 
+  const handleBack = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      const historyIndex = typeof window.history.state?.idx === 'number'
+        ? window.history.state.idx
+        : 0;
+
+      if (historyIndex > 0) {
+        router.back();
+        window.setTimeout(() => {
+          if (window.location.pathname === currentPath) {
+            router.push('/activities');
+          }
+        }, 450);
+        return;
+      }
+    }
+
+    router.push('/activities');
+  }, [router]);
+
   // Pace trend data
-  const { activities: allActivities } = useActivitiesStore();
+  const { activities: allActivities, selectedActivity } = useActivitiesStore();
   const paceTrend = useMemo(() => {
     if (!activity) return null;
     return calculatePaceTrend(allActivities, activity.id);
@@ -132,6 +166,13 @@ export default function ActivityDetailPage() {
   }, [activity, forceShow]);
 
   const activityId = parseInt(params.id as string, 10);
+
+  useEffect(() => {
+    if (activity || !selectedActivity || selectedActivity.id !== activityId) return;
+    setActivity(selectedActivity);
+    setIsFromCache(true);
+    setLoading(false);
+  }, [activity, activityId, selectedActivity]);
 
   // Handle 401 error - try refresh session or logout
   const handleAuthError = useCallback(async () => {
@@ -336,14 +377,13 @@ export default function ActivityDetailPage() {
     };
   }, [activity?.laps]);
 
-  // Show loading only if no cache data available
   if (loading && !activity) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <button 
-              onClick={() => router.back()}
+          <div className="container mx-auto px-4 py-4 max-w-6xl">
+            <button
+              onClick={handleBack}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
@@ -351,9 +391,7 @@ export default function ActivityDetailPage() {
             </button>
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="animate-spin text-zinc-400" size={32} />
-        </div>
+        <ActivityDetailSkeleton />
       </div>
     );
   }
@@ -363,9 +401,9 @@ export default function ActivityDetailPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <button 
-              onClick={() => router.back()}
+          <div className="container mx-auto px-4 py-4 max-w-6xl">
+            <button
+              onClick={handleBack}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
@@ -373,7 +411,7 @@ export default function ActivityDetailPage() {
             </button>
           </div>
         </div>
-        <div className="container mx-auto px-4 py-12 max-w-2xl">
+        <div className="container mx-auto px-4 py-12 max-w-6xl">
           <div className="text-center">
             {rateLimited ? (
               <>
@@ -407,19 +445,20 @@ export default function ActivityDetailPage() {
   // Page is ready if we have activity data
   // Once shown, always stay ready (never go back to full-page loading)
   const isPageReady = hasShownContent || (activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow));
+  const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
-          <Link 
-            href="/activities" 
+        <div className="container mx-auto px-4 py-4 max-w-6xl flex items-center justify-between">
+          <button
+            onClick={handleBack}
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </button>
           
           {/* Refresh button - only show if we have data */}
           {activity && (
@@ -444,7 +483,7 @@ export default function ActivityDetailPage() {
       {/* Warning banner */}
       {(needsReauth || rateLimited) && activity && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
-          <div className="container mx-auto px-4 py-2 max-w-2xl">
+          <div className="container mx-auto px-4 py-2 max-w-6xl">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
               {rateLimited ? t('errors.rateLimitedShowCache', '请求过于频繁，显示缓存数据') : t('auth.sessionExpiredShowCache', '登录已过期，显示缓存数据')}
             </span>
@@ -454,434 +493,414 @@ export default function ActivityDetailPage() {
 
       {/* Page content or full-page loading - only show once */}
       {!isPageReady ? (
-        <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-          <Loader2 className="animate-spin text-zinc-400" size={32} />
-        </div>
+        <ActivityDetailSkeleton />
       ) : activity && (
-        <div className="container mx-auto px-4 py-4 max-w-2xl relative">
-          {/* Header */}
-          <div className="mb-4">
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <div className="min-w-0">
-                <h1 className="font-pixel text-xl font-bold mb-1">{activity.name}</h1>
-                <p className="font-mono text-xs text-zinc-500">
-                  {formatDateTime(activity.start_date_local)}
-                </p>
-              </div>
-              <div className="flex-shrink-0 flex items-center gap-2">
-                <SaveRouteButton activity={activity} />
-                {activity.map?.polyline && (
-                  <button
-                    onClick={() => setIsShareOpen(true)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold uppercase border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    title={t('sharePoster.title', '分享海报')}
-                  >
-                    <Share2 size={14} />
-                    <span className="hidden sm:inline">{t('sharePoster.title', '分享海报')}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-            {activity.description && activity.description.trim().length > 0 && (
-              <p className="font-mono text-xs text-zinc-400 mt-1 break-words">
-                {activity.description.trim()}
-              </p>
-            )}
-          </div>
-
-          {/* Map - notify when ready */}
-          {activity.map?.polyline && (
-            <div className="mb-4 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative">
-              <ActivityMap 
-                polyline={activity.map.polyline}
-                startLatlng={activity.start_latlng}
-                endLatlng={activity.end_latlng}
-                height="200px"
-                isDark={isDark}
-                onReady={() => setMapReady(true)}
-              />
-              {/* Workout type tag */}
-              {activity.workout_type !== undefined && activity.workout_type !== null && (
-                <div className="absolute top-2 right-2 z-[400]">
-                  <span className="inline-flex items-center px-2 py-0.5 font-mono text-[10px] font-bold bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                    {activity.workout_type === 1 ? '比赛' :
-                     activity.workout_type === 2 ? '长跑' :
-                     activity.workout_type === 3 ? '锻炼' :
-                     activity.workout_type === 0 ? '带娃' :
-                     `类型${activity.workout_type}`}
-                  </span>
+        <div className="container mx-auto max-w-6xl px-4 py-5 sm:py-6 relative">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.92fr)] lg:items-stretch">
+            <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="mb-2 inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                    <CalendarDays size={13} />
+                    {formatDateTime(activity.start_date_local)}
+                  </div>
+                  <h1 className="break-words text-2xl font-black leading-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
+                    {activity.name}
+                  </h1>
+                  {activity.description && activity.description.trim().length > 0 && (
+                    <p className="mt-2 break-words font-mono text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      {activity.description.trim()}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Route Achievement Banner */}
-          {routeAchievement && (
-            <div className="mb-4 border-2 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-                    <span className="font-mono text-[10px] uppercase text-zinc-500">{t('activity.route', '路线')}</span>
-                  </div>
-                  <h3 className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                    {routeAchievement.routeName}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    {routeAchievement.isPB && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
-                        <Trophy className="w-3 h-3" />
-                        {t('activity.routePB', '路线 PB')}
-                      </span>
-                    )}
-                    <span className="font-mono text-[10px] text-zinc-500">
-                      {t('activity.routeRank', { rank: routeAchievement.rank, total: routeAchievement.totalRuns })}
-                    </span>
-                    {routeAchievement.diffSec !== 0 && (
-                      <span className={`font-mono text-[10px] font-bold ${routeAchievement.diffSec < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {routeAchievement.diffSec < 0 ? '↑' : '↓'} {Math.abs(Math.round(routeAchievement.diffSec))}s/km
-                      </span>
-                    )}
-                  </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                  <SaveRouteButton activity={activity} />
+                  {routePolyline && (
+                    <button
+                      onClick={() => setIsShareOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 font-mono text-xs font-bold text-zinc-700 transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      title={t('sharePoster.title', '分享海报')}
+                    >
+                      <Share2 size={14} />
+                      <span>{t('sharePoster.title', '分享海报')}</span>
+                    </button>
+                  )}
                 </div>
-                <Link
-                  href={`/routes/${encodeURIComponent(routeAchievement.routeKey)}`}
-                  className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[10px] font-bold border-2 border-zinc-800 dark:border-zinc-200 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-                >
-                  {t('activity.viewRoute', '路线详情')}
-                  <ChevronLeft className="w-3 h-3 rotate-180" />
-                </Link>
               </div>
-            </div>
-          )}
 
-          {/* Main Stats - Compact, no truncate */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            <StatCard 
-              label={t('activity.distance')}
-              value={formatDistance(activity.distance, 'km')}
-            />
-            <StatCard 
-              label={t('activity.time')}
-              value={formatDurationDetail(activity.moving_time)}
-            />
-            <StatCard 
-              label={t('activity.pace')}
-              value={formatPace(activity.distance, activity.moving_time, 'min/km')}
-            />
-            <StatCard 
-              label={t('activity.elapsedTime', '用时')}
-              value={formatDurationDetail(activity.elapsed_time)}
-            />
-          </div>
-
-          {/* Extended Stats */}
-          <div className="mb-4">
-            <ActivityStats activity={activity} />
-          </div>
-
-          {/* Best Efforts */}
-          {activity.best_efforts && activity.best_efforts.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
-                  {t('activity.bestEfforts', '本次最佳成绩')}
-                </h3>
+              <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatCard
+                  icon={<Route size={16} />}
+                  label={t('activity.distance')}
+                  value={formatDistance(activity.distance, 'km')}
+                  tone="blue"
+                />
+                <StatCard
+                  icon={<Timer size={16} />}
+                  label={t('activity.time')}
+                  value={formatDurationDetail(activity.moving_time)}
+                  tone="emerald"
+                />
+                <StatCard
+                  icon={<Gauge size={16} />}
+                  label={t('activity.pace')}
+                  value={formatPace(activity.distance, activity.moving_time, 'min/km')}
+                  tone="orange"
+                />
+                <StatCard
+                  icon={<Clock3 size={16} />}
+                  label={t('activity.elapsedTime', '用时')}
+                  value={formatDurationDetail(activity.elapsed_time)}
+                  tone="zinc"
+                />
               </div>
-              <div className="flex flex-wrap gap-2">
-                {sortBestEfforts(activity.best_efforts).map((effort) => (
-                  <div
-                    key={effort.name}
-                    className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
-                  >
-                    <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      {effort.name}
-                    </span>
-                    <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
-                      {formatDurationDetail(effort.elapsed_time)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Segment Efforts */}
-          {activity.segment_efforts && activity.segment_efforts.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
-                  {t('activity.segmentEfforts', '路段成绩')}
-                  <span className="ml-1 font-normal text-zinc-400">({activity.segment_efforts.length})</span>
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {activity.segment_efforts.map((effort) => (
-                  <div
-                    key={effort.id}
-                    className="flex items-center justify-between px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
-                  >
+              {routeAchievement && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300 truncate">
-                          {effort.segment.name}
+                      <div className="mb-1.5 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                        <span className="font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
+                          {t('activity.route', '路线')}
                         </span>
-                        {effort.pr_rank === 1 && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
-                            PR
-                          </span>
-                        )}
-                        {effort.kom_rank && effort.kom_rank <= 3 && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-300 dark:border-red-700">
-                            #{effort.kom_rank}
-                          </span>
-                        )}
-                        {effort.achievements && effort.achievements.map((a, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-300 dark:border-zinc-600"
-                          >
-                            {a.type} #{a.rank}
-                          </span>
-                        ))}
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="font-mono text-[10px] text-zinc-400">
-                          {(effort.segment.distance / 1000).toFixed(2)} km
+                      <h3 className="truncate font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        {routeAchievement.routeName}
+                      </h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {routeAchievement.isPB && (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            <Trophy className="h-3 w-3" />
+                            {t('activity.routePB', '路线 PB')}
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] text-zinc-500">
+                          {t('activity.routeRank', { rank: routeAchievement.rank, total: routeAchievement.totalRuns })}
                         </span>
-                        <span className="font-mono text-[10px] text-zinc-400">
-                          {effort.segment.average_grade > 0 ? '+' : ''}{effort.segment.average_grade.toFixed(1)}%
-                        </span>
-                        <span className="font-mono text-[10px] text-blue-500 dark:text-blue-400">
-                          {formatPace(effort.segment.distance, effort.elapsed_time, 'min/km')}
-                        </span>
+                        {routeAchievement.diffSec !== 0 && (
+                          <span className={`font-mono text-[10px] font-bold ${routeAchievement.diffSec < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {routeAchievement.diffSec < 0 ? '快' : '慢'} {Math.abs(Math.round(routeAchievement.diffSec))}s/km
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                        {formatDurationDetail(effort.elapsed_time)}
+                    <Link
+                      href={`/routes/${encodeURIComponent(routeAchievement.routeKey)}`}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-300 bg-white px-2.5 py-1.5 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                    >
+                      {t('activity.viewRoute', '路线详情')}
+                      <ChevronLeft className="h-3 w-3 rotate-180" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="relative overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              {routePolyline ? (
+                <>
+                  <ActivityMap
+                    polyline={routePolyline}
+                    startLatlng={activity.start_latlng}
+                    endLatlng={activity.end_latlng}
+                    height="clamp(320px, 42vh, 460px)"
+                    isDark={isDark}
+                    onReady={() => setMapReady(true)}
+                  />
+                  {activity.workout_type !== undefined && activity.workout_type !== null && (
+                    <div className="absolute right-3 top-3 z-[400]">
+                      <span className="inline-flex items-center rounded-md border border-zinc-200 bg-white/90 px-2.5 py-1 font-mono text-[10px] font-bold shadow-sm backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90">
+                        {activity.workout_type === 1 ? '比赛' :
+                         activity.workout_type === 2 ? '长跑' :
+                         activity.workout_type === 3 ? '锻炼' :
+                         activity.workout_type === 0 ? '带娃' :
+                         `类型${activity.workout_type}`}
                       </span>
                     </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex min-h-[260px] items-center justify-center">
+                  <p className="font-mono text-sm text-zinc-500">No route data</p>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+            <main className="min-w-0 space-y-5">
+              <div className="min-w-0">
+                <AIAnalysisCard activity={activity} streams={streams} />
+              </div>
+
+              {streams && (
+                <SectionCard
+                  title={t('activity.charts', '运动曲线')}
+                  icon={<BarChart3 size={15} />}
+                  aside={formatDistance(activity.distance, 'km')}
+                >
+                  <div className="space-y-4">
+                    {streams.heartrate && (
+                      <ChartSection
+                        title={t('activity.heartRate')}
+                        avgValue={(() => {
+                          const data = streams.heartrate.data as number[];
+                          const valid = data.filter(v => v > 50);
+                          if (valid.length === 0) return '';
+                          return `${Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)}`;
+                        })()}
+                        avgUnit="bpm"
+                        rangeValue={(() => {
+                          const data = streams.heartrate.data as number[];
+                          const valid = data.filter(v => v > 50);
+                          if (valid.length === 0) return '';
+                          return `${Math.round(Math.min(...valid))}–${Math.round(Math.max(...valid))}`;
+                        })()}
+                        color="#ef4444"
+                        timeData={streams.time?.data as number[]}
+                        distanceData={streams.distance?.data as number[]}
+                      >
+                        <SimpleLineChart
+                          data={streams.heartrate.data as number[]}
+                          color="#ef4444"
+                          height={130}
+                          xLabels={['0:00', formatDurationShort(activity.moving_time)]}
+                          domain={(() => {
+                            const data = streams.heartrate.data as number[];
+                            const valid = data.filter(v => v > 50);
+                            if (valid.length === 0) return undefined;
+                            const min = Math.min(...valid);
+                            const max = Math.max(...valid);
+                            return [min, max];
+                          })()}
+                        />
+                      </ChartSection>
+                    )}
+
+                    {streams.velocity_smooth && (
+                      <ChartSection
+                        title={t('activity.pace')}
+                        avgValue={(() => {
+                          const paces = processPaceData(streams.velocity_smooth.data as number[]);
+                          const valid = paces.filter(p => p > 0);
+                          if (valid.length === 0) return '';
+                          const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+                          return formatPaceValue(avg);
+                        })()}
+                        avgUnit=""
+                        rangeValue={(() => {
+                          const paces = processPaceData(streams.velocity_smooth.data as number[]);
+                          if (paces.length === 0) return '';
+                          const valid = paces.filter(p => p > 0);
+                          return `${formatPaceValue(Math.min(...valid))}–${formatPaceValue(Math.max(...valid))}`;
+                        })()}
+                        color="#3b82f6"
+                        timeData={streams.time?.data as number[]}
+                        distanceData={streams.distance?.data as number[]}
+                      >
+                        <SimpleLineChart
+                          data={processPaceData(streams.velocity_smooth.data as number[])}
+                          color="#3b82f6"
+                          height={130}
+                          xLabels={['0:00', formatDurationShort(activity.moving_time)]}
+                          formatYLabel={(v) => formatPaceValue(v)}
+                          domain={(() => {
+                            const paces = processPaceData(streams.velocity_smooth.data as number[]).filter(p => p > 0);
+                            if (paces.length === 0) return undefined;
+                            return [Math.min(...paces), Math.max(...paces)];
+                          })()}
+                          smooth={5}
+                        />
+                      </ChartSection>
+                    )}
+
+                    {streams.altitude && (
+                      <ChartSection
+                        title={t('activity.elevation')}
+                        avgValue={`+${Math.round(activity.total_elevation_gain)}`}
+                        avgUnit="m"
+                        rangeValue={`${Math.round(activity.elev_low || 0)}–${Math.round(activity.elev_high || 0)}m`}
+                        color="#22c55e"
+                        timeData={streams.time?.data as number[]}
+                        distanceData={streams.distance?.data as number[]}
+                      >
+                        <SimpleLineChart
+                          data={streams.altitude.data as number[]}
+                          color="#22c55e"
+                          height={130}
+                          xLabels={['0:00', formatDurationShort(activity.moving_time)]}
+                          domain={(() => {
+                            const data = streams.altitude.data as number[];
+                            if (data.length === 0) return undefined;
+                            return [Math.min(...data), Math.max(...data)];
+                          })()}
+                        />
+                      </ChartSection>
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Activity Achievements */}
-          {activity.achievements && activity.achievements.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
-                  {t('activity.achievements', '成就')}
-                </h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activity.achievements.map((achievement, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center px-2 py-1 font-mono text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                  >
-                    {achievement.type}
-                    {achievement.rank && <span className="ml-1">#{achievement.rank}</span>}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Charts */}
-          {streams && (
-            <div className="space-y-3 mb-4">
-              {streams.heartrate && (
-                <ChartSection
-                  title={t('activity.heartRate')}
-                  avgValue={(() => {
-                    const data = streams.heartrate.data as number[];
-                    const valid = data.filter(v => v > 50);
-                    if (valid.length === 0) return '';
-                    return `${Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)}`;
-                  })()}
-                  avgUnit="bpm"
-                  rangeValue={(() => {
-                    const data = streams.heartrate.data as number[];
-                    const valid = data.filter(v => v > 50);
-                    if (valid.length === 0) return '';
-                    return `${Math.round(Math.min(...valid))}–${Math.round(Math.max(...valid))}`;
-                  })()}
-                  color="#ef4444"
-                  timeData={streams.time?.data as number[]}
-                  distanceData={streams.distance?.data as number[]}
-                >
-                  <SimpleLineChart
-                    data={streams.heartrate.data as number[]}
-                    color="#ef4444"
-                    height={130}
-                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
-                    domain={(() => {
-                      const data = streams.heartrate.data as number[];
-                      const valid = data.filter(v => v > 50);
-                      if (valid.length === 0) return undefined;
-                      const min = Math.min(...valid);
-                      const max = Math.max(...valid);
-                      return [min, max];
-                    })()}
-                  />
-                </ChartSection>
+                </SectionCard>
               )}
 
-              {streams.velocity_smooth && (
-                <ChartSection
-                  title={t('activity.pace')}
-                  avgValue={(() => {
-                    const paces = processPaceData(streams.velocity_smooth.data as number[]);
-                    const valid = paces.filter(p => p > 0);
-                    if (valid.length === 0) return '';
-                    const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
-                    return formatPaceValue(avg);
-                  })()}
-                  avgUnit=""
-                  rangeValue={(() => {
-                    const paces = processPaceData(streams.velocity_smooth.data as number[]);
-                    if (paces.length === 0) return '';
-                    const valid = paces.filter(p => p > 0);
-                    return `${formatPaceValue(Math.min(...valid))}–${formatPaceValue(Math.max(...valid))}`;
-                  })()}
-                  color="#3b82f6"
-                  timeData={streams.time?.data as number[]}
-                  distanceData={streams.distance?.data as number[]}
+              {(shouldShowSplits || shouldShowLaps) && (
+                <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+                  {shouldShowSplits && (
+                    <SectionCard title={`${t('activity.splits')} (${activity.splits_metric!.length})`}>
+                      <div className="overflow-x-auto">
+                        <SplitsTable splits={splitsExpanded ? [...visibleSplits, ...hiddenSplits] : visibleSplits} showHeader={true} />
+                      </div>
+
+                      {hasHiddenSplits && (
+                        <button
+                          onClick={() => setSplitsExpanded(!splitsExpanded)}
+                          className="mt-0 w-full border-t border-zinc-200 py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                        >
+                          {splitsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                        </button>
+                      )}
+                    </SectionCard>
+                  )}
+
+                  {shouldShowLaps && (
+                    <SectionCard title={`${t('activity.laps')} (${activity.laps!.length})`}>
+                      <div className="overflow-x-auto">
+                        <LapsTable laps={lapsExpanded ? [...visibleLaps, ...hiddenLaps] : visibleLaps} showHeader={true} />
+                      </div>
+
+                      {hasHiddenLaps && (
+                        <button
+                          onClick={() => setLapsExpanded(!lapsExpanded)}
+                          className="mt-0 w-full border-t border-zinc-200 py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                        >
+                          {lapsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
+                        </button>
+                      )}
+                    </SectionCard>
+                  )}
+                </div>
+              )}
+            </main>
+
+            <aside className="min-w-0 space-y-5 xl:sticky xl:top-[88px]">
+              <ActivityStats activity={activity} />
+
+              {paceTrend && (
+                <SectionCard
+                  title={t('activity.paceTrend', '近期配速趋势')}
+                  icon={<TrendingUp size={15} />}
+                  aside={(
+                    <Link href="/stats" className="font-mono text-[10px] text-blue-600 hover:underline dark:text-blue-400">
+                      {t('activity.viewDetails', '查看详细对比')}
+                    </Link>
+                  )}
                 >
-                  <SimpleLineChart
-                    data={processPaceData(streams.velocity_smooth.data as number[])}
-                    color="#3b82f6"
-                    height={130}
-                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
-                    formatYLabel={(v) => formatPaceValue(v)}
-                    domain={(() => {
-                      const paces = processPaceData(streams.velocity_smooth.data as number[]).filter(p => p > 0);
-                      if (paces.length === 0) return undefined;
-                      return [Math.min(...paces), Math.max(...paces)];
-                    })()}
-                    smooth={5}
-                  />
-                </ChartSection>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.thisRun', '本次')}</div>
+                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.currentPaceStr}</div>
+                    </div>
+                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.last7Days', '近7天')}</div>
+                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days7AvgStr}</div>
+                      <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days7DiffStr}</div>
+                    </div>
+                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.last28Days', '近28天')}</div>
+                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days28AvgStr}</div>
+                      <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days28DiffStr}</div>
+                    </div>
+                  </div>
+                </SectionCard>
               )}
 
-              {streams.altitude && (
-                <ChartSection
-                  title={t('activity.elevation')}
-                  avgValue={`+${Math.round(activity.total_elevation_gain)}`}
-                  avgUnit="m"
-                  rangeValue={`${Math.round(activity.elev_low || 0)}–${Math.round(activity.elev_high || 0)}m`}
-                  color="#22c55e"
-                  timeData={streams.time?.data as number[]}
-                  distanceData={streams.distance?.data as number[]}
-                >
-                  <SimpleLineChart
-                    data={streams.altitude.data as number[]}
-                    color="#22c55e"
-                    height={130}
-                    xLabels={['0:00', formatDurationShort(activity.moving_time)]}
-                    domain={(() => {
-                      const data = streams.altitude.data as number[];
-                      if (data.length === 0) return undefined;
-                      return [Math.min(...data), Math.max(...data)];
-                    })()}
-                  />
-                </ChartSection>
+              {activity.best_efforts && activity.best_efforts.length > 0 && (
+                <SectionCard title={t('activity.bestEfforts', '本次最佳成绩')} icon={<Trophy size={15} />}>
+                  <div className="flex flex-wrap gap-2">
+                    {sortBestEfforts(activity.best_efforts).map((effort) => (
+                      <div
+                        key={effort.name}
+                        className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
+                      >
+                        <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          {effort.name}
+                        </span>
+                        <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
+                          {formatDurationDetail(effort.elapsed_time)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
               )}
-            </div>
-          )}
 
-          {/* AI Analysis */}
-          {activity && (
-            <AIAnalysisCard 
-              activity={activity} 
-              streams={streams} 
-            />
-          )}
+              {activity.achievements && activity.achievements.length > 0 && (
+                <SectionCard title={t('activity.achievements', '成就')}>
+                  <div className="flex flex-wrap gap-2">
+                    {activity.achievements.map((achievement, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400"
+                      >
+                        {achievement.type}
+                        {achievement.rank && <span className="ml-1">#{achievement.rank}</span>}
+                      </span>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
 
-          {/* Pace Trend */}
-          {paceTrend && (
-            <div className="mb-4 border-2 border-zinc-200 dark:border-zinc-700 p-3 bg-white dark:bg-zinc-900">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp size={14} className="text-zinc-500" />
-                  <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                    {t('activity.paceTrend', '近期配速趋势')}
-                  </span>
-                </div>
-                <Link
-                  href="/stats"
-                  className="font-mono text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+              {activity.segment_efforts && activity.segment_efforts.length > 0 && (
+                <SectionCard
+                  title={t('activity.segmentEfforts', '路段成绩')}
+                  aside={`${activity.segment_efforts.length}`}
                 >
-                  {t('activity.viewDetails', '查看详细对比 →')}
-                </Link>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
-                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.thisRun', '本次')}</div>
-                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.currentPaceStr}</div>
-                </div>
-                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
-                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.last7Days', '近7天')}</div>
-                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.days7AvgStr}</div>
-                  <div className="text-[10px] font-mono text-zinc-500">{paceTrend.days7DiffStr}</div>
-                </div>
-                <div className="bg-zinc-50 dark:bg-zinc-800 p-2">
-                  <div className="text-[10px] font-mono text-zinc-500">{t('activity.last28Days', '近28天')}</div>
-                  <div className="text-sm font-mono font-bold text-zinc-800 dark:text-zinc-200">{paceTrend.days28AvgStr}</div>
-                  <div className="text-[10px] font-mono text-zinc-500">{paceTrend.days28DiffStr}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Splits - Show first 20km, collapse rest (only if more than 1) */}
-          {shouldShowSplits && (
-            <div className="mb-4">
-              <div className="py-3 border-b border-zinc-200 dark:border-zinc-700">
-                <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  {t('activity.splits')} ({activity.splits_metric!.length})
-                </h2>
-              </div>
-              <div className="mt-3">
-                <SplitsTable splits={splitsExpanded ? [...visibleSplits, ...hiddenSplits] : visibleSplits} showHeader={true} />
-                
-                {hasHiddenSplits && (
-                  <button
-                    onClick={() => setSplitsExpanded(!splitsExpanded)}
-                    className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
-                  >
-                    {splitsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Laps - Show first 20km, collapse rest (only if more than 1) */}
-          {shouldShowLaps && (
-            <div className="mb-4">
-              <div className="py-3 border-b border-zinc-200 dark:border-zinc-700">
-                <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  {t('activity.laps')} ({activity.laps!.length})
-                </h2>
-              </div>
-              <div className="mt-3">
-                <LapsTable laps={lapsExpanded ? [...visibleLaps, ...hiddenLaps] : visibleLaps} showHeader={true} />
-                
-                {hasHiddenLaps && (
-                  <button
-                    onClick={() => setLapsExpanded(!lapsExpanded)}
-                    className="w-full py-3 text-center font-mono text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-t border-zinc-200 dark:border-zinc-700 mt-0"
-                  >
-                    {lapsExpanded ? t('common.showLess', '收起') : t('common.showMore', '查看更多')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+                  <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+                    {activity.segment_efforts.map((effort) => (
+                      <div
+                        key={effort.id}
+                        className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                              {effort.segment.name}
+                            </span>
+                            {effort.pr_rank === 1 && (
+                              <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                PR
+                              </span>
+                            )}
+                            {effort.kom_rank && effort.kom_rank <= 3 && (
+                              <span className="inline-flex items-center rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                #{effort.kom_rank}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-3">
+                            <span className="font-mono text-[10px] text-zinc-400">
+                              {(effort.segment.distance / 1000).toFixed(2)} km
+                            </span>
+                            <span className="font-mono text-[10px] text-zinc-400">
+                              {effort.segment.average_grade > 0 ? '+' : ''}{effort.segment.average_grade.toFixed(1)}%
+                            </span>
+                            <span className="font-mono text-[10px] text-blue-500 dark:text-blue-400">
+                              {formatPace(effort.segment.distance, effort.elapsed_time, 'min/km')}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-3 shrink-0 text-right">
+                          <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                            {formatDurationDetail(effort.elapsed_time)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+            </aside>
+          </div>
         </div>
       )}
 
@@ -890,7 +909,7 @@ export default function ActivityDetailPage() {
         onClose={() => setIsShareOpen(false)}
         activityName={activity?.name || ''}
         activityDate={activity ? getActivityDateKey(activity).replace(/-/g, '') : ''}
-        polyline={activity?.map?.polyline || null}
+        polyline={routePolyline}
         stats={activity ? {
           distance: formatDistance(activity.distance, 'km'),
           duration: formatDurationDetail(activity.moving_time),
@@ -901,11 +920,115 @@ export default function ActivityDetailPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function SectionCard({
+  title,
+  aside,
+  icon,
+  children,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-2">
-      <p className="font-mono text-[10px] text-zinc-500 uppercase">{label}</p>
-      <p className="font-mono text-sm font-bold">{value}</p>
+    <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {icon && <span className="shrink-0 text-zinc-400">{icon}</span>}
+          <h2 className="truncate font-mono text-xs font-bold uppercase text-zinc-500">
+            {title}
+          </h2>
+        </div>
+        {aside && (
+          <div className="shrink-0 font-mono text-[10px] text-zinc-400">
+            {aside}
+          </div>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ActivityDetailSkeleton() {
+  return (
+    <div className="container mx-auto max-w-6xl px-4 py-5 sm:py-6">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.92fr)]">
+        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+          <div className="mb-4 h-6 w-48 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+          <div className="mb-3 h-9 w-3/4 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+          <div className="mb-6 h-4 w-2/3 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="rounded-lg border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+                <div className="mb-3 h-8 w-8 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                <div className="mb-2 h-3 w-14 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800" />
+                <div className="h-6 w-20 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="min-h-[320px] animate-pulse rounded-lg border border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-800 dark:bg-zinc-900" />
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="space-y-5">
+          <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-4 h-6 w-36 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+            <div className="space-y-3">
+              <div className="h-20 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+              <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+                <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+              </div>
+            </div>
+          </section>
+        </main>
+        <aside className="space-y-5">
+          <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-3 h-4 w-24 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div key={index} className="h-16 animate-pulse bg-zinc-100 dark:bg-zinc-800" />
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+type StatTone = 'blue' | 'emerald' | 'orange' | 'zinc';
+
+const statToneClasses: Record<StatTone, string> = {
+  blue: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300',
+  emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300',
+  orange: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300',
+  zinc: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
+};
+
+function StatCard({
+  icon,
+  label,
+  value,
+  tone = 'zinc',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone?: StatTone;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+      <div className={`mb-3 inline-flex h-8 w-8 items-center justify-center rounded-md ${statToneClasses[tone]}`}>
+        {icon}
+      </div>
+      <p className="font-mono text-[10px] uppercase text-zinc-500">{label}</p>
+      <p className="mt-1 break-words font-mono text-lg font-black leading-tight text-zinc-950 dark:text-zinc-50">
+        {value}
+      </p>
     </div>
   );
 }

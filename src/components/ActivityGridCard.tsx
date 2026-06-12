@@ -6,12 +6,14 @@ import { StravaActivity } from '@/types';
 import { RouteOnlyMap } from '@/components/map/RouteOnlyMap';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
+import { useActivitiesStore } from '@/store/activities';
 
 interface ActivityGridCardProps {
   activity: StravaActivity;
 }
 
 export function ActivityGridCard({ activity }: ActivityGridCardProps) {
+  const selectActivity = useActivitiesStore((state) => state.selectActivity);
   const date = getActivityDate(activity);
   
   // Format month manually to avoid SSR issues
@@ -20,7 +22,13 @@ export function ActivityGridCard({ activity }: ActivityGridCardProps) {
   const day = date.getDate();
 
   return (
-    <Link href={`/activities/${activity.id}`} className="block">
+    <Link
+      href={`/activities/${activity.id}`}
+      className="block"
+      onClick={() => selectActivity(activity)}
+      onPointerEnter={() => selectActivity(activity)}
+      prefetch
+    >
       <div className="relative bg-zinc-100 dark:bg-zinc-800 rounded-sm overflow-hidden aspect-[3/4] hover:ring-2 hover:ring-blue-500 transition-all">
         {/* Route Preview - Takes up most of the card - Same background as card */}
         <div className="absolute inset-x-0 top-6 bottom-14 bg-zinc-100 dark:bg-zinc-800">

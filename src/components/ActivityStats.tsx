@@ -31,20 +31,29 @@ export function ActivityStats({ activity }: ActivityStatsProps) {
   ];
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-      {stats.map((stat, index) => (
-        <div 
-          key={index}
-          className="flex items-center justify-between py-1.5 px-3 border-b border-zinc-100 dark:border-zinc-800/50 last:border-0"
-        >
-          <span className="font-mono text-xs text-zinc-500 flex-shrink-0">{stat.label}</span>
-          <span className="font-mono text-xs text-right ml-2 overflow-hidden">
-            <span className="block truncate" title={stat.title || (typeof stat.value === 'string' ? stat.value : undefined)}>
+    <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-mono text-xs font-bold uppercase text-zinc-500">
+          {t('activity.details', '活动资料')}
+        </h2>
+        <span className="font-mono text-[10px] text-zinc-400">{stats.length}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-zinc-100 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800">
+        {stats.map((stat, index) => (
+          <div
+            key={index}
+            className="min-w-0 bg-white p-3 dark:bg-zinc-900"
+          >
+            <p className="mb-1 truncate font-mono text-[10px] text-zinc-500">{stat.label}</p>
+            <p
+              className="truncate font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100"
+              title={stat.title || (typeof stat.value === 'string' ? stat.value : undefined)}
+            >
               {stat.value}
-            </span>
-          </span>
-        </div>
-      ))}
-    </div>
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
