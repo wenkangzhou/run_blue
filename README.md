@@ -159,6 +159,10 @@ cp .env.example .env.local
 NEXT_PUBLIC_STRAVA_CLIENT_ID=你的Strava_Client_ID
 STRAVA_CLIENT_SECRET=你的Strava_Client_Secret
 
+# ── 更新 /me 游客预览数据时使用（可选）────
+# 只放在 .env.local，不要提交到仓库
+# STRAVA_REFRESH_TOKEN=你的Strava_Refresh_Token
+
 # ── 应用 URL（必填）──────────────────────
 # 本地开发
 NEXT_PUBLIC_APP_URL=http://localhost:6364
@@ -186,13 +190,41 @@ NEXT_PUBLIC_MAPTILER_KEY=你的MapTiler_Key
 
 详细图文步骤见 [STRAVA_SETUP.md](./STRAVA_SETUP.md)
 
-### 5. 申请 Moonshot API Key
+### 5. 获取 Refresh Token（可选）
+
+`STRAVA_REFRESH_TOKEN` 不是在 Strava 应用设置页直接复制的；应用设置页只有 **Client ID** 和 **Client Secret**。
+
+Refresh Token 来自一次真实的 OAuth 授权。它只在你需要用本地脚本更新 `/me` 游客预览数据 `public/data/activities.json` 时才需要：
+
+1. 本地启动应用并完成 Strava 登录：`http://localhost:6364/api/auth/signin/strava`
+2. 登录成功回到应用后，打开浏览器 DevTools
+3. 进入 **Application → Storage → Cookies → http://localhost:6364**
+4. 找到 `refresh_token`，复制它的值
+5. 写入 `.env.local`：
+
+```env
+STRAVA_REFRESH_TOKEN=复制到的_refresh_token
+```
+
+> 注意：`refresh_token` 是敏感信息，只放在本地 `.env.local`，不要提交到仓库。Strava 在刷新 token 时可能返回新的 refresh token；如果脚本提示 token 已轮换，需要把新的值同步更新到 `.env.local`。
+
+更新游客预览数据：
+
+```bash
+# 全量更新 public/data/activities.json
+npm run data:update-activities
+
+# 日常定期更新：只拉最近 14 天并合并
+npm run data:update-activities -- --recent-days=14
+```
+
+### 6. 申请 Moonshot API Key
 
 1. 访问 [Moonshot 开放平台](https://platform.moonshot.cn)
 2. 注册账号并完成实名认证
 3. 在「API Key 管理」中创建新 Key，填入 `.env.local`
 
-### 6. 本地开发
+### 7. 本地开发
 
 ```bash
 npm run dev
@@ -200,7 +232,7 @@ npm run dev
 
 访问 http://localhost:6364
 
-### 7. 生产部署（Vercel 推荐）
+### 8. 生产部署（Vercel 推荐）
 
 ```bash
 npm i -g vercel

@@ -148,6 +148,28 @@ test('classifyActivity recognizes interval workouts from lap structure', () => {
   assert.ok(classification.workoutTypeEvidence.some((evidence) => evidence.includes('short reps')));
 });
 
+test('classifyActivity treats repeated lap workouts as interval candidates before threshold pace guesses', () => {
+  const activity = makeActivity(25, {
+    name: 'Morning run',
+    distance: 7000,
+    moving_time: 2485,
+    average_heartrate: 150,
+    max_heartrate: 164,
+    laps: Array.from({ length: 7 }, (_, index) => makeLap(index, 1000, 355 + (index % 2))),
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1850), 'medium', 176);
+
+  assert.equal(classification.paceZone, 'T');
+  assert.equal(classification.workoutType, 'interval');
+  assert.equal(classification.workoutTypeConfidence, 'medium');
+  assert.ok(
+    classification.workoutTypeEvidence.some((evidence) =>
+      evidence.includes('lap structure')
+    )
+  );
+});
+
 test('classifyActivity recognizes progression runs from splits', () => {
   const activity = makeActivity(2, {
     name: 'Evening run',

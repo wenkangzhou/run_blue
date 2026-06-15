@@ -39,6 +39,7 @@ import { useTranslation } from 'react-i18next';
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
 const LAP_DISTANCE_THRESHOLD = 20; // km
+const DESCRIPTION_PREVIEW_LENGTH = 128;
 
 export default function ActivityDetailPage() {
   const router = useRouter();
@@ -64,6 +65,7 @@ export default function ActivityDetailPage() {
   const [forceShow, setForceShow] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -149,6 +151,10 @@ export default function ActivityDetailPage() {
   useEffect(() => {
     activityRef.current = activity;
   }, [activity]);
+
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [activityId]);
   
   // Once content is shown, never go back to loading
   useEffect(() => {
@@ -381,10 +387,10 @@ export default function ActivityDetailPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-6xl">
+          <div className="container mx-auto px-4 py-2 max-w-6xl">
             <button
               onClick={handleBack}
-              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="inline-flex h-9 items-center gap-1 rounded-md px-2 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
@@ -401,10 +407,10 @@ export default function ActivityDetailPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="container mx-auto px-4 py-4 max-w-6xl">
+          <div className="container mx-auto px-4 py-2 max-w-6xl">
             <button
               onClick={handleBack}
-              className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="inline-flex h-9 items-center gap-1 rounded-md px-2 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
@@ -446,15 +452,20 @@ export default function ActivityDetailPage() {
   // Once shown, always stay ready (never go back to full-page loading)
   const isPageReady = hasShownContent || (activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow));
   const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
+  const activityDescription = activity?.description?.trim() ?? '';
+  const shouldCollapseDescription = activityDescription.length > DESCRIPTION_PREVIEW_LENGTH;
+  const displayedDescription = shouldCollapseDescription && !descriptionExpanded
+    ? `${activityDescription.slice(0, DESCRIPTION_PREVIEW_LENGTH)}...`
+    : activityDescription;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-6xl flex items-center justify-between">
+        <div className="container mx-auto px-4 py-2 max-w-6xl flex items-center justify-between">
           <button
             onClick={handleBack}
-            className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            className="inline-flex h-9 items-center gap-1 rounded-md px-2 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
@@ -465,16 +476,14 @@ export default function ActivityDetailPage() {
             <button
               onClick={() => loadData(true)}
               disabled={refreshing || needsReauth || rateLimited}
-              className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
               {rateLimited
                 ? t('errors.rateLimited', '限流中')
                 : refreshing
                   ? t('common.refreshing', '刷新中')
-                  : isFromCache
-                    ? t('common.cached', '缓存')
-                    : t('common.refresh', '刷新')}
+                  : t('common.refresh', '刷新')}
             </button>
           )}
         </div>
@@ -507,10 +516,21 @@ export default function ActivityDetailPage() {
                   <h1 className="break-words text-2xl font-black leading-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
                     {activity.name}
                   </h1>
-                  {activity.description && activity.description.trim().length > 0 && (
-                    <p className="mt-2 break-words font-mono text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      {activity.description.trim()}
-                    </p>
+                  {activityDescription.length > 0 && (
+                    <div className="mt-2 max-w-2xl">
+                      <p className="break-words font-mono text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                        {displayedDescription}
+                      </p>
+                      {shouldCollapseDescription && (
+                        <button
+                          type="button"
+                          onClick={() => setDescriptionExpanded((expanded) => !expanded)}
+                          className="mt-1 font-mono text-[10px] font-bold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          {descriptionExpanded ? t('common.showLess', '收起') : t('common.showMore', '展开')}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 

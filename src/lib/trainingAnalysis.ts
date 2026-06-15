@@ -663,6 +663,27 @@ function inferWorkoutType(
     };
   }
 
+  if (
+    structure.source === 'laps' &&
+    structure.lapCount >= 4 &&
+    structure.shortRepCount >= 4 &&
+    (structure.medianLapDistance ?? Number.POSITIVE_INFINITY) <= 2000
+  ) {
+    evidence.push(`${structure.lapCount} lap structure with ${structure.shortRepCount} short segments`);
+    if (structure.splitPattern !== 'unknown') {
+      evidence.push(`split pattern ${structure.splitPattern}`);
+    }
+    if ((structure.paceVariability ?? 0) < 0.08) {
+      evidence.push('lap structure has low pace contrast, analyze reps rather than average pace');
+    }
+    return {
+      workoutType: 'interval',
+      workoutTypeConfidence: 'medium',
+      workoutTypeEvidence: evidence,
+      intensity: paceZone === 'T' || paceZone === 'I' || paceZone === 'R' ? 'hard' : 'moderate',
+    };
+  }
+
   if (keywordType === 'threshold' || keywordType === 'tempo') {
     evidence.push(`keyword match: ${keywordType}`);
     return {

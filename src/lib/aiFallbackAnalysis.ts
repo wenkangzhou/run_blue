@@ -4,6 +4,48 @@ import type { ActivityClassification, TrainingProfile } from './trainingAnalysis
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 
+function getZoneDescription(
+  zone: ActivityClassification['paceZone'],
+  profile: TrainingProfile,
+  locale: string
+) {
+  const en = locale.startsWith('en');
+  const zoneMap = {
+    E: {
+      fallback: en ? 'Easy / recovery zone' : '轻松跑/恢复区间',
+      model: profile.paceZones.easy,
+    },
+    M: {
+      fallback: en ? 'Marathon pace zone' : '马拉松配速区间',
+      model: profile.paceZones.marathon,
+    },
+    T: {
+      fallback: en ? 'Threshold zone' : '乳酸阈值区间',
+      model: profile.paceZones.threshold,
+    },
+    I: {
+      fallback: en ? 'Interval / VO2max zone' : '间歇/VO2max区间',
+      model: profile.paceZones.interval,
+    },
+    R: {
+      fallback: en ? 'Repetition / speed zone' : '重复跑/速度区间',
+      model: profile.paceZones.repetition,
+    },
+    unknown: {
+      fallback: en ? 'Unknown zone' : '未知区间',
+      model: null,
+    },
+  }[zone];
+
+  if (!zoneMap.model) return zoneMap.fallback;
+  const { min, max } = zoneMap.model;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return zoneMap.fallback;
+
+  return en
+    ? `${zoneMap.fallback} (${formatPace(min)}-${formatPace(max)}/km)`
+    : `${zoneMap.fallback}（${formatPace(min)}-${formatPace(max)}/km）`;
+}
+
 /**
  * Generate local analysis when the AI provider fails or times out.
  */
@@ -15,32 +57,10 @@ export function generateFallbackAnalysis(
 ): AIAnalysis {
   const en = locale.startsWith('en');
   const paceSecKm = activity.moving_time / activity.distance * 1000;
-  const paceMin = paceSecKm / 60;
   const paceStr = formatPace(paceSecKm);
 
-  // Determine pace zone based on absolute pace thresholds
-  let zone = 'E';
-  let zoneDesc = en ? 'Easy zone' : '轻松跑区间';
-
-  if (paceMin < 3.5) {
-    zone = 'R';
-    zoneDesc = en ? 'Repetition zone' : '重复跑区间';
-  } else if (paceMin < 4.0) {
-    zone = 'I';
-    zoneDesc = en ? 'Interval zone' : '间歇跑区间';
-  } else if (paceMin < 4.5) {
-    zone = 'T';
-    zoneDesc = en ? 'Threshold zone' : '乳酸阈值区间';
-  } else if (paceMin < 5.3) {
-    zone = 'M';
-    zoneDesc = en ? 'Marathon pace zone' : '马拉松配速区间';
-  } else if (paceMin < 6.2) {
-    zone = 'E';
-    zoneDesc = en ? 'Easy zone' : '轻松跑区间';
-  } else {
-    zone = 'E';
-    zoneDesc = en ? 'Recovery zone' : '恢复跑区间';
-  }
+  const zone = classification.paceZone;
+  const zoneDesc = getZoneDescription(zone, profile, locale);
 
   // Race-specific fallback
   const fallbackComparison = profile.similarStats

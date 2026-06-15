@@ -51,7 +51,36 @@ NEXT_PUBLIC_APP_URL=http://localhost:6364
 
 **不需要**: `activity:write` (写入权限)
 
-## 5. Callback Domain 切换（本地 ↔ 生产）
+## 5. 更新游客预览数据
+
+`/me` 未登录预览使用 `public/data/activities.json`。如果你想定期用自己的 Strava 数据更新它，可以在本地 `.env.local` 额外加入：
+
+```env
+STRAVA_REFRESH_TOKEN=你的Refresh_Token
+```
+
+然后运行：
+
+```bash
+npm run data:update-activities
+```
+
+常用模式：
+
+```bash
+# 只拉最近 14 天并合并到现有 JSON，适合日常定期更新
+npm run data:update-activities -- --recent-days=14
+
+# 先试跑，不写文件
+npm run data:update-activities -- --recent-days=14 --dry-run
+
+# 偶尔全量刷新一次，确保历史数据也一致
+npm run data:update-activities
+```
+
+脚本会读取 `.env.local`，分页拉取 Strava 活动列表，并原子写回 `public/data/activities.json`。`STRAVA_REFRESH_TOKEN` 不要提交到仓库。
+
+## 6. Callback Domain 切换（本地 ↔ 生产）
 
 Strava 只允许一个 Callback Domain，切换时注意：
 

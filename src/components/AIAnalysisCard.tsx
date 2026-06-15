@@ -107,6 +107,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
       return {
+        level: 'caution' as const,
         title: classification.workoutType === 'recovery'
           ? t('aiAnalysis.recoveryQuality', '恢复质量')
           : t('aiAnalysis.aerobicQuality', '有氧质量'),
@@ -118,6 +119,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     if (z1 + z2 >= 95 && drift <= 6) {
       return {
+        level: 'excellent' as const,
         title: classification.workoutType === 'recovery'
           ? t('aiAnalysis.recoveryQuality', '恢复质量')
           : t('aiAnalysis.aerobicQuality', '有氧质量'),
@@ -129,6 +131,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     if (z1 + z2 >= 85) {
       return {
+        level: 'controlled' as const,
         title: classification.workoutType === 'recovery'
           ? t('aiAnalysis.recoveryQuality', '恢复质量')
           : t('aiAnalysis.aerobicQuality', '有氧质量'),
@@ -139,6 +142,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     return {
+      level: 'mixed' as const,
       title: classification.workoutType === 'recovery'
         ? t('aiAnalysis.recoveryQuality', '恢复质量')
         : t('aiAnalysis.aerobicQuality', '有氧质量'),
@@ -203,9 +207,13 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (evidence === 'steady aerobic effort without recovery-only profile') return '整体是稳定有氧输出，但不像纯恢复跑';
     if (evidence === 'insufficient workout-structure evidence') return '训练结构证据不足，只能做保守判断';
     if (evidence === 'no clear repeat structure, possibly steady hard effort') return '没有明显重复段结构，更像持续偏强的稳态努力';
+    if (evidence === 'lap structure has low pace contrast, analyze reps rather than average pace') return '各圈配速对比不强，重点看分段结构而不是全程均配';
 
     let match = evidence.match(/^(\d+) laps with (\d+) short reps$/);
     if (match) return `${match[1]} 圈中包含 ${match[2]} 个短重复段`;
+
+    match = evidence.match(/^(\d+) lap structure with (\d+) short segments$/);
+    if (match) return `${match[1]} 圈结构中包含 ${match[2]} 个短分段，优先按结构化训练解读`;
 
     match = evidence.match(/^(\d+) faster reps and (\d+) recovery reps$/);
     if (match) return `${match[1]} 个快段，对应 ${match[2]} 个恢复段`;
@@ -240,6 +248,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
   const structureSummary = formatStructureSummary();
   const lowIntensityExecution = getLowIntensityExecution();
+  const lowIntensityLooksControlled =
+    lowIntensityExecution?.level === 'excellent' ||
+    lowIntensityExecution?.level === 'controlled';
   const pacePatternExplainsHRDrift =
     streamAnalysis?.pacePattern === 'interval' ||
     streamAnalysis?.pacePattern === 'progression' ||
@@ -311,12 +322,12 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     // From stream analysis
-    if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) {
+    if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift && !lowIntensityLooksControlled) {
       cons.push(`后程心率上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm，需要留意疲劳或补给`);
     } else if (streamAnalysis?.avgHRDrift && streamAnalysis.avgHRDrift > 5) {
       if (pacePatternExplainsHRDrift) {
         pros.push('心率变化与训练结构匹配');
-      } else {
+      } else if (!lowIntensityLooksControlled) {
         cons.push(`后程心率小幅上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm`);
       }
     } else if (streamAnalysis?.avgHRDrift !== undefined && streamAnalysis.avgHRDrift <= 5) {
@@ -325,9 +336,11 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     // From low intensity execution
     if (lowIntensityExecution) {
-      if (lowIntensityExecution.status === t('aiAnalysis.executionExcellent', '到位')) {
+      if (lowIntensityExecution.level === 'excellent') {
         pros.push('低强度执行到位');
-      } else if (lowIntensityExecution.status === t('aiAnalysis.executionCaution', '略偏顶')) {
+      } else if (lowIntensityExecution.level === 'controlled') {
+        pros.push('低强度控制良好');
+      } else if (lowIntensityExecution.level === 'caution') {
         cons.push('低强度负荷偏高');
       }
     }
@@ -349,7 +362,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     return { type, effect, effectLabel, pros, cons, advice };
-  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, comparisonIsReferenceOnly, pacePatternExplainsHRDrift, t]);
+  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, lowIntensityLooksControlled, comparisonIsReferenceOnly, pacePatternExplainsHRDrift]);
 
   const effectStyles: Record<string, { color: string; bg: string; border: string }> = {
     excellent: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-400' },

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useProfileActivities } from '@/hooks/useProfileActivities';
 import { getActivityYear } from '@/lib/dates';
 
@@ -18,8 +18,9 @@ export default function MePage() {
     activities,
     canRefresh,
     error,
+    isRefreshDisabled,
+    isRefreshing,
     isLoading,
-    isSyncing,
     lastFetchedAt,
     refresh,
     source,
@@ -72,7 +73,8 @@ export default function MePage() {
       <div className="relative z-10">
         <ProfileSyncBar
           canRefresh={canRefresh}
-          isSyncing={isSyncing}
+          isRefreshDisabled={isRefreshDisabled}
+          isRefreshing={isRefreshing}
           lastFetchedAt={lastFetchedAt}
           onRefresh={refresh}
           source={source}
@@ -94,7 +96,7 @@ export default function MePage() {
         <footer className="border-t border-zinc-800/80 px-4 py-10">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 text-xs text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
             <span>跑蓝个人档案</span>
-            <span>{stats?.totalRuns ?? 0} 次记录 · {stats?.yearCount ?? 0} 年跑步数据 · {source === 'strava' ? 'Strava 缓存' : 'Demo 数据'}</span>
+            <span>{stats?.totalRuns ?? 0} 次记录 · {stats?.yearCount ?? 0} 年跑步数据 · {source === 'strava' ? 'Strava 数据' : 'Demo 数据'}</span>
           </div>
         </footer>
       </div>
@@ -104,48 +106,56 @@ export default function MePage() {
 
 function ProfileSyncBar({
   canRefresh,
-  isSyncing,
+  isRefreshDisabled,
+  isRefreshing,
   lastFetchedAt,
   onRefresh,
   source,
   syncError,
 }: {
   canRefresh: boolean;
-  isSyncing: boolean;
+  isRefreshDisabled: boolean;
+  isRefreshing: boolean;
   lastFetchedAt: number | null;
   onRefresh: () => Promise<void>;
   source: 'strava' | 'demo';
   syncError: string | null;
 }) {
+  if (!canRefresh && !syncError) return null;
+
   return (
-    <div className="mx-auto flex max-w-6xl justify-end px-4 pt-4">
-      <div className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/70 px-2 py-1.5 text-[10px] text-zinc-500 backdrop-blur">
-        <span>{getProfileSyncText(source, lastFetchedAt, syncError)}</span>
-        {canRefresh && (
-          <button
-            type="button"
-            onClick={() => {
-              onRefresh().catch((error) => console.error('[Profile] Refresh failed:', error));
-            }}
-            disabled={isSyncing}
-            className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 transition-colors hover:border-cyan-500/50 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
-            title="更新最新 Strava 数据"
-            aria-label="更新最新 Strava 数据"
-          >
-            <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
-          </button>
-        )}
-      </div>
+    <div className="mx-auto flex max-w-6xl items-center justify-end gap-2 px-4 pt-4">
+      {syncError && (
+        <div className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-amber-400/25 bg-amber-400/10 px-2.5 text-[10px] text-amber-200">
+          <AlertCircle size={13} />
+          <span>{syncError}</span>
+        </div>
+      )}
+
+      {canRefresh && (
+        <button
+          type="button"
+          onClick={() => {
+            onRefresh().catch((error) => console.error('[Profile] Refresh failed:', error));
+          }}
+          disabled={isRefreshDisabled}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-3 text-[10px] font-bold text-cyan-100 transition-colors hover:border-cyan-300/60 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+          title={getRefreshButtonTitle(source, lastFetchedAt)}
+          aria-label="更新最新 Strava 数据"
+        >
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          <span>{isRefreshing ? '更新中' : '更新最新'}</span>
+        </button>
+      )}
     </div>
   );
 }
 
-function getProfileSyncText(source: 'strava' | 'demo', lastFetchedAt: number | null, syncError: string | null) {
-  if (syncError) return syncError;
-  if (source === 'demo') return '未登录预览';
-  if (!lastFetchedAt) return '正在同步 Strava';
+function getRefreshButtonTitle(source: 'strava' | 'demo', lastFetchedAt: number | null) {
+  if (source === 'demo') return '登录后同步 Strava 数据';
+  if (!lastFetchedAt) return '更新最新 Strava 数据';
 
-  return `最近更新 ${new Intl.DateTimeFormat('zh-CN', {
+  return `更新最新 Strava 数据，上次更新时间 ${new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

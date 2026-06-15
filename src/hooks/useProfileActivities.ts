@@ -5,12 +5,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { isActivitiesCacheStale, useActivitiesStore } from '@/store/activities';
 import { getActivityTimestamp } from '@/lib/dates';
+import { syncRecentActivities } from '@/lib/activitySync';
 import type { StravaActivity } from '@/types';
 
 interface UseProfileActivitiesResult {
   activities: StravaActivity[];
   canRefresh: boolean;
   error: string | null;
+  isRefreshDisabled: boolean;
+  isRefreshing: boolean;
   isLoading: boolean;
   isSyncing: boolean;
   lastFetchedAt: number | null;
@@ -145,28 +148,27 @@ export function useProfileActivities(): UseProfileActivitiesResult {
 
   const refresh = useCallback(async () => {
     if (!user?.accessToken || !shouldUseStrava) return;
+    if (historySyncing || manualSyncing) return;
 
     setManualSyncing(true);
     setSyncError(null);
-    resetHistorySync();
 
     try {
-      await syncHistory({
-        forceRecent: true,
-        syncRecent: true,
-      });
+      await syncRecentActivities(user.accessToken, { force: true });
     } catch (error) {
       setSyncError(getSyncErrorMessage(error));
     } finally {
       setManualSyncing(false);
     }
-  }, [resetHistorySync, shouldUseStrava, syncHistory, user?.accessToken]);
+  }, [historySyncing, manualSyncing, shouldUseStrava, user?.accessToken]);
 
   if (shouldUseStrava) {
     return {
       activities: stravaRuns,
       canRefresh: true,
       error: stravaRuns.length === 0 ? syncError : null,
+      isRefreshDisabled: historySyncing || manualSyncing,
+      isRefreshing: manualSyncing,
       isLoading: authLoading || !hasHydrated || (stravaRuns.length === 0 && historySyncing),
       isSyncing: historySyncing || manualSyncing,
       lastFetchedAt,
@@ -180,6 +182,8 @@ export function useProfileActivities(): UseProfileActivitiesResult {
     activities: demoActivities,
     canRefresh: false,
     error: demoError,
+    isRefreshDisabled: false,
+    isRefreshing: false,
     isLoading: authLoading || demoLoading,
     isSyncing: false,
     lastFetchedAt: null,

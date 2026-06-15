@@ -547,3 +547,21 @@ test('generateFallbackAnalysis uses training deficiencies for normal runs', () =
   assert.ok(result.suggestions.some((suggestion) => suggestion.includes('15km+')));
   assert.ok(result.suggestions.some((suggestion) => suggestion.includes('400m×6')));
 });
+
+test('generateFallbackAnalysis uses classification pace zone instead of absolute pace cutoffs', () => {
+  const result = generateFallbackAnalysis(
+    makeActivity({ name: 'Easy aerobic', distance: 10000, moving_time: 2500 }),
+    makeProfile(),
+    makeClassification({
+      paceZone: 'E',
+      workoutType: 'easy',
+      workoutTypeConfidence: 'medium',
+      paceZoneConfidence: 'medium',
+    }),
+    'zh'
+  );
+
+  assert.equal(result.paceZoneAnalysis.zone, 'E');
+  assert.match(result.paceZoneAnalysis.description, /轻松跑/);
+  assert.doesNotMatch(result.summary, /乳酸阈值区间|间歇跑区间|重复跑区间/);
+});
