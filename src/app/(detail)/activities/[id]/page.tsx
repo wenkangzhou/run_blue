@@ -7,6 +7,7 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity, ActivityStream, StravaSplit, StravaLap } from '@/types';
 import { getActivity, getActivityStreams, formatDateTime, formatDistance, formatPace } from '@/lib/strava';
+import { formatPaceSeconds } from '@/lib/paceFormat';
 import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
 import { getActivityDateKey } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
@@ -1196,9 +1197,7 @@ function processPaceData(velocityData: number[]): number[] {
 function formatPaceValue(pace: number): string {
   if (!isFinite(pace) || pace < 0) return '--';
   if (pace === 0) return '0\'00"';  // Show 0'00" instead of --
-  const min = Math.floor(pace);
-  const sec = Math.round((pace - min) * 60);
-  return `${min}'${sec.toString().padStart(2, '0')}"`;
+  return formatPaceSeconds(pace * 60);
 }
 
 interface StravaBestEffort {

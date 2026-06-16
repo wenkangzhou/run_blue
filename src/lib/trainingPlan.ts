@@ -1,4 +1,5 @@
 import { getHRZones } from './heartRateZones';
+import { formatPaceSeconds } from './paceFormat';
 import { formatSecondsToTime, getUserProfile } from './userProfile';
 
 export type RaceDistance = '5k' | '10k' | '21k' | '42k';
@@ -395,9 +396,7 @@ function assessGoal(
 /* ── Helpers for building rich session descriptions ── */
 
 function fmtPace(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}'${s.toString().padStart(2, '0')}"`;
+  return formatPaceSeconds(sec);
 }
 
 function buildRestDay(day: number, en: boolean): TrainingSession {

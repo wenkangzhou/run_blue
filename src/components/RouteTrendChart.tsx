@@ -4,6 +4,7 @@ import React from 'react';
 import { StravaActivity } from '@/types';
 import { SimpleLineChart } from './charts/SimpleLineChart';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
+import { formatPaceSeconds } from '@/lib/paceFormat';
 
 interface RouteTrendChartProps {
   activities: StravaActivity[];
@@ -31,10 +32,7 @@ export function RouteTrendChart({ activities }: RouteTrendChartProps) {
   });
 
   const formatPaceLabel = (secPerKm: number) => {
-    if (secPerKm <= 0) return '--';
-    const min = Math.floor(secPerKm / 60);
-    const sec = Math.round(secPerKm % 60);
-    return `${min}'${sec.toString().padStart(2, '0')}"`;
+    return formatPaceSeconds(secPerKm);
   };
 
   return (

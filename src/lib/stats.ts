@@ -7,6 +7,7 @@ import {
   getISOWeekNumber,
   getISOWeekStart,
 } from './dates';
+import { formatPaceSeconds } from './paceFormat';
 
 export type PeriodType = 'week' | 'month' | 'year' | 'all';
 export type MetricType = 'distance' | 'duration' | 'count' | 'calories' | 'elevation' | 'pace';
@@ -351,10 +352,7 @@ export function calculateSummaryStats(
 }
 
 export function formatPaceFromSeconds(secondsPerKm: number): string {
-  if (secondsPerKm <= 0) return '--';
-  const min = Math.floor(secondsPerKm / 60);
-  const sec = Math.floor(secondsPerKm % 60);
-  return `${min}'${sec.toString().padStart(2, '0')}"`;
+  return formatPaceSeconds(secondsPerKm);
 }
 
 export interface DailyAggregate {

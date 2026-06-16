@@ -6,6 +6,7 @@ import { formatDistance, formatDuration } from '@/lib/strava';
 import { BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getActivityDate, getISOWeek } from '@/lib/dates';
+import { formatPaceSeconds } from '@/lib/paceFormat';
 
 type PeriodType = 'week' | 'month' | 'year' | 'all';
 
@@ -73,10 +74,7 @@ export function RunningStats({ activities }: ActivityStatsProps) {
   
   // Format pace as M'SS"/km
   const formatAvgPace = (pace: number): string => {
-    if (pace <= 0) return '-';
-    const min = Math.floor(pace);
-    const sec = Math.round((pace - min) * 60);
-    return `${min}'${sec.toString().padStart(2, '0')}"/km`;
+    return pace > 0 ? `${formatPaceSeconds(pace * 60)}/km` : '-';
   };
 
   // Get current period label

@@ -1,5 +1,6 @@
 import { StravaActivity } from '@/types';
 import { getActivityDate } from './dates';
+import { formatPaceSeconds } from './paceFormat';
 
 export interface PaceTrendResult {
   currentPace: number; // sec/km
@@ -26,9 +27,7 @@ export interface MonthlyPace {
 }
 
 function fmtPace(secPerKm: number): string {
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return `${m}'${s.toString().padStart(2, '0')}"`;
+  return formatPaceSeconds(secPerKm);
 }
 
 function diffStr(diffSec: number): string {

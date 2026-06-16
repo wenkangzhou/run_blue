@@ -1,5 +1,6 @@
 import { StravaActivity, StravaToken, StravaAthlete, ActivityStream } from '@/types';
 import { parseStravaLocalDate } from './dates';
+import { formatPaceSeconds } from './paceFormat';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -288,10 +289,8 @@ export function formatPace(
   
   const distance = unit === 'min/mi' ? meters / 1609.344 : meters / 1000;
   const paceSeconds = seconds / distance;
-  const minutes = Math.floor(paceSeconds / 60);
-  const secs = Math.floor(paceSeconds % 60);
   
-  return `${minutes}'${secs.toString().padStart(2, '0')}"${unit === 'min/mi' ? '/mi' : '/km'}`;
+  return `${formatPaceSeconds(paceSeconds)}${unit === 'min/mi' ? '/mi' : '/km'}`;
 }
 
 export function formatDate(dateString: string, locale: string = 'zh-CN'): string {
