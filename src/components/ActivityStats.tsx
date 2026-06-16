@@ -9,10 +9,18 @@ interface ActivityStatsProps {
   activity: StravaActivity;
 }
 
+type ActivityStat = {
+  label: string;
+  value: string | React.ReactNode;
+  title?: string;
+  wide?: boolean;
+};
+
 export function ActivityStats({ activity }: ActivityStatsProps) {
   const { t } = useTranslation();
+  const gearDistance = activity.gear ? formatGearDistance(activity.gear.distance) : null;
   
-  const stats: { label: string; value: string | React.ReactNode; title?: string }[] = [
+  const stats: ActivityStat[] = [
     { label: t('activity.averagePace', '平均配速'), value: formatPace(activity.distance, activity.moving_time, 'min/km') },
     { label: t('activity.maxPace', '最快配速'), value: activity.max_speed ? formatPace(1000, 1000 / activity.max_speed, 'min/km') : '--' },
     ...(activity.average_heartrate ? [{ label: t('activity.averageHeartRate', '平均心率'), value: `${Math.round(activity.average_heartrate)} bpm` }] : []),
@@ -26,8 +34,29 @@ export function ActivityStats({ activity }: ActivityStatsProps) {
     ...(activity.calories ? [{ label: t('activity.calories', '卡路里'), value: `${activity.calories} kcal` }] : []),
     ...(activity.average_cadence ? [{ label: t('activity.cadence', '步频'), value: `${Math.round(activity.average_cadence)} spm` }] : []),
     ...(activity.average_temp ? [{ label: t('activity.temperature', '温度'), value: `${Math.round(activity.average_temp)}°C` }] : []),
-    ...(activity.gear ? [{ label: t('activity.gear', '装备'), value: `${activity.gear.name} (${formatGearDistance(activity.gear.distance)})`, title: `${activity.gear.name} (${formatGearDistance(activity.gear.distance)})` }] : []),
-    ...(activity.device_name ? [{ label: t('activity.device', '设备'), value: activity.device_name, title: activity.device_name }] : []),
+    ...(activity.gear ? [{
+      label: t('activity.gear', '装备'),
+      title: `${activity.gear.name}${gearDistance ? ` (${gearDistance})` : ''}`,
+      wide: true,
+      value: (
+        <span className="block min-w-0">
+          <span className="block whitespace-normal break-words font-mono text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
+            {activity.gear.name}
+          </span>
+          {gearDistance && (
+            <span className="mt-1 block font-mono text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+              {t('gear.officialDistance', '官方里程')} {gearDistance}
+            </span>
+          )}
+        </span>
+      ),
+    }] : []),
+    ...(activity.device_name ? [{
+      label: t('activity.device', '设备'),
+      value: activity.device_name,
+      title: activity.device_name,
+      wide: true,
+    }] : []),
   ];
 
   return (
@@ -42,15 +71,19 @@ export function ActivityStats({ activity }: ActivityStatsProps) {
         {stats.map((stat, index) => (
           <div
             key={index}
-            className="min-w-0 bg-white p-3 dark:bg-zinc-900"
+            className={`${stat.wide ? 'col-span-2' : ''} min-w-0 bg-white p-3 dark:bg-zinc-900`}
           >
             <p className="mb-1 truncate font-mono text-[10px] text-zinc-500">{stat.label}</p>
-            <p
-              className="truncate font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100"
-              title={stat.title || (typeof stat.value === 'string' ? stat.value : undefined)}
-            >
-              {stat.value}
-            </p>
+            {typeof stat.value === 'string' ? (
+              <p
+                className={`${stat.wide ? 'whitespace-normal break-words text-sm leading-5 [overflow-wrap:anywhere]' : 'truncate text-xs'} font-mono font-bold text-zinc-900 dark:text-zinc-100`}
+                title={stat.title || stat.value}
+              >
+                {stat.value}
+              </p>
+            ) : (
+              <div title={stat.title}>{stat.value}</div>
+            )}
           </div>
         ))}
       </div>

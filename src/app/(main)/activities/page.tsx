@@ -109,6 +109,12 @@ export default function ActivitiesPage() {
     });
   }, [activities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
 
+  useEffect(() => {
+    if (activities.length > 0 && initialLoading) {
+      setInitialLoading(false);
+    }
+  }, [activities.length, initialLoading]);
+
   // Load activities
   const loadActivities = useCallback(async (type: 'initial' | 'refresh') => {
     if (!user?.accessToken) return;
@@ -241,10 +247,18 @@ export default function ActivitiesPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
+      if (activities.length > 0) {
+        setInitialLoading(false);
+        setNeedsReauth(true);
+        return;
+      }
       router.push('/');
       return;
     }
-    if (!user?.accessToken) return;
+    if (!user?.accessToken) {
+      if (activities.length > 0) setInitialLoading(false);
+      return;
+    }
 
     if (activities.length === 0) {
       loadActivities('initial');
@@ -258,7 +272,7 @@ export default function ActivitiesPage() {
       nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
       checkForNewActivities();
     }
-  }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, user?.accessToken, activities.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (authLoading || !isAuthenticated || !user?.accessToken || activities.length === 0) return;
@@ -281,13 +295,13 @@ export default function ActivitiesPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const canRenderCachedWhileAuthLoading = authLoading && activities.length > 0;
+  const canRenderCachedActivities = activities.length > 0;
 
   if (authLoading && activities.length === 0) {
     return <ActivitiesPageSkeleton />;
   }
 
-  if (!isAuthenticated && !canRenderCachedWhileAuthLoading) {
+  if (!isAuthenticated && !canRenderCachedActivities) {
     return <ActivitiesPageSkeleton />;
   }
 

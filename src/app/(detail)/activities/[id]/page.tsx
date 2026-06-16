@@ -56,13 +56,11 @@ export default function ActivityDetailPage() {
   const [loading, setLoading] = useState(() => !selectedSeedActivity);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [mapReady, setMapReady] = useState(false);
+  const [, setMapReady] = useState(false);
   const [splitsExpanded, setSplitsExpanded] = useState(false);
   const [lapsExpanded, setLapsExpanded] = useState(false);
-  const [isFromCache, setIsFromCache] = useState(() => Boolean(selectedSeedActivity));
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
-  const [forceShow, setForceShow] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -144,7 +142,8 @@ export default function ActivityDetailPage() {
   }, [activity, savedRoutes, allActivities]);
 
   // Use ref to track if we have loaded data to avoid infinite loops
-  const hasLoadedRef = useRef(false);
+  const loadedActivityIdRef = useRef<number | null>(null);
+  const checkedDetailCacheIdRef = useRef<number | null>(null);
   const activityRef = useRef<StravaActivity | null>(null);
   
   // Keep ref in sync with state
@@ -154,7 +153,22 @@ export default function ActivityDetailPage() {
 
   useEffect(() => {
     setDescriptionExpanded(false);
-  }, [activityId]);
+    if (selectedSeedActivity) {
+      setActivity(selectedSeedActivity);
+      setStreams(null);
+      setLoading(false);
+      setHasShownContent(true);
+      return;
+    }
+
+    const currentActivity = activityRef.current;
+    if (currentActivity && currentActivity.id !== activityId) {
+      setActivity(null);
+      setStreams(null);
+      setLoading(true);
+      setHasShownContent(false);
+    }
+  }, [activityId, selectedSeedActivity]);
   
   // Once content is shown, never go back to loading
   useEffect(() => {
@@ -163,22 +177,33 @@ export default function ActivityDetailPage() {
     }
   }, [activity, hasShownContent]);
   
-  // Timeout to force show page if map gets stuck
-  useEffect(() => {
-    if (activity && !forceShow) {
-      const timeout = setTimeout(() => {
-        setForceShow(true);
-      }, 2000);
-      return () => clearTimeout(timeout);
-    }
-  }, [activity, forceShow]);
-
   useEffect(() => {
     if (activity || !selectedActivity || selectedActivity.id !== activityId) return;
     setActivity(selectedActivity);
-    setIsFromCache(true);
     setLoading(false);
   }, [activity, activityId, selectedActivity]);
+
+  useEffect(() => {
+    if (!activityId || activity || checkedDetailCacheIdRef.current === activityId) return;
+
+    let cancelled = false;
+    checkedDetailCacheIdRef.current = activityId;
+
+    getCachedActivity(activityId)
+      .then((cached) => {
+        if (cancelled || !cached) return;
+        setActivity(cached.activity);
+        setStreams(cached.streams);
+        setLoading(false);
+      })
+      .catch(() => {
+        // The auth-aware loader below decides whether to redirect or show an error.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activity, activityId]);
 
   // Handle 401 error - try refresh session or logout
   const handleAuthError = useCallback(async () => {
@@ -216,7 +241,6 @@ export default function ActivityDetailPage() {
       if (cached) {
         setActivity(cached.activity);
         setStreams(cached.streams);
-        setIsFromCache(true);
         setLoading(false);
 
         if (!shouldRefreshCachedActivity(cached)) {
@@ -239,7 +263,6 @@ export default function ActivityDetailPage() {
       // Update state with fresh data
       setActivity(activityData);
       setStreams(streamsData);
-      setIsFromCache(false);
       setError('');
       setNeedsReauth(false);
       setRateLimited(false);
@@ -297,6 +320,11 @@ export default function ActivityDetailPage() {
     }
 
     if (!isAuthenticated) {
+      if (activityRef.current || selectedSeedActivity) {
+        setLoading(false);
+        return;
+      }
+
       let cancelled = false;
 
       // Check if we have cached data to show.
@@ -310,7 +338,6 @@ export default function ActivityDetailPage() {
 
           setActivity(cached.activity);
           setStreams(cached.streams);
-          setIsFromCache(true);
           setLoading(false);
         })
         .catch(() => {
@@ -324,12 +351,12 @@ export default function ActivityDetailPage() {
 
     if (!user?.accessToken || !activityId) return;
     
-    // Only load once to avoid infinite loop
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
+    // Only load once per activity id to avoid infinite loops.
+    if (loadedActivityIdRef.current !== activityId) {
+      loadedActivityIdRef.current = activityId;
       loadData(false);
     }
-  }, [authLoading, isAuthenticated, user?.accessToken, activityId, router, loadData]);
+  }, [authLoading, isAuthenticated, user?.accessToken, activityId, router, loadData, selectedSeedActivity]);
 
   // Split data into visible and hidden based on 20km threshold
   const { visibleSplits, hiddenSplits, hasHiddenSplits } = useMemo(() => {
@@ -450,7 +477,7 @@ export default function ActivityDetailPage() {
 
   // Page is ready if we have activity data
   // Once shown, always stay ready (never go back to full-page loading)
-  const isPageReady = hasShownContent || (activity && (mapReady || !activity.map?.polyline || isFromCache || forceShow));
+  const isPageReady = hasShownContent || Boolean(activity);
   const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
   const activityDescription = activity?.description?.trim() ?? '';
   const shouldCollapseDescription = activityDescription.length > DESCRIPTION_PREVIEW_LENGTH;

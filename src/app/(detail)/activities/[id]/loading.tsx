@@ -4,8 +4,8 @@ export default function ActivityDetailRouteLoading() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="container mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div className="inline-flex items-center gap-1 font-mono text-sm text-zinc-400">
+        <div className="container mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
+          <div className="inline-flex h-9 items-center gap-1 rounded-md px-2 font-mono text-sm text-zinc-400">
             <ChevronLeft size={16} />
             返回
           </div>
