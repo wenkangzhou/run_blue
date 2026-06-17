@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { StravaActivity } from '@/types';
-import { RouteOnlyMap } from '@/components/map/RouteOnlyMap';
+import { RouteCanvasThumbnail } from '@/components/map/RouteCanvasThumbnail';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
@@ -12,7 +12,7 @@ interface ActivityGridCardProps {
   activity: StravaActivity;
 }
 
-export function ActivityGridCard({ activity }: ActivityGridCardProps) {
+export const ActivityGridCard = React.memo(function ActivityGridCard({ activity }: ActivityGridCardProps) {
   const selectActivity = useActivitiesStore((state) => state.selectActivity);
   const date = getActivityDate(activity);
   const primeActivity = React.useCallback(() => {
@@ -37,9 +37,8 @@ export function ActivityGridCard({ activity }: ActivityGridCardProps) {
       <div className="relative bg-zinc-100 dark:bg-zinc-800 rounded-sm overflow-hidden aspect-[3/4] hover:ring-2 hover:ring-blue-500 transition-all">
         {/* Route Preview - Takes up most of the card - Same background as card */}
         <div className="absolute inset-x-0 top-6 bottom-14 bg-zinc-100 dark:bg-zinc-800">
-          <RouteOnlyMap 
-            polyline={activity.map?.summary_polyline || null} 
-            height="100%"
+          <RouteCanvasThumbnail
+            polyline={activity.map?.summary_polyline || null}
           />
         </div>
 
@@ -67,4 +66,4 @@ export function ActivityGridCard({ activity }: ActivityGridCardProps) {
       </div>
     </Link>
   );
-}
+});

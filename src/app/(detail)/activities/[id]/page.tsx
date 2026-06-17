@@ -485,12 +485,135 @@ export default function ActivityDetailPage() {
   const displayedDescription = shouldCollapseDescription && !descriptionExpanded
     ? `${activityDescription.slice(0, DESCRIPTION_PREVIEW_LENGTH)}...`
     : activityDescription;
+  const renderPrimarySideSections = (currentActivity: StravaActivity) => (
+    <>
+      <ActivityStats activity={currentActivity} />
+
+      {paceTrend && (
+        <SectionCard
+          title={t('activity.paceTrend', '近期配速趋势')}
+          icon={<TrendingUp size={15} />}
+          aside={(
+            <Link href="/stats" className="font-mono text-[10px] text-blue-600 hover:underline dark:text-blue-400">
+              {t('activity.viewDetails', '查看详细对比')}
+            </Link>
+          )}
+        >
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+              <div className="font-mono text-[10px] text-zinc-500">{t('activity.thisRun', '本次')}</div>
+              <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.currentPaceStr}</div>
+            </div>
+            <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+              <div className="font-mono text-[10px] text-zinc-500">{t('activity.last7Days', '近7天')}</div>
+              <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days7AvgStr}</div>
+              <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days7DiffStr}</div>
+            </div>
+            <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+              <div className="font-mono text-[10px] text-zinc-500">{t('activity.last28Days', '近28天')}</div>
+              <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days28AvgStr}</div>
+              <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days28DiffStr}</div>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+    </>
+  );
+  const renderSecondarySideSections = (currentActivity: StravaActivity) => (
+    <>
+      {currentActivity.best_efforts && currentActivity.best_efforts.length > 0 && (
+        <SectionCard title={t('activity.bestEfforts', '本次最佳成绩')} icon={<Trophy size={15} />}>
+          <div className="flex flex-wrap gap-2">
+            {sortBestEfforts(currentActivity.best_efforts).map((effort) => (
+              <div
+                key={effort.name}
+                className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
+              >
+                <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  {effort.name}
+                </span>
+                <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
+                  {formatDurationDetail(effort.elapsed_time)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {currentActivity.achievements && currentActivity.achievements.length > 0 && (
+        <SectionCard title={t('activity.achievements', '成就')}>
+          <div className="flex flex-wrap gap-2">
+            {currentActivity.achievements.map((achievement, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400"
+              >
+                {achievement.type}
+                {achievement.rank && <span className="ml-1">#{achievement.rank}</span>}
+              </span>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {currentActivity.segment_efforts && currentActivity.segment_efforts.length > 0 && (
+        <SectionCard
+          title={t('activity.segmentEfforts', '路段成绩')}
+          aside={`${currentActivity.segment_efforts.length}`}
+        >
+          <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+            {currentActivity.segment_efforts.map((effort) => (
+              <div
+                key={effort.id}
+                className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      {effort.segment.name}
+                    </span>
+                    {effort.pr_rank === 1 && (
+                      <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        PR
+                      </span>
+                    )}
+                    {effort.kom_rank && effort.kom_rank <= 3 && (
+                      <span className="inline-flex items-center rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400">
+                        #{effort.kom_rank}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-3">
+                    <span className="font-mono text-[10px] text-zinc-400">
+                      {(effort.segment.distance / 1000).toFixed(2)} km
+                    </span>
+                    <span className="font-mono text-[10px] text-zinc-400">
+                      {effort.segment.average_grade > 0 ? '+' : ''}{effort.segment.average_grade.toFixed(1)}%
+                    </span>
+                    <span className="font-mono text-[10px] text-blue-500 dark:text-blue-400">
+                      {formatPace(effort.segment.distance, effort.elapsed_time, 'min/km')}
+                    </span>
+                  </div>
+                </div>
+                <div className="ml-3 shrink-0 text-right">
+                  <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                    {formatDurationDetail(effort.elapsed_time)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-2 max-w-6xl flex items-center justify-between">
+        <div className="container mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 py-2">
           <button
             onClick={handleBack}
             className="inline-flex h-9 items-center gap-1 rounded-md px-2 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -498,6 +621,14 @@ export default function ActivityDetailPage() {
             <ChevronLeft size={16} />
             {t('common.back')}
           </button>
+
+          <div className="min-w-0 text-center">
+            {activity && (
+              <p className="truncate font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                {activity.name}
+              </p>
+            )}
+          </div>
           
           {/* Refresh button - only show if we have data */}
           {activity && (
@@ -507,11 +638,13 @@ export default function ActivityDetailPage() {
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {rateLimited
-                ? t('errors.rateLimited', '限流中')
-                : refreshing
-                  ? t('common.refreshing', '刷新中')
-                  : t('common.refresh', '刷新')}
+              <span className="hidden sm:inline">
+                {rateLimited
+                  ? t('errors.rateLimited', '限流中')
+                  : refreshing
+                    ? t('common.refreshing', '刷新中')
+                    : t('common.refresh', '刷新')}
+              </span>
             </button>
           )}
         </div>
@@ -679,6 +812,10 @@ export default function ActivityDetailPage() {
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
             <main className="min-w-0 space-y-5">
+              <div className="space-y-5 xl:hidden">
+                {renderPrimarySideSections(activity)}
+              </div>
+
               <div className="min-w-0">
                 <AIAnalysisCard
                   activity={activity}
@@ -832,125 +969,15 @@ export default function ActivityDetailPage() {
                   )}
                 </div>
               )}
+
+              <div className="space-y-5 xl:hidden">
+                {renderSecondarySideSections(activity)}
+              </div>
             </main>
 
-            <aside className="min-w-0 space-y-5 xl:sticky xl:top-[88px]">
-              <ActivityStats activity={activity} />
-
-              {paceTrend && (
-                <SectionCard
-                  title={t('activity.paceTrend', '近期配速趋势')}
-                  icon={<TrendingUp size={15} />}
-                  aside={(
-                    <Link href="/stats" className="font-mono text-[10px] text-blue-600 hover:underline dark:text-blue-400">
-                      {t('activity.viewDetails', '查看详细对比')}
-                    </Link>
-                  )}
-                >
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
-                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.thisRun', '本次')}</div>
-                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.currentPaceStr}</div>
-                    </div>
-                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
-                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.last7Days', '近7天')}</div>
-                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days7AvgStr}</div>
-                      <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days7DiffStr}</div>
-                    </div>
-                    <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
-                      <div className="font-mono text-[10px] text-zinc-500">{t('activity.last28Days', '近28天')}</div>
-                      <div className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{paceTrend.days28AvgStr}</div>
-                      <div className="font-mono text-[10px] text-zinc-500">{paceTrend.days28DiffStr}</div>
-                    </div>
-                  </div>
-                </SectionCard>
-              )}
-
-              {activity.best_efforts && activity.best_efforts.length > 0 && (
-                <SectionCard title={t('activity.bestEfforts', '本次最佳成绩')} icon={<Trophy size={15} />}>
-                  <div className="flex flex-wrap gap-2">
-                    {sortBestEfforts(activity.best_efforts).map((effort) => (
-                      <div
-                        key={effort.name}
-                        className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
-                      >
-                        <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                          {effort.name}
-                        </span>
-                        <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
-                          {formatDurationDetail(effort.elapsed_time)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-              )}
-
-              {activity.achievements && activity.achievements.length > 0 && (
-                <SectionCard title={t('activity.achievements', '成就')}>
-                  <div className="flex flex-wrap gap-2">
-                    {activity.achievements.map((achievement, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400"
-                      >
-                        {achievement.type}
-                        {achievement.rank && <span className="ml-1">#{achievement.rank}</span>}
-                      </span>
-                    ))}
-                  </div>
-                </SectionCard>
-              )}
-
-              {activity.segment_efforts && activity.segment_efforts.length > 0 && (
-                <SectionCard
-                  title={t('activity.segmentEfforts', '路段成绩')}
-                  aside={`${activity.segment_efforts.length}`}
-                >
-                  <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
-                    {activity.segment_efforts.map((effort) => (
-                      <div
-                        key={effort.id}
-                        className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/70"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                              {effort.segment.name}
-                            </span>
-                            {effort.pr_rank === 1 && (
-                              <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                PR
-                              </span>
-                            )}
-                            {effort.kom_rank && effort.kom_rank <= 3 && (
-                              <span className="inline-flex items-center rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                #{effort.kom_rank}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex items-center gap-3">
-                            <span className="font-mono text-[10px] text-zinc-400">
-                              {(effort.segment.distance / 1000).toFixed(2)} km
-                            </span>
-                            <span className="font-mono text-[10px] text-zinc-400">
-                              {effort.segment.average_grade > 0 ? '+' : ''}{effort.segment.average_grade.toFixed(1)}%
-                            </span>
-                            <span className="font-mono text-[10px] text-blue-500 dark:text-blue-400">
-                              {formatPace(effort.segment.distance, effort.elapsed_time, 'min/km')}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-3 shrink-0 text-right">
-                          <span className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                            {formatDurationDetail(effort.elapsed_time)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-              )}
+            <aside className="hidden min-w-0 space-y-5 xl:sticky xl:top-[88px] xl:block">
+              {renderPrimarySideSections(activity)}
+              {renderSecondarySideSections(activity)}
             </aside>
           </div>
         </div>
