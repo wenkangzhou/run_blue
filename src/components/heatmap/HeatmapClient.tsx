@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
@@ -46,6 +48,7 @@ function formatDistance(meters: number): string {
 
 export function HeatmapClient() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { activities, hasMore } = useActivitiesStore();
   const { language } = useSettingsStore();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -122,6 +125,27 @@ export function HeatmapClient() {
     }
   }, []);
 
+  const handleBack = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      const historyIndex = typeof window.history.state?.idx === 'number'
+        ? window.history.state.idx
+        : 0;
+
+      if (historyIndex > 0) {
+        router.back();
+        window.setTimeout(() => {
+          if (window.location.pathname === currentPath) {
+            router.push('/activities');
+          }
+        }, 450);
+        return;
+      }
+    }
+
+    router.push('/activities');
+  }, [router]);
+
   const toggleYear = useCallback((year: number) => {
     setFilters(prev => ({
       ...prev,
@@ -192,19 +216,19 @@ export function HeatmapClient() {
                 <X size={13} />
               </button>
             </div>
-            <a
+            <Link
               href={`/activities/${popupActivity.id}`}
               className="inline-flex items-center gap-1 mt-1 font-mono text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
             >
               <MapPin size={10} />
               {language === 'zh' ? '查看详情' : 'View Details'}
-            </a>
+            </Link>
           </div>
         )}
 
         {/* Back Button */}
         <button
-          onClick={() => window.location.href = '/activities'}
+          onClick={handleBack}
           className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
         >
           <ArrowLeft size={14} />

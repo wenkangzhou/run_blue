@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { TrainingPlanView } from '@/components/TrainingPlanView';
 import { getStoredTrainingPlan, deleteTrainingPlan } from '@/lib/trainingPlan';
 import type { TrainingPlan } from '@/lib/trainingPlan';
@@ -55,7 +56,9 @@ export default function TrainingPlanDetailPage() {
     };
   }, [authLoading, isAuthenticated, router, params.id]);
 
-  if (authLoading || !isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) {
+    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
+  }
 
   if (notFound) {
     return (

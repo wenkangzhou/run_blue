@@ -10,6 +10,7 @@ import { useRoutesStore, type SavedRoute } from '@/store/routes';
 import { MiniMap } from '@/components/map/MiniMap';
 import { RouteComparisonTable } from '@/components/RouteComparisonTable';
 import { RouteTrendChart } from '@/components/RouteTrendChart';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { PixelCard, PixelButton } from '@/components/ui';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { areActivitiesSameRoute, createActivityFromRouteReference, getBestPaceActivity } from '@/lib/routeClustering';
@@ -112,7 +113,9 @@ export default function RouteDetailPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  if (authLoading || !isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) {
+    return <PageLoadingShell title={t('routes.title', '收藏路线')} maxWidth="2xl" variant="detail" />;
+  }
 
   if (!route) {
     return (

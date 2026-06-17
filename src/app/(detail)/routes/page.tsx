@@ -9,6 +9,7 @@ import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore, type SavedRoute } from '@/store/routes';
 import type { RouteSyncStats } from '@/lib/routeSync';
 import { RouteCard } from '@/components/RouteCard';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityTimestamp } from '@/lib/dates';
 import { areActivitiesSameRoute, createActivityFromRouteReference } from '@/lib/routeClustering';
@@ -134,7 +135,9 @@ export default function RoutesPage() {
   );
   const totalMatchedActivities = savedRoutes.reduce((sum, route) => sum + route.activityIds.length, 0);
 
-  if (authLoading || !isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) {
+    return <PageLoadingShell title={t('routes.title', '收藏路线')} maxWidth="2xl" variant="list" />;
+  }
 
   const handleSyncHistory = async () => {
     if (isSyncing) return;

@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { BarChart3, ChevronLeft, Loader2, Route } from 'lucide-react';
 
 const MAX_LOAD_PAGES = 10; // Safety limit for one automatic catch-up pass.
@@ -63,7 +64,9 @@ export default function StatsPage() {
     loadAll();
   }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (authLoading || !isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) {
+    return <PageLoadingShell title={t('nav.stats', '统计')} maxWidth="6xl" variant="dashboard" />;
+  }
 
   const isLoading = storeLoading || historySyncing;
   const progressText = historyProgress?.phase === 'history' && historyProgress.page

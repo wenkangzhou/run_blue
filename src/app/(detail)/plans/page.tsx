@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { TrainingPlanForm } from '@/components/TrainingPlanForm';
 import { GeneratingOverlay } from '@/components/GeneratingOverlay';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { PixelButton } from '@/components/ui';
 import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
 import { getActivityDate } from '@/lib/dates';
@@ -127,7 +128,9 @@ export default function TrainingPlansListPage() {
     };
   }, [authLoading, isAuthenticated, router, activities]);
 
-  if (authLoading || !isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) {
+    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
+  }
 
   const isZh = i18n.language === 'zh';
 

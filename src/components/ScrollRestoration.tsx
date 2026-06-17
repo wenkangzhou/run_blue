@@ -1,28 +1,28 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 const STORAGE_PREFIX = 'run_blue_scroll:';
-const RESTORE_DELAYS = [0, 50, 150, 350, 700];
+const RESTORE_DELAYS = [0, 50, 150, 350, 700, 1200, 1800];
 
-function storageKey(pathname: string) {
-  return `${STORAGE_PREFIX}${pathname || '/'}`;
+function storageKey(routeKey: string) {
+  return `${STORAGE_PREFIX}${routeKey || '/'}`;
 }
 
-function saveScrollPosition(pathname: string) {
+function saveScrollPosition(routeKey: string) {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(storageKey(pathname), String(window.scrollY));
+    sessionStorage.setItem(storageKey(routeKey), String(window.scrollY));
   } catch {
     // Ignore private browsing / storage quota edge cases.
   }
 }
 
-function getSavedScrollPosition(pathname: string) {
+function getSavedScrollPosition(routeKey: string) {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(storageKey(pathname));
+    const raw = sessionStorage.getItem(storageKey(routeKey));
     if (!raw) return null;
     const value = Number(raw);
     return Number.isFinite(value) ? value : null;
@@ -33,7 +33,10 @@ function getSavedScrollPosition(pathname: string) {
 
 export function ScrollRestoration() {
   const pathname = usePathname() || '/';
-  const pathnameRef = useRef(pathname);
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const routeKey = query ? `${pathname}?${query}` : pathname;
+  const routeKeyRef = useRef(routeKey);
   const saveTimerRef = useRef<number | null>(null);
   const restoreTimersRef = useRef<number[]>([]);
 
@@ -48,14 +51,14 @@ export function ScrollRestoration() {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      saveScrollPosition(pathnameRef.current);
+      saveScrollPosition(routeKeyRef.current);
     };
 
     const scheduleSave = () => {
       if (saveTimerRef.current !== null) return;
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
-        saveScrollPosition(pathnameRef.current);
+        saveScrollPosition(routeKeyRef.current);
       }, 120);
     };
 
@@ -86,19 +89,21 @@ export function ScrollRestoration() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    pathnameRef.current = pathname;
+    saveScrollPosition(routeKeyRef.current);
+    routeKeyRef.current = routeKey;
     restoreTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     restoreTimersRef.current = [];
 
-    const savedY = getSavedScrollPosition(pathname);
+    const savedY = getSavedScrollPosition(routeKey);
     if (savedY === null || savedY <= 0) return;
 
     restoreTimersRef.current = RESTORE_DELAYS.map((delay) =>
       window.setTimeout(() => {
-        window.scrollTo({ top: savedY, left: 0, behavior: 'auto' });
+        const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        window.scrollTo({ top: Math.min(savedY, maxY || savedY), left: 0, behavior: 'auto' });
       }, delay)
     );
-  }, [pathname]);
+  }, [routeKey]);
 
   return null;
 }
