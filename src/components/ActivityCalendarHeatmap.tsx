@@ -158,9 +158,13 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
                 const value = valueMap.get(key) || 0;
                 const level = getLevel(value);
                 const isInYear = date.getFullYear() === year;
+                const title = value > 0
+                  ? `${formatDateLabel(date)} · ${formatMetricValue(value, metric)} ${getMetricUnit(metric)}`
+                  : formatDateLabel(date);
                 return (
                   <div
                     key={di}
+                    title={isInYear ? title : undefined}
                     className={`h-[11px] w-[11px] rounded-[3px] ${isInYear ? COLOR_CLASSES[level] : 'bg-transparent'} cursor-pointer ring-1 ring-transparent transition-transform hover:scale-125 hover:ring-white dark:hover:ring-zinc-950`}
                     onMouseEnter={(e) => isInYear && handleMouseEnter(date, value, e)}
                     onMouseLeave={() => setHovered(null)}

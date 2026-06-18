@@ -125,7 +125,9 @@ export function VolumeBarChart({ data, metric, selectedKey, onSelect, colors }: 
                   fill={entry.isCurrent ? (colors?.currentBar || '#f97316') : (colors?.bar || '#3b82f6')}
                   className={`${entry.activities.length > 0 ? 'cursor-pointer' : 'cursor-default'} transition-opacity hover:opacity-80`}
                   onClick={() => entry.activities.length > 0 && onSelect?.(entry)}
-                  stroke={selectedKey === entry.key ? '#0f172a' : entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
+                  stroke={selectedKey === entry.key
+                    ? (entry.isCurrent ? (colors?.currentBarStroke || '#0f766e') : (colors?.barStroke || '#2563eb'))
+                    : entry.isCurrent ? (colors?.currentBarStroke || '#ea580c') : (colors?.barStroke || '#2563eb')}
                   strokeWidth={selectedKey === entry.key ? 2 : 0}
                 />
               ))}

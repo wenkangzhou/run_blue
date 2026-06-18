@@ -379,8 +379,8 @@ function SectionHeader({ icon: Icon, title, action }: { icon: LucideIcon; title:
 function StatLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-t border-zinc-100 py-2 first:border-t-0 first:pt-0 last:pb-0 dark:border-zinc-800">
-      <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
-      <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100 text-right">{value}</span>
+      <span className="shrink-0 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
+      <span className="min-w-0 truncate text-right font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">{value}</span>
     </div>
   );
 }
@@ -611,6 +611,17 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const last30DeltaLabel = previous30Summary.totalDistance > 0
     ? t('stats.vsPrevious30Days', '较前 30 天 {{value}}', { value: last30DistanceDeltaText })
     : last30DistanceDeltaText;
+  const avgRunDistanceText = yearSummary.activityCount > 0
+    ? formatCompactDistance(yearSummary.totalDistance / yearSummary.activityCount)
+    : '--';
+  const projectedYearDistanceText = trainingRhythm.projectedYearDistance > 0
+    ? formatCompactDistance(trainingRhythm.projectedYearDistance)
+    : '--';
+  const last30TrendTone = previous30Summary.totalDistance === 0
+    ? 'text-blue-600 dark:text-blue-400'
+    : last30DistanceDelta >= 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : 'text-amber-600 dark:text-amber-400';
 
   useEffect(() => {
     setSelectedPeriodKey((prev) => {
@@ -700,102 +711,107 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
-        <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="border-b border-zinc-100 p-4 sm:p-5 lg:border-b-0 lg:border-r lg:p-6 dark:border-zinc-800">
-            <div className="flex items-start justify-between gap-4 mb-5">
-              <div className="min-w-0">
-                <p className="mb-2 font-mono text-[11px] uppercase text-blue-600 dark:text-blue-400">
-                  {t('stats.trainingDashboard', '训练统计')}
-                </p>
-                <h2 className="font-mono text-4xl font-bold leading-none text-zinc-950 sm:text-5xl dark:text-zinc-50">
-                  {formatCompactDistance(yearSummary.totalDistance)}
-                </h2>
-                <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                  {selectedYear}{t('stats.year', '年')} · {yearSummary.activityCount}{t('stats.runs')} · {formatPaceFromSeconds(yearSummary.avgPace)}/km
-                </p>
-              </div>
-              <div className="hidden size-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 sm:flex dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900">
-                <Sparkles size={20} />
-              </div>
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(290px,0.65fr)]">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 sm:p-5 lg:p-6 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2 py-1 font-mono text-[11px] uppercase text-blue-600 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-300">
+                <Sparkles size={13} />
+                {t('stats.trainingDashboard', '训练统计')}
+              </p>
+              <h2 className="font-mono text-4xl font-bold leading-none text-zinc-950 sm:text-5xl dark:text-zinc-50">
+                {formatCompactDistance(yearSummary.totalDistance)}
+              </h2>
+              <p className="mt-2 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                {selectedYear}{t('stats.year', '年')} · {yearSummary.activityCount}{t('stats.runs')} · {formatPaceFromSeconds(yearSummary.avgPace)}/km
+              </p>
             </div>
+            {yearNavigator}
+          </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-                <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.last7Days', '近 7 天')}</p>
-                <p className="font-mono text-lg font-bold">{formatCompactDistance(last7Summary.totalDistance)}</p>
+          <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_150px] lg:items-end">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{t('stats.last7Days', '近 7 天')}</p>
+                <p className="mt-1 font-mono text-lg font-bold">{formatCompactDistance(last7Summary.totalDistance)}</p>
                 <p className="font-mono text-[10px] text-zinc-400">{last7Summary.activityCount}{t('stats.runs')}</p>
               </div>
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-                <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.activeDays', '活跃天数')}</p>
-                <p className="font-mono text-lg font-bold">{activeDays}</p>
-                <p className="font-mono text-[10px] text-zinc-400">{yearRemainingText}</p>
-              </div>
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-                <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.avgRunDistance', '单次均距')}</p>
-                <p className="font-mono text-lg font-bold">
-                  {yearSummary.activityCount > 0 ? formatCompactDistance(yearSummary.totalDistance / yearSummary.activityCount) : '--'}
-                </p>
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{t('stats.avgRunDistance', '单次均距')}</p>
+                <p className="mt-1 font-mono text-lg font-bold">{avgRunDistanceText}</p>
                 <p className="font-mono text-[10px] text-zinc-400">{formatDuration(Math.round(yearSummary.avgDuration))}</p>
+              </div>
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{t('stats.activeDays', '活跃天数')}</p>
+                <p className="mt-1 font-mono text-lg font-bold">{activeDays}</p>
+                <p className="font-mono text-[10px] text-zinc-400">{t('stats.daysUnit', '天')}</p>
+              </div>
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{yearProjectionLabel}</p>
+                <p className="mt-1 font-mono text-lg font-bold">{projectedYearDistanceText}</p>
+                <p className="font-mono text-[10px] text-zinc-400">{t('stats.basedOnCurrentRhythm', '按当前节奏')}</p>
               </div>
             </div>
 
-            <div className="mt-5">
-              <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-4 rounded-lg border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/60 lg:flex-col lg:gap-2">
+              <div
+                className="relative size-20 shrink-0 rounded-full [--year-fill:#2563eb] [--year-track:#e4e4e7] dark:[--year-fill:#60a5fa] dark:[--year-track:#27272a]"
+                style={{ background: `conic-gradient(var(--year-fill) ${yearTimeline.elapsedPercent * 3.6}deg, var(--year-track) 0deg)` }}
+              >
+                <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white dark:bg-zinc-900">
+                  <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{yearTimeline.elapsedPercent}%</span>
+                </div>
+              </div>
+              <div className="min-w-0 lg:text-center">
                 <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
                   {t('stats.yearElapsed', '年内时间')}
                 </p>
-                <p className="font-mono text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
-                  {yearTimeline.elapsedPercent}% · {yearRemainingText}
+                <p className="mt-1 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                  {yearRemainingText}
                 </p>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                <div className="h-full rounded-full bg-blue-600 dark:bg-blue-400" style={{ width: `${yearTimeline.elapsedPercent}%` }} />
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="bg-zinc-50/70 dark:bg-zinc-950/50">
-            <div className="grid grid-cols-2 lg:grid-cols-1">
-              <div className="border-r border-zinc-100 p-4 sm:p-5 lg:border-b lg:border-r-0 dark:border-zinc-800">
-                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-1">
-                  {t('stats.last30Days', '近 30 天')}
-                </p>
-                <p className="font-mono text-2xl font-bold text-zinc-950 dark:text-zinc-50">{formatCompactDistance(last30Summary.totalDistance)}</p>
-                <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {last30Summary.activityCount}{t('stats.runs')} · {last30DeltaLabel}
-                </p>
-              </div>
-              <div className="p-4 sm:p-5">
-                <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 mb-1">
-                  {t('stats.latestRun', '最近一次')}
-                </p>
-                <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50 truncate">
-                  {latestRun?.name || t('stats.noRecentRun', '暂无记录')}
-                </p>
-                <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {latestRun ? `${formatActivityDistance(latestRun.distance)} · ${formatActivityPace(latestRun)}/km · ${formatActivityDate(latestRun, locale)}` : '--'}
-                </p>
-              </div>
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-1">
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+            <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
+              {t('stats.last30Days', '近 30 天')}
+            </p>
+            <p className="mt-2 font-mono text-3xl font-bold text-zinc-950 dark:text-zinc-50">{formatCompactDistance(last30Summary.totalDistance)}</p>
+            <p className={`mt-1 font-mono text-xs font-bold ${last30TrendTone}`}>
+              {last30Summary.activityCount}{t('stats.runs')} · {last30DeltaLabel}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+            <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
+              {t('stats.latestRun', '最近一次')}
+            </p>
+            <p className="mt-2 truncate font-mono text-base font-bold text-zinc-950 dark:text-zinc-50">
+              {latestRun?.name || t('stats.noRecentRun', '暂无记录')}
+            </p>
+            <p className="mt-1 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
+              {latestRun ? `${formatActivityDistance(latestRun.distance)} · ${formatActivityPace(latestRun)}/km · ${formatActivityDate(latestRun, locale)}` : '--'}
+            </p>
+          </div>
+
+          <div className="col-span-2 grid grid-cols-2 gap-3 xl:col-span-1">
+            <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+              <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{t('stats.longestRun')}</p>
+              <p className="mt-1 truncate font-mono text-lg font-bold text-zinc-950 dark:text-zinc-50">{longestYearActivity ? formatActivityDistance(longestYearActivity.distance) : '--'}</p>
             </div>
-            <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                  <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.longestRun')}</p>
-                  <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50 truncate">{longestYearActivity ? formatActivityDistance(longestYearActivity.distance) : '--'}</p>
-                </div>
-                <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                  <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('stats.fastestPace')}</p>
-                  <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50 truncate">{fastestYearActivity ? `${formatActivityPace(fastestYearActivity)}/km` : '--'}</p>
-                </div>
-              </div>
+            <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+              <p className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{t('stats.fastestPace')}</p>
+              <p className="mt-1 truncate font-mono text-lg font-bold text-zinc-950 dark:text-zinc-50">{fastestYearActivity ? `${formatActivityPace(fastestYearActivity)}/km` : '--'}</p>
             </div>
           </div>
         </div>
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 sm:p-4 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="grid grid-cols-4 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-950">
             {PERIOD_TYPES.map((type) => (
               <button
@@ -814,9 +830,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
             ))}
           </div>
 
-          {showYearNav && yearNavigator}
-
-          <div className="flex gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 xl:pb-0">
             {METRIC_OPTIONS.map(({ value, icon: Icon }) => {
               const itemTone = getMetricTone(value);
               return (

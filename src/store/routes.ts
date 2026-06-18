@@ -42,6 +42,7 @@ interface RoutesState {
   renameRoute: (key: string, name: string) => void;
   removeActivityFromRoute: (key: string, activityId: number) => void;
   splitActivityToRoute: (key: string, activity: StravaActivity) => void;
+  splitActivitiesToRoute: (key: string, activities: StravaActivity[]) => void;
   addActivityToRoute: (key: string, activityId: number) => void;
   mergeRoutes: (targetKey: string, sourceKey: string) => void;
   restoreLastRoutesBackup: () => void;
@@ -354,6 +355,7 @@ export const useRoutesStore = create<RoutesState>()(
       unsaveRoute: (key) => {
         set((state) => ({
           savedRoutes: state.savedRoutes.filter((r) => r.key !== key),
+          lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
         }));
       },
 
@@ -370,7 +372,10 @@ export const useRoutesStore = create<RoutesState>()(
               };
             })
             .filter((r) => r.activityIds.length > 0);
-          return { savedRoutes: updated };
+          return {
+            savedRoutes: updated,
+            lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
+          };
         });
       },
 
@@ -397,6 +402,7 @@ export const useRoutesStore = create<RoutesState>()(
                 : r
             )
             .filter((r) => r.activityIds.length > 0),
+          lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
         }));
       },
 
@@ -443,6 +449,66 @@ export const useRoutesStore = create<RoutesState>()(
                 elevationGain: activity.total_elevation_gain || 0,
               },
             ],
+            lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
+          };
+        });
+      },
+
+      splitActivitiesToRoute: (key, activities) => {
+        const selectedActivities = activities.filter((activity, index, arr) => (
+          arr.findIndex((candidate) => candidate.id === activity.id) === index
+        ));
+        if (selectedActivities.length === 0) return;
+
+        set((state) => {
+          const sourceRoute = state.savedRoutes.find((route) => route.key === key);
+          if (!sourceRoute) return state;
+
+          const selectedIds = selectedActivities
+            .map((activity) => activity.id)
+            .filter((id) => sourceRoute.activityIds.includes(id));
+          if (selectedIds.length === 0 || selectedIds.length >= sourceRoute.activityIds.length) return state;
+
+          const referenceActivity = selectedActivities.find((activity) => selectedIds.includes(activity.id));
+          if (!referenceActivity) return state;
+
+          const remainingSourceIds = sourceRoute.activityIds.filter((id) => !selectedIds.includes(id));
+          const remainingRoutes = state.savedRoutes
+            .map((route) =>
+              route.key === key
+                ? {
+                    ...route,
+                    activityIds: remainingSourceIds,
+                    excludedActivityIds: uniqueActivityIds([...(route.excludedActivityIds ?? []), ...selectedIds]),
+                    manualUpdatedAt: Date.now(),
+                  }
+                : route
+            )
+            .filter((route) => route.activityIds.length > 0);
+          const baseKey = getRouteBaseKey(sourceRoute.key) || getRouteKey(referenceActivity);
+          const nextKey = getUniqueRouteKey(baseKey, remainingRoutes);
+          const selectedRouteActivities = selectedActivities.filter((activity) => selectedIds.includes(activity.id));
+
+          return {
+            savedRoutes: [
+              ...remainingRoutes,
+              {
+                key: nextKey,
+                name: getDefaultRouteName(selectedRouteActivities) || referenceActivity.name || sourceRoute.name,
+                activityIds: selectedIds,
+                excludedActivityIds: uniqueActivityIds([
+                  ...remainingSourceIds,
+                  ...(sourceRoute.excludedActivityIds ?? []),
+                ]),
+                manualUpdatedAt: Date.now(),
+                createdAt: Date.now(),
+                referenceActivityId: referenceActivity.id,
+                polyline: referenceActivity.map?.summary_polyline || undefined,
+                distance: referenceActivity.distance,
+                elevationGain: referenceActivity.total_elevation_gain || 0,
+              },
+            ],
+            lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
           };
         });
       },
@@ -459,6 +525,7 @@ export const useRoutesStore = create<RoutesState>()(
                 }
               : r
           ),
+          lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
         }));
       },
 
@@ -479,6 +546,7 @@ export const useRoutesStore = create<RoutesState>()(
                   ? { ...mergedRoute, manualUpdatedAt: Date.now() }
                   : route
               ),
+            lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
           };
         });
       },

@@ -78,22 +78,22 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
   const avgRunDistance = stats.totalRuns > 0 ? stats.totalDistance / stats.totalRuns : 0;
 
   return (
-    <section className="relative px-4 pb-10 pt-10 sm:pb-14 sm:pt-16">
+    <section className="relative px-4 pb-8 pt-8 sm:pb-12 sm:pt-12">
       <div className="relative mx-auto max-w-6xl overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80 shadow-2xl shadow-black/30">
         <TrajectoryCanvas activities={activities} />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,9,11,0.98),rgba(8,9,11,0.88),rgba(8,9,11,0.7))]" />
-        <div className="relative grid min-h-[560px] gap-8 p-5 sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_380px] lg:p-10">
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,9,11,0.98),rgba(8,9,11,0.9),rgba(8,9,11,0.72))]" />
+        <div className="relative grid min-h-[500px] gap-8 p-5 sm:min-h-[520px] sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_380px] lg:p-10">
           <div className="flex flex-col justify-between gap-8">
             <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200">
                 <Sparkles size={13} />
-                RUN BLUE PROFILE
+                跑蓝档案
               </div>
               <h1 className="max-w-3xl text-4xl font-black leading-none tracking-normal text-zinc-50 sm:text-6xl">
-                跑步档案
+                个人跑步档案
               </h1>
               <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
-                从 {firstYear ?? '--'} 到 {latestYear ?? '--'}，把每一次训练留下的路线、跑量和节奏变化整理成一份可浏览的个人记录。
+                从 {firstYear ?? '--'} 到 {latestYear ?? '--'}，把路线、跑量和节奏变化整理成一份可以快速回看的训练记录。
               </p>
             </div>
 
@@ -106,30 +106,30 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
           </div>
 
           <div className="grid content-end gap-3">
-          <BigStat
-            label="累计距离"
-            value={Math.round(stats.totalDistance / 1000)}
-            suffix=" km"
-            sub={formatDistance(stats.totalDistance)}
-          />
-          <BigStat
-            label="累计跑步"
-            value={stats.totalRuns}
-            suffix=""
-            sub={firstYear ? `始于 ${firstYear}` : '始于 --'}
-          />
-          <BigStat
-            label="累计时长"
-            value={Math.round(stats.totalTime / 3600)}
-            suffix=" h"
-            sub={formatDuration(stats.totalTime)}
-          />
-          <BigStat
-            label="累计爬升"
-            value={Math.round(stats.totalElevation)}
-            suffix=" m"
-            sub={`单次最高 ${Math.round(maxElevation.total_elevation_gain || 0)}m`}
-          />
+            <BigStat
+              label="累计距离"
+              value={Math.round(stats.totalDistance / 1000)}
+              suffix=" km"
+              sub={formatDistance(stats.totalDistance)}
+            />
+            <BigStat
+              label="累计跑步"
+              value={stats.totalRuns}
+              suffix=""
+              sub={firstYear ? `始于 ${firstYear}` : '始于 --'}
+            />
+            <BigStat
+              label="累计时长"
+              value={Math.round(stats.totalTime / 3600)}
+              suffix=" h"
+              sub={formatDuration(stats.totalTime)}
+            />
+            <BigStat
+              label="累计爬升"
+              value={Math.round(stats.totalElevation)}
+              suffix=" m"
+              sub={`单次最高 ${Math.round(maxElevation.total_elevation_gain || 0)}m`}
+            />
           </div>
         </div>
       </div>

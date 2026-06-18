@@ -133,6 +133,7 @@ export default function RoutesPage() {
     () => buildRouteFamilies(savedRoutes, activities),
     [savedRoutes, activities]
   );
+  const hasSimilarRouteFamilies = routeFamilies.some((family) => family.routes.length > 1);
   const totalMatchedActivities = savedRoutes.reduce((sum, route) => sum + route.activityIds.length, 0);
 
   if (authLoading || !isAuthenticated) {
@@ -157,6 +158,16 @@ export default function RoutesPage() {
     } catch (error) {
       console.error('[Routes] Failed to sync historical routes:', error);
     }
+  };
+
+  const handleAutoMergeRoutes = () => {
+    if (isSyncing || savedRoutes.length < 2) return;
+    if (!confirm(t('routes.autoMergeConfirm', '自动整理只会合并高置信相似路线，并会保留撤销备份。确定开始吗？'))) {
+      return;
+    }
+    resetSyncState();
+    const stats = syncRoutes(useActivitiesStore.getState().activities, { autoMerge: true });
+    setLastSyncStats(stats);
   };
 
   const handleRestoreLastRoutesBackup = () => {
@@ -185,6 +196,16 @@ export default function RoutesPage() {
     }
     if (syncProgress.phase === 'complete') {
       if (lastSyncStats) {
+        if ((lastSyncStats.autoMergedRoutes ?? 0) > 0) {
+          return t(
+            'routes.syncDoneWithMergeStats',
+            '历史匹配已更新 · 新增 {{added}} 条匹配 · 自动合并 {{merged}} 条相似路线',
+            {
+              added: lastSyncStats.matchesAdded,
+              merged: lastSyncStats.autoMergedRoutes,
+            }
+          );
+        }
         return t(
           'routes.syncDoneWithStats',
           '历史匹配已更新 · 新增 {{added}} 条匹配 · 更新 {{routes}} 条路线',
@@ -196,9 +217,25 @@ export default function RoutesPage() {
       }
       return t('routes.syncDone', '历史匹配已更新');
     }
+    if (lastSyncStats && (lastSyncStats.autoMergedRoutes ?? 0) > 0) {
+      return t('routes.autoMergeDone', '自动整理完成 · 合并 {{count}} 条高置信相似路线', {
+        count: lastSyncStats.autoMergedRoutes,
+      });
+    }
+    if (lastSyncStats) {
+      return t('routes.matchRefreshDone', '匹配已补充 · 新增 {{added}} 条记录 · 更新 {{routes}} 条路线', {
+        added: lastSyncStats.matchesAdded,
+        routes: lastSyncStats.routesUpdated,
+      });
+    }
     return '';
   })();
-  const shouldShowSyncPanel = savedRoutes.length > 0 && Boolean(hasMore || isSyncing || syncError || lastSyncStats || lastRoutesBackup);
+  const shouldShowSyncPanel = savedRoutes.length > 0 && Boolean(hasMore || isSyncing || syncError || lastSyncStats || lastRoutesBackup || hasSimilarRouteFamilies);
+  const syncPanelTitle = hasSimilarRouteFamilies
+    ? t('routes.routeReviewAvailable', '发现可整理的相似路线')
+    : hasMore
+      ? t('routes.historyIncomplete', '历史活动尚未完整加载')
+      : t('routes.historyComplete', '历史活动已加载完整');
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -213,7 +250,7 @@ export default function RoutesPage() {
             {t('common.back')}
           </Link>
           <h1 className="font-pixel text-base font-bold">{t('routes.title', '收藏路线')}</h1>
-          {savedRoutes.length > 0 && (
+          {savedRoutes.length > 0 && !shouldShowSyncPanel && (
             <button
               onClick={handleSyncHistory}
               disabled={isSyncing}
@@ -221,7 +258,7 @@ export default function RoutesPage() {
               title={t('routes.syncHistoryHint', '加载剩余历史活动，并重新匹配到已收藏路线')}
             >
               <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
-              {hasMore ? t('routes.syncHistory', '同步历史') : t('routes.rematchLoaded', '重新匹配')}
+              {hasMore ? t('routes.syncHistory', '同步历史') : t('routes.refreshMatches', '补充匹配')}
             </button>
           )}
           {savedRoutes.length === 0 && <div className="w-16" />}
@@ -238,19 +275,17 @@ export default function RoutesPage() {
             'mb-4 border-2 px-3 py-3 bg-white dark:bg-zinc-900',
             hasMore || syncError
               ? 'border-amber-200 dark:border-amber-800'
-              : 'border-zinc-200 dark:border-zinc-700',
+                : 'border-zinc-200 dark:border-zinc-700',
           ].join(' ')}>
             <div className="flex items-start gap-2">
-              {hasMore ? (
+              {hasMore || hasSimilarRouteFamilies ? (
                 <AlertCircle size={16} className="mt-0.5 text-amber-600 dark:text-amber-400 shrink-0" />
               ) : (
                 <Database size={16} className="mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
               )}
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                  {hasMore
-                    ? t('routes.historyIncomplete', '历史活动尚未完整加载')
-                    : t('routes.historyComplete', '历史活动已加载完整')}
+                  {syncPanelTitle}
                 </p>
                 <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
                   {t('routes.syncSummary', '已扫描 {{activities}} 条活动，{{routes}} 条收藏路线已匹配 {{matches}} 次记录。', {
@@ -267,6 +302,11 @@ export default function RoutesPage() {
                 {hasMore && (
                   <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
                     {t('routes.partialHistoryPreserve', '历史未完整时会保留已有匹配，只增量补充新识别到的活动。')}
+                  </p>
+                )}
+                {hasSimilarRouteFamilies && (
+                  <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                    {t('routes.autoMergeSafeHint', '自动整理只会合并高置信相似路线；有手工拆分记录的路线会跳过，避免覆盖你的判断。')}
                   </p>
                 )}
                 {syncStatusText && (
@@ -287,6 +327,27 @@ export default function RoutesPage() {
                     {t('routes.restoreLastBackup', '撤销上次路线同步')}
                   </button>
                 )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncHistory}
+                    disabled={isSyncing}
+                    className="inline-flex items-center gap-1 border border-zinc-200 dark:border-zinc-700 px-2 py-1 font-mono text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+                  >
+                    <RefreshCw size={11} className={isSyncing ? 'animate-spin' : ''} />
+                    {hasMore ? t('routes.syncHistory', '同步历史') : t('routes.refreshMatches', '补充匹配')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAutoMergeRoutes}
+                    disabled={isSyncing || !hasSimilarRouteFamilies}
+                    className="inline-flex items-center gap-1 border border-blue-200 px-2 py-1 font-mono text-[10px] font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30 transition-colors"
+                    title={t('routes.autoMergeSafeHint', '自动整理只会合并高置信相似路线；有手工拆分记录的路线会跳过，避免覆盖你的判断。')}
+                  >
+                    <Layers size={11} />
+                    {t('routes.autoMergeSimilarRoutes', '自动整理相似路线')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

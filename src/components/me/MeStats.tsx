@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StravaActivity } from '@/types';
 import { ActivityCalendarHeatmap } from '@/components/ActivityCalendarHeatmap';
 import { VolumeBarChart } from '@/components/charts/VolumeBarChart';
 import { aggregateActivities, getAvailableYears } from '@/lib/stats';
-import { ChevronLeft, ChevronRight, CalendarRange, BarChart3 } from 'lucide-react';
-import { formatDistance, formatDuration } from '@/lib/strava';
+import { ChevronLeft, ChevronRight, CalendarRange, BarChart3, Clock3, Footprints, Gauge, Route } from 'lucide-react';
+import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
 
 interface MeStatsProps {
@@ -16,6 +16,11 @@ interface MeStatsProps {
 export function MeStats({ activities }: MeStatsProps) {
   const years = useMemo(() => getAvailableYears(activities), [activities]);
   const [selectedYear, setSelectedYear] = useState(() => years[years.length - 1] || new Date().getFullYear());
+
+  useEffect(() => {
+    if (years.length === 0) return;
+    setSelectedYear((year) => years.includes(year) ? year : years[years.length - 1]);
+  }, [years]);
 
   const yearChartData = useMemo(
     () => aggregateActivities(activities, 'year', selectedYear, 'distance', 'zh'),
@@ -27,6 +32,9 @@ export function MeStats({ activities }: MeStatsProps) {
   );
   const selectedYearDistance = selectedYearActivities.reduce((sum, activity) => sum + activity.distance, 0);
   const selectedYearDuration = selectedYearActivities.reduce((sum, activity) => sum + activity.moving_time, 0);
+  const selectedYearPace = selectedYearDistance > 0
+    ? formatPace(selectedYearDistance, selectedYearDuration, 'min/km')
+    : '--';
 
   const yearIndex = years.indexOf(selectedYear);
   const canPrev = yearIndex > 0;
@@ -48,6 +56,13 @@ export function MeStats({ activities }: MeStatsProps) {
             <span>{formatDistance(selectedYearDistance)}</span>
             <span>{formatDuration(selectedYearDuration)}</span>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <YearStat icon={<Route size={14} />} label="年度跑量" value={formatDistance(selectedYearDistance)} />
+          <YearStat icon={<Footprints size={14} />} label="跑步次数" value={`${selectedYearActivities.length} 次`} />
+          <YearStat icon={<Gauge size={14} />} label="平均配速" value={selectedYearPace} />
+          <YearStat icon={<Clock3 size={14} />} label="累计时长" value={formatDuration(selectedYearDuration)} />
         </div>
 
         <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80">
@@ -117,5 +132,17 @@ export function MeStats({ activities }: MeStatsProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+function YearStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-amber-300">
+        {icon}
+        <span className="text-[10px] text-zinc-500">{label}</span>
+      </div>
+      <div className="truncate text-sm font-black text-zinc-100">{value}</div>
+    </div>
   );
 }

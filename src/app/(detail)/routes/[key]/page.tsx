@@ -23,6 +23,7 @@ import {
   X,
   Trash2,
   Merge,
+  Undo2,
 } from 'lucide-react';
 
 function getRouteBaseKey(key: string) {
@@ -72,6 +73,9 @@ export default function RouteDetailPage() {
     unsaveRoute,
     mergeRoutes,
     splitActivityToRoute,
+    splitActivitiesToRoute,
+    restoreLastRoutesBackup,
+    lastRoutesBackup,
   } = useRoutesStore();
 
   const rawKey = params.key as string;
@@ -98,6 +102,7 @@ export default function RouteDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [selectedSiblingKeys, setSelectedSiblingKeys] = useState<string[]>([]);
+  const [selectedActivityIds, setSelectedActivityIds] = useState<number[]>([]);
 
   React.useEffect(() => {
     setSelectedSiblingKeys((keys) => {
@@ -105,6 +110,13 @@ export default function RouteDetailPage() {
       return nextKeys.length === keys.length ? keys : nextKeys;
     });
   }, [siblingRoutes]);
+
+  React.useEffect(() => {
+    setSelectedActivityIds((ids) => {
+      const nextIds = ids.filter((id) => routeActivities.some((activity) => activity.id === id));
+      return nextIds.length === ids.length ? ids : nextIds;
+    });
+  }, [routeActivities]);
 
   React.useEffect(() => {
     if (authLoading) return;
@@ -204,6 +216,33 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleToggleActivitySelection = (activity: typeof routeActivities[number]) => {
+    setSelectedActivityIds((ids) =>
+      ids.includes(activity.id)
+        ? ids.filter((id) => id !== activity.id)
+        : [...ids, activity.id]
+    );
+  };
+
+  const handleSplitSelectedActivities = () => {
+    if (selectedActivityIds.length === 0 || selectedActivityIds.length >= routeActivities.length) return;
+    const selectedActivities = routeActivities.filter((activity) => selectedActivityIds.includes(activity.id));
+    if (confirm(t('routes.splitSelectedConfirm', '会把选中的 {{count}} 条记录拆成一个新的路线版本，当前路线会保留其余记录。确定继续吗？', {
+      count: selectedActivities.length,
+    }))) {
+      splitActivitiesToRoute(route.key, selectedActivities);
+      setSelectedActivityIds([]);
+    }
+  };
+
+  const handleRestoreLastRoutesBackup = () => {
+    if (confirm(t('routes.restoreLastBackupConfirm', '确定撤销上一次路线同步/整理结果吗？当前状态会作为新的备份保留。'))) {
+      restoreLastRoutesBackup();
+      setSelectedActivityIds([]);
+      setSelectedSiblingKeys([]);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
@@ -276,6 +315,22 @@ export default function RouteDetailPage() {
           {route.key}
         </p>
 
+        {lastRoutesBackup && (
+          <div className="mb-4 flex flex-col gap-2 border-2 border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-900/60 dark:bg-blue-950/20 sm:flex-row sm:items-center sm:justify-between">
+            <p className="font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+              {t('routes.lastEditCanRestore', '刚做过路线整理，如结果不满意可以撤销。')}
+            </p>
+            <button
+              type="button"
+              onClick={handleRestoreLastRoutesBackup}
+              className="inline-flex shrink-0 items-center justify-center gap-1 border border-blue-200 px-2 py-1 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-white dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/50"
+            >
+              <Undo2 size={11} />
+              {t('routes.restoreLastBackup', '撤销上次路线同步')}
+            </button>
+          </div>
+        )}
+
         {/* Map + Stats */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <PixelCard className="lg:col-span-2 h-64 overflow-hidden p-0">
@@ -288,7 +343,7 @@ export default function RouteDetailPage() {
             )}
           </PixelCard>
 
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
             <PixelCard className="p-3">
               <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('stats.totalActivities')}</p>
               <p className="font-mono text-2xl font-bold">{routeActivities.length}{t('routes.runs', '次')}</p>
@@ -309,7 +364,7 @@ export default function RouteDetailPage() {
                   : '--'}
               </p>
             </PixelCard>
-            <PixelCard className="p-3">
+            <PixelCard className="col-span-2 p-3 lg:col-span-1">
               <p className="font-mono text-[10px] text-zinc-500 uppercase">{t('routes.bestPace', '最快配速')}</p>
               <p className="font-mono text-2xl font-bold text-green-600 dark:text-green-400">{bestPace}</p>
             </PixelCard>
@@ -428,6 +483,10 @@ export default function RouteDetailPage() {
           <RouteComparisonTable
             activities={routeActivities}
             onSplitActivity={routeActivities.length > 1 ? handleSplitActivity : undefined}
+            selectedActivityIds={selectedActivityIds}
+            onToggleActivitySelection={routeActivities.length > 1 ? handleToggleActivitySelection : undefined}
+            onClearActivitySelection={() => setSelectedActivityIds([])}
+            onSplitSelectedActivities={handleSplitSelectedActivities}
           />
         </PixelCard>
       </div>
