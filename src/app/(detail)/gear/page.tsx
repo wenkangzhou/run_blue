@@ -341,6 +341,8 @@ export default function GearPage() {
   const totalRunningActivities = allActivities.filter(
     (a) => a.sport_type === 'Run' || a.type === 'Run'
   ).length;
+  const linkedRunningActivities = gearStats.reduce((sum, gear) => sum + gear.activityCount, 0);
+  const unlinkedRunningActivities = Math.max(0, totalRunningActivities - linkedRunningActivities);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -361,14 +363,20 @@ export default function GearPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Info bar */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 justify-between bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 px-4 py-3">
+        <div className="mb-4 flex flex-col gap-1 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
           <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
             {t('gear.basedOnActivities', '基于 {{count}} 条跑步记录', { count: totalRunningActivities })}
           </div>
+          {hasData && (
+            <div className="font-mono text-[10px] text-zinc-400">
+              {gearStats.length} 双跑鞋 · {linkedRunningActivities} 次已绑定
+              {unlinkedRunningActivities > 0 ? ` · ${unlinkedRunningActivities} 次未绑定` : ''}
+            </div>
+          )}
         </div>
 
         {error && (
-          <div className="mb-4 font-mono text-xs text-red-500 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 px-4 py-2">
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 font-mono text-xs text-red-500 dark:border-red-800 dark:bg-red-900/20">
             {error === 'token_expired'
               ? t('auth.sessionExpired')
               : error === 'rate_limited'
@@ -399,14 +407,14 @@ export default function GearPage() {
           <div className="space-y-4">
             {/* Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-4">
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
                   <Footprints size={14} />
                   <span className="font-mono text-xs uppercase">{t('gear.totalShoes', '跑鞋数量')}</span>
                 </div>
                 <div className="font-pixel text-xl font-bold">{gearStats.length}</div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-4">
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
                   <Route size={14} />
                   <span className="font-mono text-xs uppercase">{t('gear.totalRuns', '跑步次数')}</span>
@@ -415,7 +423,7 @@ export default function GearPage() {
                   {gearStats.reduce((sum, g) => sum + g.activityCount, 0)}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-4">
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
                   <TrendingUp size={14} />
                   <span className="font-mono text-xs uppercase">{t('gear.totalDistance', '总距离')}</span>
@@ -424,7 +432,7 @@ export default function GearPage() {
                   {formatDistance(gearStats.reduce((sum, g) => sum + g.activityDistance, 0))}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-4">
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
                   <Clock size={14} />
                   <span className="font-mono text-xs uppercase">{t('gear.totalTime', '总用时')}</span>
@@ -440,31 +448,33 @@ export default function GearPage() {
               {gearStats.map((gear) => (
                 <div
                   key={gear.gearId}
-                  className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-4"
+                  className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 flex items-center justify-center">
+                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
                         <Footprints size={20} className="text-zinc-500 dark:text-zinc-400" />
                       </div>
-                      <div>
-                        <h3 className="font-mono text-sm font-bold">{gear.name}</h3>
+                      <div className="min-w-0">
+                        <h3 className="break-words font-mono text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
+                          {gear.name}
+                        </h3>
                         <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
                           {t('gear.officialDistance', '官方里程')}: {formatDistance(gear.stravaDistance)}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="shrink-0 sm:text-right">
+                      <div className="font-mono text-[10px] uppercase text-zinc-400">
+                        本地统计
+                      </div>
                       <div className="font-pixel text-lg font-bold text-blue-600 dark:text-blue-400">
                         {formatDistance(gear.activityDistance)}
-                      </div>
-                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
-                        {gear.activityCount} {t('stats.runs')}
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 pt-3 border-t-2 border-zinc-100 dark:border-zinc-800">
+                  <div className="grid grid-cols-3 gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                     <div>
                       <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500 uppercase mb-1">
                         {t('activity.averagePace')}
@@ -484,10 +494,10 @@ export default function GearPage() {
                     </div>
                     <div>
                       <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500 uppercase mb-1">
-                        {t('activity.distance')}
+                        {t('gear.totalRuns', '跑步次数')}
                       </div>
                       <div className="font-mono text-sm font-bold">
-                        {formatDistance(gear.activityDistance)}
+                        {gear.activityCount} {t('stats.runs')}
                       </div>
                     </div>
                   </div>

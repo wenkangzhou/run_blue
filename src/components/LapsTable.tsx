@@ -14,44 +14,49 @@ export function LapsTable({ laps, showHeader = true }: LapsTableProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="overflow-x-auto -mx-2 scrollbar-hide">
-      <table className="w-full min-w-[400px]">
-        {showHeader && (
-          <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
-              <th className="text-left py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">#</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.distance')}</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.time')}</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.pace')}</th>
-              <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.heartRate')}</th>
-            </tr>
-          </thead>
-        )}
-        <tbody>
-          {laps.map((lap, index) => (
-            <tr 
-              key={lap.id || index} 
-              className="border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-            >
-              <td className="py-1.5 px-2 font-mono text-xs">
-                {lap.lap_index || index + 1}
-              </td>
-              <td className="py-1.5 px-2 font-mono text-xs text-right">
-                {formatDistance(lap.distance, 'km')}
-              </td>
-              <td className="py-1.5 px-2 font-mono text-xs text-right">
-                {formatDuration(lap.moving_time)}
-              </td>
-              <td className="py-1.5 px-2 font-mono text-xs text-right font-bold">
-                {lap.moving_time > 0 ? formatPace(lap.distance, lap.moving_time, 'min/km') : '--:--'}
-              </td>
-              <td className="py-1.5 px-2 font-mono text-xs text-right">
-                {lap.average_heartrate ? Math.round(lap.average_heartrate) : '--'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      <div className="-mx-2 overflow-x-auto pb-1">
+        <table className="w-full min-w-[400px]">
+          {showHeader && (
+            <thead>
+              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                <th className="text-left py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">#</th>
+                <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.distance')}</th>
+                <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.time')}</th>
+                <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.pace')}</th>
+                <th className="text-right py-1 px-2 font-mono text-[10px] uppercase text-zinc-500">{t('activity.heartRate')}</th>
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {laps.map((lap, index) => (
+              <tr
+                key={lap.id || index}
+                className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/50 dark:hover:bg-zinc-900"
+              >
+                <td className="py-1.5 px-2 font-mono text-xs">
+                  {lap.lap_index || index + 1}
+                </td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right">
+                  {formatDistance(lap.distance, 'km')}
+                </td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right">
+                  {formatDuration(lap.moving_time)}
+                </td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right font-bold">
+                  {lap.moving_time > 0 ? formatPace(lap.distance, lap.moving_time, 'min/km') : '--:--'}
+                </td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right">
+                  {lap.average_heartrate ? Math.round(lap.average_heartrate) : '--'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1 font-mono text-[10px] text-zinc-400 sm:hidden">
+        {t('common.swipeHorizontally', '左右滑动查看更多')}
+      </p>
     </div>
   );
 }

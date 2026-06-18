@@ -49,7 +49,7 @@ export async function analyzeActivity(
         },
         signal: controller.signal,
         body: JSON.stringify({
-          model: 'kimi-k2.5',
+          model: 'kimi-k2.6',
           messages: [
             {
               role: 'system',

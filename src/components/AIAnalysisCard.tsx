@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityStream, StravaActivity } from '@/types';
 import {
   Sparkles, RefreshCw, Clock, Zap, TrendingUp, Target,
-  Activity, AlertTriangle, ChevronRight, BarChart3, Trophy, Brain, Radar, ListTree,
+  Activity, AlertTriangle, ChevronRight, Trophy, Radar,
   ArrowRight,
 } from 'lucide-react';
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
@@ -62,6 +62,55 @@ function getAppropriatePaceProLabel(workoutType: ActivityClassification['workout
     default:
       return '配速区间匹配';
   }
+}
+
+function compactSummary(text: string, maxSentences = 1, maxChars = 88): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+
+  const [dashLead, ...dashRest] = normalized.split(/——|--/);
+  const dashTail = dashRest.join(' ').trim();
+  const leadSentence = closeSentence(dashLead ?? '');
+  const remainingChars = maxChars - leadSentence.length;
+  if (dashTail && leadSentence.length >= 8 && remainingChars >= 24) {
+    return `${leadSentence}${compactNaturalSentence(dashTail, 1, remainingChars)}`;
+  }
+
+  return compactNaturalSentence(normalized, maxSentences, maxChars);
+}
+
+function compactNaturalSentence(text: string, maxSentences: number, maxChars: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+
+  const sentences = normalized.match(/[^。！？!?]+[。！？!?]?/g)?.map((part) => part.trim()).filter(Boolean) ?? [];
+  const bySentence = sentences.slice(0, maxSentences).join('');
+  const candidate = bySentence || normalized;
+
+  if (candidate.length <= maxChars) return candidate;
+  const clipped = candidate.slice(0, maxChars).trim();
+  const splitIndex = Math.max(
+    clipped.lastIndexOf('，'),
+    clipped.lastIndexOf('；'),
+    clipped.lastIndexOf('、'),
+    clipped.lastIndexOf(','),
+    clipped.lastIndexOf(';')
+  );
+  if (splitIndex > maxChars * 0.45) {
+    return closeSentence(clipped.slice(0, splitIndex));
+  }
+
+  return closeSentence(clipped);
+}
+
+function closeSentence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  return /[。！？!?.]$/.test(trimmed) ? trimmed : `${trimmed}。`;
+}
+
+function cleanClause(text: string): string {
+  return text.replace(/[。！？!?.]+$/g, '').trim();
 }
 
 export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysisCardProps) {
@@ -380,6 +429,48 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const zoneFallbackLabel = zoneKey;
   const zoneLabel = t(zoneTranslationKey, zoneFallbackLabel);
   const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
+  const briefSignals = (() => {
+    if (!analysis || !verdict) return [];
+    const warnings = (analysis.warnings ?? []).filter(Boolean);
+    if (warnings.length > 0) {
+      return warnings.slice(0, 2).map((text) => ({ tone: 'warning' as const, text: compactSummary(text, 1, 56) }));
+    }
+    if (verdict.cons.length > 0) {
+      return verdict.cons.slice(0, 2).map((text) => ({ tone: 'caution' as const, text: compactSummary(text, 1, 56) }));
+    }
+    return verdict.pros.slice(0, 2).map((text) => ({ tone: 'positive' as const, text: compactSummary(text, 1, 56) }));
+  })();
+  const briefAdvice = (() => {
+    if (!analysis || !verdict) return [];
+    const candidates = [
+      ...verdict.advice,
+      analysis.nextWorkoutSuggestion,
+      ...analysis.suggestions,
+    ].filter((item): item is string => Boolean(item?.trim()));
+    return Array.from(new Set(candidates)).slice(0, 1).map((item) => compactSummary(item, 1, 56));
+  })();
+  const briefSummary = (() => {
+    if (!analysis) return '';
+    if (!verdict) return compactNaturalSentence(analysis.summary, 2, 110);
+
+    const warnings = (analysis.warnings ?? []).map(cleanClause).filter(Boolean);
+    const intro = `本次识别为${verdict.type}，${verdict.effectLabel}`;
+    const effortTone = isRace
+      ? '优先按比赛恢复处理'
+      : classification?.intensity === 'hard'
+        ? '属于质量课，恢复优先级高于继续加量'
+        : isLowIntensityRun
+          ? '重点看低负荷完成度，而不是配速排名'
+          : '整体按一次常规训练处理';
+
+    if (warnings.length > 0) {
+      return closeSentence(`${intro}；先处理风险项，再看训练收益`);
+    }
+    if (structureSummary) {
+      return closeSentence(`${intro}；${effortTone}`);
+    }
+    return closeSentence(`${intro}；${effortTone}`);
+  })();
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -439,331 +530,338 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
             )}
           </div>
         ) : analysis ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {analysis.isFallback && (
               <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
-                <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                <span className="font-mono text-[10px] text-amber-700 dark:text-amber-300 flex-1">
+                <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="flex-1 font-mono text-[10px] text-amber-700 dark:text-amber-300">
                   {t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
                 </span>
               </div>
             )}
 
-            {/* Coach Verdict */}
-            {verdict && (
-              <div className={`rounded-lg border ${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg} p-3`}>
-                {/* Header: Type + Effect */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{verdict.type}</span>
-                    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} ${effectStyles[verdict.effect].border}`}>
-                      {verdict.effectLabel}
+            <div className={`rounded-lg border p-4 ${verdict ? `${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg}` : 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60'}`}>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="break-words font-mono text-base font-black text-zinc-950 [overflow-wrap:anywhere] dark:text-zinc-50">
+                      {verdict?.type || workoutTypeLabel || t('aiAnalysis.workoutRead', '训练识别')}
                     </span>
-                  </div>
-                </div>
-
-                {/* Pros */}
-                {verdict.pros.length > 0 && (
-                  <div className="mb-2">
-                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">优点</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {verdict.pros.map((pro, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
-                          <span className="text-emerald-500">+</span>
-                          {pro}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Cons */}
-                {verdict.cons.length > 0 && (
-                  <div className="mb-2">
-                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">不足</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {verdict.cons.map((con, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 font-mono text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-                          <span className="text-red-500">−</span>
-                          {con}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Advice */}
-                {verdict.advice.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
-                    <p className="font-mono text-[10px] uppercase text-zinc-500 mb-1">建议</p>
-                    <div className="space-y-1">
-                      {verdict.advice.map((item, i) => (
-                        <div key={i} className="flex items-start gap-1.5">
-                          <ArrowRight className="w-3 h-3 mt-0.5 text-blue-500 flex-shrink-0" />
-                          <p className="font-mono text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{item}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Summary */}
-            <div className={`rounded-lg border p-3 ${isRace ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60'}`}>
-              <p className="font-mono text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">{analysis.summary}</p>
-            </div>
-
-            {classification && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                  <div className="flex items-center gap-1 mb-1">
-                    <Brain className="w-3 h-3 text-zinc-400" />
-                    <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.workoutRead', '训练识别')}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-base font-bold text-zinc-900 dark:text-zinc-100">{workoutTypeLabel}</span>
-                    <span className="inline-flex items-center rounded-md bg-zinc-200 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
-                      {confidenceLabel}
-                    </span>
-                  </div>
-                  {structureSummary && (
-                    <p className="mt-1 font-mono text-[11px] text-zinc-500">{structureSummary}</p>
-                  )}
-                </div>
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                  <div className="flex items-center gap-1 mb-1">
-                    <Radar className="w-3 h-3 text-zinc-400" />
-                    <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.whyItThinksSo', '判断依据')}</span>
-                  </div>
-                  <div className="space-y-1">
-                    {classification.workoutTypeEvidence.slice(0, 2).map((evidence, index) => (
-                      <p key={index} className="font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-                        {formatEvidence(evidence)}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                <div className="flex items-center gap-1 mb-1">
-                  <Target className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.paceZone')}</span>
-                </div>
-                {zone ? (
-                  <div>
-                    <span className={`font-mono text-lg font-bold ${zone.color}`}>{zone.label}</span>
-                    {analysis.paceZoneAnalysis?.appropriateness !== 'appropriate' && (
-                      <span className="ml-2 font-mono text-[10px] text-amber-600">
-                        {analysis.paceZoneAnalysis?.appropriateness === 'too-fast' ? t('aiAnalysis.tooFast') : t('aiAnalysis.tooSlow')}
+                    {verdict && (
+                      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} ${effectStyles[verdict.effect].border}`}>
+                        {verdict.effectLabel}
+                      </span>
+                    )}
+                    {confidenceLabel && (
+                      <span className="inline-flex items-center rounded-md bg-white/70 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-500 dark:bg-zinc-900/60 dark:text-zinc-400">
+                        {confidenceLabel}
                       </span>
                     )}
                   </div>
-                ) : <span className="font-mono text-sm text-zinc-400">--</span>}
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                <div className="flex items-center gap-1 mb-1">
-                  <Zap className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.intensity')}</span>
-                </div>
-                {intensity && (
-                  <span className={`inline-block rounded-md px-2 py-0.5 font-mono text-sm font-bold ${intensity.color} ${intensity.bg}`}>
-                    {isRace ? t('aiAnalysis.extremeRace') : intensity.label}
-                  </span>
-                )}
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                <div className="flex items-center gap-1 mb-1">
-                  <Clock className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.recovery')}</span>
-                </div>
-                <span className={`font-mono text-lg font-bold ${isRace ? 'text-red-600' : ''}`}>{analysis.recoveryHours}h</span>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                <div className="flex items-center gap-1 mb-1">
-                  <TrendingUp className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">
-                    {comparisonIsReferenceOnly && lowIntensityExecution
-                      ? lowIntensityExecution.title
-                      : comparisonIsReferenceOnly
-                        ? t('aiAnalysis.comparisonReference', '配速参考')
-                        : t('aiAnalysis.comparison')}
-                  </span>
-                </div>
-                {comparisonIsReferenceOnly && lowIntensityExecution ? (
-                  <div>
-                    <span className={`font-mono text-lg font-bold ${lowIntensityExecution.color}`}>{lowIntensityExecution.status}</span>
-                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-zinc-500">{lowIntensityExecution.detail}</p>
-                  </div>
-                ) : comparisonIsReferenceOnly ? (
-                  <div>
-                    <span className="font-mono text-sm font-bold">{analysis.comparisonToAverage}</span>
-                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-zinc-500">
-                      {isLowIntensityRun
-                        ? t('aiAnalysis.easyRunComparisonHint', '轻松/恢复跑更看重低负荷完成度，配速对比只作背景参考。')
-                        : t('aiAnalysis.comparisonSecondaryHint', '这组历史样本参考性一般，更适合当作方向提示。')}
+                  {structureSummary && (
+                    <p className="mt-1 break-words font-mono text-[11px] text-zinc-500 [overflow-wrap:anywhere]">
+                      {structureSummary}
                     </p>
-                  </div>
-                ) : (
-                  <span className="font-mono text-sm font-bold">{analysis.comparisonToAverage}</span>
-                )}
+                  )}
+                </div>
+                <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:min-w-[220px]">
+                  <BriefMetric label={t('aiAnalysis.paceZone', '配速区间')} value={zone.label} valueClassName={zone.color} />
+                  <BriefMetric
+                    label={t('aiAnalysis.intensity', '强度')}
+                    value={intensity ? (isRace ? t('aiAnalysis.extremeRace') : intensity.label) : '--'}
+                  />
+                  <BriefMetric label={t('aiAnalysis.recovery', '恢复')} value={`${analysis.recoveryHours}h`} valueClassName={isRace ? 'text-red-600' : ''} />
+                </div>
               </div>
+
+              <p className="break-words font-mono text-sm leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                {briefSummary}
+              </p>
+
+              {(briefSignals.length > 0 || briefAdvice.length > 0) && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {briefSignals.length > 0 && (
+                    <div className="rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
+                      <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
+                        {t('aiAnalysis.keyTakeaways', '本次重点')}
+                      </p>
+                      <div className="space-y-1">
+                        {briefSignals.map((item, index) => (
+                          <div key={index} className="flex items-start gap-1.5">
+                            <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                              item.tone === 'positive'
+                                ? 'bg-emerald-500'
+                                : item.tone === 'warning'
+                                  ? 'bg-red-500'
+                                  : 'bg-amber-500'
+                            }`} />
+                            <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                              {item.text}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {briefAdvice.length > 0 && (
+                    <div className="rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
+                      <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
+                        {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
+                      </p>
+                      <div className="space-y-1">
+                        {briefAdvice.map((item, index) => (
+                          <div key={index} className="flex items-start gap-1.5">
+                            <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-blue-500" />
+                            <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                              {item}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* HR Zone Distribution */}
-            {hrDist && Object.keys(hrDist).length > 0 && (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                <div className="flex items-center gap-1 mb-2">
-                  <Activity className="w-3 h-3 text-zinc-400" />
-                  <span className="font-mono text-[10px] text-zinc-500 uppercase">{t('aiAnalysis.hrZoneDistribution')}</span>
-                </div>
-                <div className="space-y-1.5">
-                  {hrZonesOrdered.map((zk) => {
-                    const pct = hrDist[zk] || 0;
-                    if (pct <= 0) return null;
-                    const info = hrZoneDisplay[zk];
-                    return (
-                      <div key={zk} className="flex items-center gap-2">
-                        <span className={`font-mono text-[10px] w-20 text-right ${info.color}`}>{info.label}</span>
-                        <div className="flex-1 h-2.5 bg-zinc-200 dark:bg-zinc-700 rounded-sm overflow-hidden">
-                          <div className={`h-full ${info.bg} rounded-sm`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="font-mono text-[10px] w-8 text-zinc-500">{pct}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {streamAnalysis?.pacePattern && (
-                  <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
-                    <span className="font-mono text-[10px] text-zinc-500">
-                      {t('aiAnalysis.pacePattern')}: <span className="text-zinc-700 dark:text-zinc-300">{streamAnalysis.patternConfidence}</span>
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Expandable Details */}
             <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
               <button
                 onClick={() => setExpanded(!expanded)}
                 className="flex w-full items-center justify-between p-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
-                <span className="font-mono text-xs font-bold uppercase text-zinc-500">{t('aiAnalysis.deepInsights')}</span>
+                <span className="font-mono text-xs font-bold uppercase text-zinc-500">
+                  {t('aiAnalysis.analysisDetails', '分析依据与建议')}
+                </span>
                 <ChevronRight className={`w-4 h-4 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
               </button>
 
               {expanded && (
-                <div className="px-3 pb-3 border-t border-zinc-200 dark:border-zinc-700">
+                <div className="border-t border-zinc-200 px-3 pb-3 dark:border-zinc-700">
                   <div className="space-y-3 pt-3">
-                    {analysis.trainingLoadContext && (
-                      <div className="flex items-start gap-3">
-                        <BarChart3 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">{t('aiAnalysis.loadContext')}</span>
-                          <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{analysis.trainingLoadContext}</p>
-                        </div>
-                      </div>
+                    {analysis.summary && (
+                      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
+                        <h3 className="font-mono text-[10px] uppercase text-zinc-500">
+                          {t('aiAnalysis.fullSummary', '完整总结')}
+                        </h3>
+                        <p className="mt-1 break-words font-mono text-sm leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                          {analysis.summary}
+                        </p>
+                      </section>
                     )}
-                    {analysis.similarActivitiesInsight && (
-                      <div className="flex items-start gap-3">
-                        <Activity className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
-                            {comparisonIsReferenceOnly
-                              ? t('aiAnalysis.similarActivitiesReference', '同类参考')
-                              : t('aiAnalysis.similarActivities')}
-                          </span>
-                          <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{analysis.similarActivitiesInsight}</p>
-                        </div>
-                      </div>
-                    )}
-                    {comparisonIsReferenceOnly && analysis.comparisonToAverage && (
-                      <div className="flex items-start gap-3">
-                        <TrendingUp className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
-                            {t('aiAnalysis.comparisonReference', '配速参考')}
-                          </span>
-                          <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{analysis.comparisonToAverage}</p>
-                        </div>
-                      </div>
-                    )}
-                    {analysis.nextWorkoutSuggestion && (
-                      <div className="flex items-start gap-3">
-                        <Target className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isRace ? 'text-amber-500' : 'text-purple-500'}`} />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
-                            {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
-                          </span>
-                          <p className={`font-mono text-sm ${isRace ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                            {analysis.nextWorkoutSuggestion}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+
                     {classification && (
-                      <div className="flex items-start gap-3">
-                        <ListTree className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-[10px] text-zinc-500 uppercase block mb-0.5">
-                            {t('aiAnalysis.classificationDetail', '识别明细')}
-                          </span>
-                          <div className="space-y-1">
-                            {classification.workoutTypeEvidence.map((evidence, index) => (
-                              <p key={index} className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{formatEvidence(evidence)}</p>
-                            ))}
-                          </div>
+                      <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                        <div className="mb-2 flex items-center gap-1">
+                          <Radar className="h-3 w-3 text-zinc-400" />
+                          <h3 className="font-mono text-[10px] uppercase text-zinc-500">
+                            {t('aiAnalysis.whyItThinksSo', '为什么这样判定')}
+                          </h3>
                         </div>
-                      </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{workoutTypeLabel}</span>
+                          <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                            {confidenceLabel}
+                          </span>
+                          {structureSummary && (
+                            <span className="break-words font-mono text-[11px] text-zinc-500 [overflow-wrap:anywhere]">
+                              {structureSummary}
+                            </span>
+                          )}
+                        </div>
+                        {classification.workoutTypeEvidence.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {classification.workoutTypeEvidence.slice(0, 3).map((evidence, index) => (
+                              <li key={index} className="flex items-start gap-2 font-mono text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-zinc-400" />
+                                {formatEvidence(evidence)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    )}
+
+                    <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <DetailMetric
+                        icon={<Target className="h-3 w-3 text-zinc-400" />}
+                        label={t('aiAnalysis.paceZone')}
+                        value={zone.label}
+                        valueClassName={zone.color}
+                        aside={analysis.paceZoneAnalysis?.appropriateness !== 'appropriate'
+                          ? (analysis.paceZoneAnalysis?.appropriateness === 'too-fast' ? t('aiAnalysis.tooFast') : t('aiAnalysis.tooSlow'))
+                          : undefined}
+                      />
+                      <DetailMetric
+                        icon={<Zap className="h-3 w-3 text-zinc-400" />}
+                        label={t('aiAnalysis.intensity')}
+                        value={intensity ? (isRace ? t('aiAnalysis.extremeRace') : intensity.label) : '--'}
+                      />
+                      <DetailMetric
+                        icon={<Clock className="h-3 w-3 text-zinc-400" />}
+                        label={t('aiAnalysis.recovery')}
+                        value={`${analysis.recoveryHours}h`}
+                        valueClassName={isRace ? 'text-red-600' : ''}
+                      />
+                      <DetailMetric
+                        icon={<TrendingUp className="h-3 w-3 text-zinc-400" />}
+                        label={comparisonIsReferenceOnly && lowIntensityExecution
+                          ? lowIntensityExecution.title
+                          : comparisonIsReferenceOnly
+                            ? t('aiAnalysis.comparisonReference', '配速参考')
+                            : t('aiAnalysis.comparison')}
+                        value={comparisonIsReferenceOnly && lowIntensityExecution
+                          ? lowIntensityExecution.status
+                          : analysis.comparisonToAverage}
+                        description={comparisonIsReferenceOnly && lowIntensityExecution
+                          ? lowIntensityExecution.detail
+                          : comparisonIsReferenceOnly
+                            ? (isLowIntensityRun
+                              ? t('aiAnalysis.easyRunComparisonHint', '轻松/恢复跑更看重低负荷完成度，配速对比只作背景参考。')
+                              : t('aiAnalysis.comparisonSecondaryHint', '这组历史样本参考性一般，更适合当作方向提示。'))
+                            : undefined}
+                        valueClassName={comparisonIsReferenceOnly && lowIntensityExecution ? lowIntensityExecution.color : undefined}
+                      />
+                    </section>
+
+                    {hrDist && Object.keys(hrDist).length > 0 && (
+                      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
+                        <div className="mb-2 flex items-center gap-1">
+                          <Activity className="h-3 w-3 text-zinc-400" />
+                          <h3 className="font-mono text-[10px] uppercase text-zinc-500">{t('aiAnalysis.hrZoneDistribution')}</h3>
+                        </div>
+                        <div className="space-y-1.5">
+                          {hrZonesOrdered.map((zk) => {
+                            const pct = hrDist[zk] || 0;
+                            if (pct <= 0) return null;
+                            const info = hrZoneDisplay[zk];
+                            return (
+                              <div key={zk} className="flex items-center gap-2">
+                                <span className={`w-20 text-right font-mono text-[10px] ${info.color}`}>{info.label}</span>
+                                <div className="h-2.5 flex-1 overflow-hidden rounded-sm bg-zinc-200 dark:bg-zinc-700">
+                                  <div className={`h-full rounded-sm ${info.bg}`} style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="w-8 font-mono text-[10px] text-zinc-500">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {streamAnalysis?.pacePattern && (
+                          <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                            <span className="font-mono text-[10px] text-zinc-500">
+                              {t('aiAnalysis.pacePattern')}: <span className="text-zinc-700 dark:text-zinc-300">{streamAnalysis.patternConfidence}</span>
+                            </span>
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {analysis.warnings && analysis.warnings.length > 0 && (
+                      <section className={`rounded-lg border p-3 ${isRace ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'}`}>
+                        <div className="mb-1 flex items-center gap-2">
+                          <AlertTriangle className={`h-4 w-4 ${isRace ? 'text-amber-600' : 'text-red-600'}`} />
+                          <span className={`font-mono text-xs font-bold ${isRace ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
+                            {isRace ? t('aiAnalysis.postRaceNotes') : t('aiAnalysis.warnings')}
+                          </span>
+                        </div>
+                        <ul className="space-y-1">
+                          {analysis.warnings.map((warning, i) => (
+                            <li key={i} className={`break-words font-mono text-sm [overflow-wrap:anywhere] ${isRace ? 'text-amber-800 dark:text-amber-300' : 'text-red-800 dark:text-red-300'}`}>
+                              {warning}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+                    {(analysis.nextWorkoutSuggestion || analysis.suggestions.length > 0) && (
+                      <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                        <div className="mb-2 flex items-center gap-1">
+                          <Target className={`h-3 w-3 ${isRace ? 'text-amber-500' : 'text-purple-500'}`} />
+                          <h3 className="font-mono text-[10px] font-bold uppercase text-zinc-500">
+                            {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
+                          </h3>
+                        </div>
+                        <div className="space-y-2">
+                          {analysis.nextWorkoutSuggestion && (
+                            <p className="break-words font-mono text-sm leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                              {analysis.nextWorkoutSuggestion}
+                            </p>
+                          )}
+                          {analysis.suggestions.length > 0 && (
+                            <ul className="space-y-1">
+                              {analysis.suggestions.slice(0, 3).map((suggestion, i) => (
+                                <li key={i} className="flex items-start gap-2 break-words font-mono text-xs leading-relaxed text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-400">
+                                  <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-blue-500" />
+                                  {suggestion}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </section>
                     )}
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Warnings */}
-            {analysis.warnings && analysis.warnings.length > 0 && (
-              <div className={`rounded-lg border p-3 ${isRace ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle className={`w-4 h-4 ${isRace ? 'text-amber-600' : 'text-red-600'}`} />
-                  <span className={`font-mono text-xs font-bold ${isRace ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
-                    {isRace ? t('aiAnalysis.postRaceNotes') : t('aiAnalysis.warnings')}
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {analysis.warnings.map((warning, i) => (
-                    <li key={i} className={`font-mono text-sm ${isRace ? 'text-amber-800 dark:text-amber-300' : 'text-red-800 dark:text-red-300'}`}>
-                      {warning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Suggestions */}
-            {analysis.suggestions.length > 0 && (
-              <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.suggestions')}
-                </h3>
-                <ul className="mt-2 space-y-1">
-                  {analysis.suggestions.map((suggestion, i) => (
-                    <li key={i} className="font-mono text-sm text-zinc-600 dark:text-zinc-400 flex items-start gap-2">
-                      <span className={`mt-1 ${isRace ? 'text-amber-500' : 'text-purple-500'}`}>◼</span>
-                      {suggestion}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function BriefMetric({
+  label,
+  value,
+  valueClassName = '',
+}: {
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/70 bg-white/60 px-2 py-1.5 text-center dark:border-zinc-800 dark:bg-zinc-950/30">
+      <p className="font-mono text-[9px] uppercase text-zinc-500">{label}</p>
+      <p className={`mt-0.5 truncate font-mono text-xs font-black text-zinc-900 dark:text-zinc-100 ${valueClassName}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function DetailMetric({
+  icon,
+  label,
+  value,
+  aside,
+  description,
+  valueClassName = '',
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  aside?: ReactNode;
+  description?: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/60">
+      <div className="mb-1 flex items-center gap-1">
+        {icon}
+        <span className="font-mono text-[10px] uppercase text-zinc-500">{label}</span>
+      </div>
+      <div>
+        <span className={`break-words font-mono text-sm font-bold [overflow-wrap:anywhere] ${valueClassName}`}>
+          {value}
+        </span>
+        {aside && <span className="ml-2 font-mono text-[10px] text-amber-600">{aside}</span>}
+      </div>
+      {description && (
+        <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-zinc-500 [overflow-wrap:anywhere]">
+          {description}
+        </p>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
+import { ActivityHistorySyncProgress, useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { isActivitiesCacheStale, useActivitiesStore } from '@/store/activities';
 import { getActivityTimestamp } from '@/lib/dates';
 import { syncRecentActivities } from '@/lib/activitySync';
@@ -19,6 +19,7 @@ interface UseProfileActivitiesResult {
   lastFetchedAt: number | null;
   refresh: () => Promise<void>;
   source: 'strava' | 'demo';
+  syncProgress: ActivityHistorySyncProgress | null;
   syncError: string | null;
 }
 
@@ -76,6 +77,7 @@ export function useProfileActivities(): UseProfileActivitiesResult {
   const hasHydrated = useActivitiesStoreHydrated();
   const {
     isSyncing: historySyncing,
+    progress: syncProgress,
     syncHistory,
     reset: resetHistorySync,
   } = useActivityHistorySync(user?.accessToken);
@@ -174,6 +176,7 @@ export function useProfileActivities(): UseProfileActivitiesResult {
       lastFetchedAt,
       refresh,
       source: 'strava',
+      syncProgress,
       syncError,
     };
   }
@@ -189,6 +192,7 @@ export function useProfileActivities(): UseProfileActivitiesResult {
     lastFetchedAt: null,
     refresh,
     source: 'demo',
+    syncProgress: null,
     syncError: null,
   };
 }

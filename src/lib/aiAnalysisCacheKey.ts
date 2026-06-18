@@ -1,8 +1,8 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v17';
-const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v16', 'v15'];
+export const AI_ANALYSIS_CACHE_VERSION = 'v18';
+const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v17', 'v16'];
 
 type HistoryActivity = Pick<
   StravaActivity,

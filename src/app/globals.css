@@ -205,6 +205,7 @@ body {
 
 .heatmap-map .heatmap-polyline-selected,
 .activity-route-line,
+.activity-route-playback-progress,
 .route-card-line,
 .route-only-line,
 .mini-map-line {
@@ -217,13 +218,26 @@ body {
 }
 
 .route-endpoint-marker,
+.activity-route-playback-marker,
 .route-endpoint-marker:focus,
-.route-endpoint-marker:active {
+.route-endpoint-marker:active,
+.activity-route-playback-marker:focus,
+.activity-route-playback-marker:active {
   outline: none !important;
   border: none !important;
   background: transparent !important;
   pointer-events: none !important;
   -webkit-tap-highlight-color: transparent !important;
+}
+
+.activity-route-playback-marker span {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #fff;
+  border-radius: 9999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.32), 0 8px 18px rgba(15, 23, 42, 0.32);
 }
 
 .route-line-tooltip {

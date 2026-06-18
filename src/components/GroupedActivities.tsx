@@ -40,8 +40,8 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
   return (
     <div>
       {/* Group By Tabs + Actions */}
-      <div className="flex items-center justify-between gap-2 mb-4 px-1">
-        <div className="flex gap-1.5 sm:gap-2">
+      <div className="mb-4 flex items-center justify-between gap-2 px-1">
+        <div className="flex min-w-0 gap-1.5 overflow-x-auto sm:gap-2">
           {(['week', 'month', 'year'] as GroupBy[]).map((type) => (
             <button
               key={type}
@@ -59,7 +59,7 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {onOpenPeriodShare && (
             <button
               onClick={onOpenPeriodShare}
@@ -76,14 +76,14 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
       {/* Grouped Lists */}
       <div className="space-y-6">
         {groups.map((group) => (
-          <div key={group.key} className="border-t-2 border-zinc-200 dark:border-zinc-700 pt-4">
+          <div key={group.key} className="border-t-2 border-zinc-200 pt-4 dark:border-zinc-700">
             {/* Group Header */}
-            <div className="flex items-center justify-between mb-3 px-1">
+            <div className="mb-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <Calendar size={14} className="text-zinc-400 flex-shrink-0" />
                 <span className="font-pixel text-sm font-bold truncate">{group.label}</span>
               </div>
-              <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-mono text-zinc-500 whitespace-nowrap flex-shrink-0">
+              <div className="ml-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-zinc-500 sm:ml-0 sm:shrink-0 sm:whitespace-nowrap">
                 <span className="flex items-center gap-1">
                   <Route size={12} />
                   {formatDistance(group.totalDistance, 'km')}

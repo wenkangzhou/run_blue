@@ -61,7 +61,7 @@ export function SimpleLineChart({
   if (!data || data.length === 0) return null;
 
   const targetPoints = smooth ? 120 : 200;
-  const sampleRate = Math.ceil(data.length / targetPoints);
+  const sampleRate = Math.max(1, Math.ceil(data.length / targetPoints));
   let sampledData = sampleRate > 1
     ? data.filter((_, i) => i % sampleRate === 0)
     : data;
@@ -93,6 +93,13 @@ export function SimpleLineChart({
   const bottomPad = showYAxis ? 14 : 18;
   const chartWidth = containerWidth;
   const chartHeight = height - xLabelHeight - topPad - bottomPad;
+  const plotRight = chartWidth - (showYAxis ? 10 : 4);
+  const plotWidth = Math.max(1, plotRight - labelWidth);
+  const getPointX = (index: number) => (
+    sampledData.length <= 1
+      ? labelWidth + plotWidth / 2
+      : labelWidth + (index / (sampledData.length - 1)) * plotWidth
+  );
 
   // Build segments
   type Point = { x: number; y: number };
@@ -100,7 +107,7 @@ export function SimpleLineChart({
   let currentSeg: Point[] = [];
 
   sampledData.forEach((value, index) => {
-    const x = labelWidth + (index / (sampledData.length - 1)) * (chartWidth - labelWidth - (showYAxis ? 10 : 4));
+    const x = getPointX(index);
     if (value < min || value > max) {
       if (currentSeg.length) {
         segments.push(currentSeg);
@@ -156,11 +163,12 @@ export function SimpleLineChart({
     if (!interactive || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const plotLeft = labelWidth;
-    const plotRight = chartWidth - (showYAxis ? 10 : 4);
-    const plotWidth = plotRight - plotLeft;
-    if (plotWidth <= 0) return;
-    const ratio = Math.max(0, Math.min(1, (clickX - plotLeft) / plotWidth));
+    if (sampledData.length <= 1) {
+      setSelectedIndex(0);
+      if (onPointClick) onPointClick(0, data[0]);
+      return;
+    }
+    const ratio = Math.max(0, Math.min(1, (clickX - labelWidth) / plotWidth));
     const sampledIdx = Math.round(ratio * (sampledData.length - 1));
     const clampedSampledIdx = Math.max(0, Math.min(sampledData.length - 1, sampledIdx));
     setSelectedIndex(clampedSampledIdx);
@@ -182,7 +190,7 @@ export function SimpleLineChart({
   const selectedPoint = selectedIndex !== null ? (() => {
     const value = sampledData[selectedIndex];
     if (value < min || value > max) return null;
-    const x = labelWidth + (selectedIndex / (sampledData.length - 1)) * (chartWidth - labelWidth - (showYAxis ? 10 : 4));
+    const x = getPointX(selectedIndex);
     const y = topPad + ((max - value) / range) * chartHeight;
     return { x, y, value };
   })() : null;
@@ -262,6 +270,16 @@ export function SimpleLineChart({
           strokeLinejoin="round"
         />
 
+        {sampledData.length === 1 && segments[0]?.[0] && (
+          <circle
+            cx={segments[0][0].x}
+            cy={segments[0][0].y}
+            r={3}
+            fill={color}
+            opacity={0.8}
+          />
+        )}
+
         {/* Selected point indicator (Apple Fitness style) */}
         {interactive && selectedPoint && (
           <g>
@@ -287,8 +305,8 @@ export function SimpleLineChart({
             />
             {/* Value label */}
             <text
-              x={selectedPoint.x}
-              y={selectedPoint.y - 10}
+              x={Math.min(Math.max(selectedPoint.x, 28), chartWidth - 28)}
+              y={Math.max(12, selectedPoint.y - 10)}
               fill={color}
               textAnchor="middle"
               style={{ ...textStyle, fontSize: 10, fontWeight: 700 }}

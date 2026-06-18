@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Database, RefreshCw } from 'lucide-react';
 import { useProfileActivities } from '@/hooks/useProfileActivities';
+import type { ActivityHistorySyncProgress } from '@/hooks/useActivityHistorySync';
 import { getActivityYear } from '@/lib/dates';
 
 import { HeroSection } from '@/components/me/HeroSection';
@@ -24,6 +25,7 @@ export default function MePage() {
     lastFetchedAt,
     refresh,
     source,
+    syncProgress,
     syncError,
   } = useProfileActivities();
 
@@ -78,6 +80,7 @@ export default function MePage() {
           lastFetchedAt={lastFetchedAt}
           onRefresh={refresh}
           source={source}
+          syncProgress={syncProgress}
           syncError={syncError}
         />
         <FadeInSection>
@@ -111,6 +114,7 @@ function ProfileSyncBar({
   lastFetchedAt,
   onRefresh,
   source,
+  syncProgress,
   syncError,
 }: {
   canRefresh: boolean;
@@ -119,18 +123,41 @@ function ProfileSyncBar({
   lastFetchedAt: number | null;
   onRefresh: () => Promise<void>;
   source: 'strava' | 'demo';
+  syncProgress: ActivityHistorySyncProgress | null;
   syncError: string | null;
 }) {
-  if (!canRefresh && !syncError) return null;
+  const isBackgroundSyncing = syncProgress?.phase === 'recent' || syncProgress?.phase === 'history';
+  const statusText = syncError
+    ? syncError
+    : isBackgroundSyncing
+      ? getSyncProgressText(syncProgress)
+      : source === 'strava'
+        ? `Strava 数据${lastFetchedAt ? ` · ${formatSyncTime(lastFetchedAt)} 更新` : ' · 等待首次同步'}`
+        : 'Demo 数据 · 登录后使用你的 Strava 记录';
 
   return (
-    <div className="mx-auto flex max-w-6xl items-center justify-end gap-2 px-4 pt-4">
-      {syncError && (
-        <div className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-amber-400/25 bg-amber-400/10 px-2.5 text-[10px] text-amber-200">
-          <AlertCircle size={13} />
-          <span>{syncError}</span>
-        </div>
-      )}
+    <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={[
+          'inline-flex min-h-9 max-w-full items-center gap-2 rounded-md border px-2.5 text-[10px]',
+          syncError
+            ? 'border-amber-400/25 bg-amber-400/10 text-amber-200'
+            : source === 'strava'
+              ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100'
+              : 'border-zinc-700/80 bg-zinc-900/70 text-zinc-400',
+        ].join(' ')}
+      >
+        {syncError ? (
+          <AlertCircle size={13} className="shrink-0" />
+        ) : isBackgroundSyncing ? (
+          <RefreshCw size={13} className="shrink-0 animate-spin" />
+        ) : source === 'strava' ? (
+          <CheckCircle2 size={13} className="shrink-0" />
+        ) : (
+          <Database size={13} className="shrink-0" />
+        )}
+        <span className="min-w-0 truncate">{statusText}</span>
+      </div>
 
       {canRefresh && (
         <button
@@ -155,10 +182,24 @@ function getRefreshButtonTitle(source: 'strava' | 'demo', lastFetchedAt: number 
   if (source === 'demo') return '登录后同步 Strava 数据';
   if (!lastFetchedAt) return '更新最新 Strava 数据';
 
-  return `更新最新 Strava 数据，上次更新时间 ${new Intl.DateTimeFormat('zh-CN', {
+  return `更新最新 Strava 数据，上次更新时间 ${formatSyncTime(lastFetchedAt)}`;
+}
+
+function formatSyncTime(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(lastFetchedAt))}`;
+  }).format(new Date(timestamp));
+}
+
+function getSyncProgressText(progress: ActivityHistorySyncProgress | null) {
+  if (!progress) return '后台同步中';
+  if (progress.phase === 'recent') return '正在同步最近活动';
+  if (progress.page) {
+    return `后台同步历史数据 · 第 ${progress.page} 页 · 新增 ${progress.activitiesFetched} 条`;
+  }
+  return `后台同步历史数据 · 新增 ${progress.activitiesFetched} 条`;
 }

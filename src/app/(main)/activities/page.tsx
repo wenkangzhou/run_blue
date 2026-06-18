@@ -9,7 +9,7 @@ import { StravaActivity } from '@/types';
 import { getNextActivitiesPage, syncRecentActivities } from '@/lib/activitySync';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate } from '@/lib/dates';
-import { Loader2, RefreshCw, ChevronUp, Search, X } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronUp, SlidersHorizontal, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
@@ -68,7 +68,8 @@ export default function ActivitiesPage() {
       if (value) params.set(key, value);
       else params.delete(key);
     });
-    router.replace(`/activities?${params.toString()}`, { scroll: false });
+    const query = params.toString();
+    router.replace(query ? `/activities?${query}` : '/activities', { scroll: false });
   }, [searchParams, router]);
 
   // 直接记录下一页要加载的页码
@@ -108,6 +109,36 @@ export default function ActivitiesPage() {
       return true;
     });
   }, [activities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
+
+  const activeFilterCount = [
+    startDate,
+    endDate,
+    minDistance,
+    maxDistance,
+    raceFilter,
+    withKidFilter,
+    longRunFilter,
+  ].filter(Boolean).length;
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const resetFilters = useCallback(() => {
+    setStartDate('');
+    setEndDate('');
+    setMinDistance('');
+    setMaxDistance('');
+    setRaceFilter(false);
+    setWithKidFilter(false);
+    setLongRunFilter(false);
+    updateFilterParams({
+      startDate: '',
+      endDate: '',
+      minDistance: '',
+      maxDistance: '',
+      race: '',
+      withKid: '',
+      longRun: '',
+    });
+  }, [updateFilterParams]);
 
   useEffect(() => {
     if (activities.length > 0 && initialLoading) {
@@ -345,39 +376,48 @@ export default function ActivitiesPage() {
   return (
     <div className="container mx-auto px-3 py-4">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
           {runningActivities.length > 0 && (
-            <div className="relative shrink-0">
+            <div className="relative mb-1 shrink-0">
               <RunningStats activities={runningActivities} />
             </div>
           )}
+          <p className="truncate font-mono text-[10px] text-zinc-400">
+            {hasActiveFilters
+              ? `${runningActivities.length} / ${activities.length} 条匹配`
+              : `${runningActivities.length} 条跑步路线`}
+          </p>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => setShowFilters((s) => !s)}
-            className={`inline-flex items-center gap-1 p-2 font-mono text-xs transition-colors ${
-              showFilters || startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter
+            className={`relative inline-flex h-9 items-center gap-1 rounded-md px-2.5 font-mono text-xs transition-colors ${
+              showFilters || hasActiveFilters
                 ? 'text-blue-600 dark:text-blue-400'
-                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+                : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-300'
             }`}
             title={t('filter.title', '筛选')}
           >
-            <Search size={16} />
-            {(startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter) && (
-              <span className="w-2 h-2 bg-blue-500 rounded-full" />
+            <SlidersHorizontal size={16} />
+            <span className="hidden sm:inline">{t('filter.title', '筛选')}</span>
+            {hasActiveFilters && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[9px] font-bold text-white">
+                {activeFilterCount}
+              </span>
             )}
           </button>
-          <button onClick={handleRefresh} disabled={refreshing || isLoading || !user?.accessToken} className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50 p-2" title="刷新数据">
+          <button onClick={handleRefresh} disabled={refreshing || isLoading || !user?.accessToken} className="inline-flex h-9 items-center gap-1 rounded-md px-2.5 font-mono text-xs text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-900 dark:hover:text-zinc-300" title="刷新数据">
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{refreshing ? '刷新中' : '刷新'}</span>
           </button>
         </div>
       </div>
 
       {/* Filter Panel */}
       {showFilters && (
-        <div className="mb-4 bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-700 p-3 space-y-3 max-w-full overflow-x-auto">
+        <div className="mb-4 space-y-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.startDate', '开始日期')}</label>
@@ -425,7 +465,11 @@ export default function ActivitiesPage() {
           <div className="flex flex-wrap gap-2">
             {/* Workout type tags */}
             <button
-              onClick={() => setRaceFilter(v => !v)}
+              onClick={() => {
+                const next = !raceFilter;
+                setRaceFilter(next);
+                updateFilterParams({ race: next ? '1' : '' });
+              }}
               className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
                 raceFilter
                   ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
@@ -435,7 +479,11 @@ export default function ActivitiesPage() {
               比赛
             </button>
             <button
-              onClick={() => setWithKidFilter(v => !v)}
+              onClick={() => {
+                const next = !withKidFilter;
+                setWithKidFilter(next);
+                updateFilterParams({ withKid: next ? '1' : '' });
+              }}
               className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
                 withKidFilter
                   ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
@@ -445,7 +493,11 @@ export default function ActivitiesPage() {
               带娃
             </button>
             <button
-              onClick={() => setLongRunFilter(v => !v)}
+              onClick={() => {
+                const next = !longRunFilter;
+                setLongRunFilter(next);
+                updateFilterParams({ longRun: next ? '1' : '' });
+              }}
               className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
                 longRunFilter
                   ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
@@ -455,13 +507,9 @@ export default function ActivitiesPage() {
               长跑
             </button>
           </div>
-          {(startDate || endDate || minDistance || maxDistance || raceFilter || withKidFilter || longRunFilter) && (
+          {hasActiveFilters && (
             <button
-              onClick={() => {
-                setStartDate(''); setEndDate(''); setMinDistance(''); setMaxDistance('');
-                setRaceFilter(false); setWithKidFilter(false); setLongRunFilter(false);
-                updateFilterParams({ startDate: '', endDate: '', minDistance: '', maxDistance: '', race: '', withKid: '', longRun: '' });
-              }}
+              onClick={resetFilters}
               className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-red-500 transition-colors"
             >
               <X size={12} />
@@ -507,8 +555,22 @@ export default function ActivitiesPage() {
       )}
 
       {runningActivities.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="font-mono text-zinc-500">{t('activity.noActivities')}</p>
+        <div className="rounded-lg border border-dashed border-zinc-200 bg-white py-14 text-center dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-200">
+            {hasActiveFilters ? '没有匹配的跑步路线' : t('activity.noActivities')}
+          </p>
+          <p className="mt-2 font-mono text-xs text-zinc-500">
+            {hasActiveFilters ? '可以放宽日期、距离或类型筛选后再看。' : '同步完成后，这里会显示带路线的跑步记录。'}
+          </p>
+          {hasActiveFilters && (
+            <button
+              onClick={resetFilters}
+              className="mt-4 inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 font-mono text-xs font-bold text-zinc-700 transition-colors hover:border-blue-400 hover:text-blue-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-blue-500 dark:hover:text-blue-400"
+            >
+              <X size={13} />
+              清除筛选
+            </button>
+          )}
         </div>
       ) : (
         <>

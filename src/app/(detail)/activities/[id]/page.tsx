@@ -739,7 +739,7 @@ export default function ActivityDetailPage() {
 
               {routeAchievement && (
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1.5 flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
@@ -747,7 +747,7 @@ export default function ActivityDetailPage() {
                           {t('activity.route', '路线')}
                         </span>
                       </div>
-                      <h3 className="truncate font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      <h3 className="break-words font-mono text-sm font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
                         {routeAchievement.routeName}
                       </h3>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -769,7 +769,7 @@ export default function ActivityDetailPage() {
                     </div>
                     <Link
                       href={`/routes/${encodeURIComponent(routeAchievement.routeKey)}`}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-300 bg-white px-2.5 py-1.5 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                      className="inline-flex w-fit shrink-0 items-center gap-1 rounded-md border border-blue-300 bg-white px-2.5 py-1.5 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
                     >
                       {t('activity.viewRoute', '路线详情')}
                       <ChevronLeft className="h-3 w-3 rotate-180" />
@@ -786,6 +786,7 @@ export default function ActivityDetailPage() {
                     polyline={routePolyline}
                     startLatlng={activity.start_latlng}
                     endLatlng={activity.end_latlng}
+                    streams={streams}
                     height="clamp(320px, 42vh, 460px)"
                     isDark={isDark}
                     onReady={() => setMapReady(true)}
@@ -804,7 +805,7 @@ export default function ActivityDetailPage() {
                 </>
               ) : (
                 <div className="flex min-h-[260px] items-center justify-center">
-                  <p className="font-mono text-sm text-zinc-500">No route data</p>
+                  <p className="font-mono text-sm text-zinc-500">{t('activity.noRouteData', '暂无路线数据')}</p>
                 </div>
               )}
             </section>
@@ -855,6 +856,7 @@ export default function ActivityDetailPage() {
                           data={streams.heartrate.data as number[]}
                           color="#ef4444"
                           height={130}
+                          showYAxis
                           xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                           domain={(() => {
                             const data = streams.heartrate.data as number[];
@@ -893,6 +895,7 @@ export default function ActivityDetailPage() {
                           data={processPaceData(streams.velocity_smooth.data as number[])}
                           color="#3b82f6"
                           height={130}
+                          showYAxis
                           xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                           formatYLabel={(v) => formatPaceValue(v)}
                           domain={(() => {
@@ -919,6 +922,7 @@ export default function ActivityDetailPage() {
                           data={streams.altitude.data as number[]}
                           color="#22c55e"
                           height={130}
+                          showYAxis
                           xLabels={['0:00', formatDurationShort(activity.moving_time)]}
                           domain={(() => {
                             const data = streams.altitude.data as number[];
@@ -1133,6 +1137,7 @@ function ChartSection({
   distanceData?: number[];
   onPointSelect?: (index: number) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const handlePointClick = (idx: number) => {
     setSelectedIdx(idx);
@@ -1141,7 +1146,7 @@ function ChartSection({
 
   return (
     <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 last:border-b-0">
-      <div className="flex items-end justify-between mb-1">
+      <div className="mb-1 flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-[10px] font-bold uppercase text-zinc-500">{title}</span>
           {avgValue && (
@@ -1161,15 +1166,21 @@ function ChartSection({
         onPointClick: handlePointClick,
         interactive: true,
       })}
-      {selectedIdx !== null && (timeData || distanceData) && (
-        <div className="mt-1 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
-          {timeData && (
-            <span>{formatDurationShort(timeData[Math.min(selectedIdx, timeData.length - 1)])}</span>
-          )}
-          {distanceData && (
-            <span>{(distanceData[Math.min(selectedIdx, distanceData.length - 1)] / 1000).toFixed(2)} km</span>
-          )}
-        </div>
+      {(timeData || distanceData) && (
+        selectedIdx !== null ? (
+          <div className="mt-1 inline-flex flex-wrap items-center gap-2 rounded-md bg-zinc-50 px-2 py-1 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800/70">
+            {timeData && (
+              <span>{formatDurationShort(timeData[Math.min(selectedIdx, timeData.length - 1)])}</span>
+            )}
+            {distanceData && (
+              <span>{(distanceData[Math.min(selectedIdx, distanceData.length - 1)] / 1000).toFixed(2)} km</span>
+            )}
+          </div>
+        ) : (
+          <p className="mt-1 font-mono text-[10px] text-zinc-400">
+            {t('activity.tapChartHint', '点按曲线查看时间和距离')}
+          </p>
+        )
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import { formatDistance, formatDuration } from '@/lib/strava';
 import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain, ListOrdered } from 'lucide-react';
 import { formatLocalDateKey, getActivityDate, getActivityYear } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
+import { formatPaceSeconds } from '@/lib/paceFormat';
 
 interface ActivityTimelineProps {
   activities: StravaActivity[];
@@ -78,19 +79,22 @@ function YearGroup({
   const totalDist = acts.reduce((s, a) => s + a.distance, 0);
   const totalTime = acts.reduce((s, a) => s + a.moving_time, 0);
   const totalElev = acts.reduce((s, a) => s + (a.total_elevation_gain || 0), 0);
+  const [showAll, setShowAll] = useState(false);
+  const visibleActs = showAll ? acts : acts.slice(0, 30);
+  const hasHiddenActs = acts.length > visibleActs.length;
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/70">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-zinc-900/60"
+        className="flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors hover:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex min-w-0 items-center gap-3">
           {isExpanded ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
           <span className="text-sm font-bold text-zinc-300">{year}</span>
           <span className="text-[10px] text-zinc-600">{acts.length} 次跑步</span>
         </div>
-        <div className="hidden items-center gap-4 text-[10px] text-zinc-600 sm:flex">
+        <div className="ml-7 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-zinc-600 sm:ml-0">
           <span>{(totalDist / 1000).toFixed(0)} km</span>
           <span>{Math.floor(totalTime / 3600)}h</span>
           <span>{Math.round(totalElev)}m</span>
@@ -98,14 +102,20 @@ function YearGroup({
       </button>
 
       {isExpanded && (
-        <div className="grid grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3">
-          {acts.slice(0, 30).map((act) => (
-            <ActivityCard key={act.id} act={act} />
-          ))}
+        <div className="px-4 pb-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleActs.map((act) => (
+              <ActivityCard key={act.id} act={act} />
+            ))}
+          </div>
           {acts.length > 30 && (
-            <div className="py-2 text-center text-[10px] text-zinc-600 sm:col-span-2 lg:col-span-3">
-              还有 {acts.length - 30} 条 {year} 年记录
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowAll((value) => !value)}
+              className="mt-3 w-full rounded-md border border-zinc-800 px-3 py-2 text-center text-[10px] font-bold text-zinc-500 transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
+            >
+              {hasHiddenActs ? `展开剩余 ${acts.length - visibleActs.length} 条 ${year} 年记录` : '收起到最近 30 条'}
+            </button>
           )}
         </div>
       )}
@@ -117,8 +127,6 @@ function ActivityCard({ act }: { act: StravaActivity }) {
   const selectActivity = useActivitiesStore((state) => state.selectActivity);
   const date = getActivityDate(act);
   const pace = act.distance > 0 ? act.moving_time / (act.distance / 1000) : 0;
-  const min = Math.floor(pace / 60);
-  const sec = Math.floor(pace % 60);
   const primeActivity = React.useCallback(() => {
     selectActivity(act);
   }, [act, selectActivity]);
@@ -159,7 +167,7 @@ function ActivityCard({ act }: { act: StravaActivity }) {
       </div>
       {pace > 0 && (
         <div className="mt-1 text-[10px] text-zinc-600">
-          {`${min}'${sec.toString().padStart(2, '0')}" /km`}
+          {formatPaceSeconds(pace)} /km
         </div>
       )}
     </Link>
