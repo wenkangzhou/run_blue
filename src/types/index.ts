@@ -179,4 +179,5 @@ export interface User {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  isGuest?: boolean;
 }

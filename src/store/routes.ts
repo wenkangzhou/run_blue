@@ -45,6 +45,7 @@ interface RoutesState {
   splitActivitiesToRoute: (key: string, activities: StravaActivity[]) => void;
   addActivityToRoute: (key: string, activityId: number) => void;
   mergeRoutes: (targetKey: string, sourceKey: string) => void;
+  mergeRoutesBatch: (targetKey: string, sourceKeys: string[]) => void;
   restoreLastRoutesBackup: () => void;
   isRouteSaved: (key: string) => boolean;
   isActivitySaved: (activityId: number) => boolean;
@@ -541,6 +542,36 @@ export const useRoutesStore = create<RoutesState>()(
           return {
             savedRoutes: state.savedRoutes
               .filter((route) => route.key !== sourceKey)
+              .map((route) =>
+                route.key === targetKey
+                  ? { ...mergedRoute, manualUpdatedAt: Date.now() }
+                  : route
+              ),
+            lastRoutesBackup: createRoutesBackup(state.savedRoutes, 'manual'),
+          };
+        });
+      },
+
+      mergeRoutesBatch: (targetKey, sourceKeys) => {
+        const uniqueSourceKeys = Array.from(new Set(sourceKeys)).filter((key) => key !== targetKey);
+        if (uniqueSourceKeys.length === 0) return;
+
+        set((state) => {
+          const target = state.savedRoutes.find((route) => route.key === targetKey);
+          const sources = uniqueSourceKeys
+            .map((sourceKey) => state.savedRoutes.find((route) => route.key === sourceKey))
+            .filter((route): route is SavedRoute => Boolean(route));
+          if (!target || sources.length === 0) return state;
+
+          const mergedRoute = sources.reduce(
+            (merged, source) => mergeRouteRecords(merged, source),
+            target
+          );
+          const sourceKeySet = new Set(sources.map((source) => source.key));
+
+          return {
+            savedRoutes: state.savedRoutes
+              .filter((route) => !sourceKeySet.has(route.key))
               .map((route) =>
                 route.key === targetKey
                   ? { ...mergedRoute, manualUpdatedAt: Date.now() }

@@ -366,15 +366,15 @@ export function ActivityMap({
 
   return (
     <div ref={containerRef} className="w-full overflow-hidden rounded-lg" style={{ backgroundColor: bgColor }}>
-      <div className="relative w-full" style={{ height, backgroundColor: bgColor }}>
+      <div className="relative isolate w-full" style={{ height, backgroundColor: bgColor }}>
         {!mapReady && <div className="absolute inset-0 z-20" style={{ backgroundColor: bgColor }} />}
-        <div ref={mapRef} className="h-full w-full" style={{ opacity: mapReady ? 1 : 0, transition: 'opacity 0.2s' }} />
+        <div ref={mapRef} className="relative z-0 h-full w-full" style={{ opacity: mapReady ? 1 : 0, transition: 'opacity 0.2s' }} />
 
         {hasPlayback && mapReady && !showPlaybackPanel && (
           <button
             type="button"
             onClick={handleOpenPlayback}
-            className="absolute bottom-3 left-3 z-[1000] inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-blue-600 text-white shadow-md transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className="absolute bottom-3 left-3 z-[5] inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-blue-600 text-white shadow-md transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
             title="播放轨迹"
           >
             <Play size={13} />

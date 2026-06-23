@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
+import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
 
 interface FilterState {
@@ -61,17 +62,23 @@ export function HeatmapClient() {
   const [loadingSegments, setLoadingSegments] = useState(false);
   const mapRef = useRef<RouteMapHandle | null>(null);
   const { user } = useAuth();
-  const accessToken = user?.accessToken;
+  const isGuest = isGuestUser(user);
+  const sourceActivities = useMemo(
+    () => (isGuest ? getGuestActivities() : activities),
+    [isGuest, activities]
+  );
+  const sourceHasMore = isGuest ? false : hasMore;
+  const accessToken = isGuest ? null : user?.accessToken;
   const { isSyncing: loadingMore, syncHistory } = useActivityHistorySync(accessToken);
 
   const allYears = useMemo(() => {
     const years = new Set<number>();
-    activities.forEach(a => years.add(getActivityDate(a).getFullYear()));
+    sourceActivities.forEach(a => years.add(getActivityDate(a).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);
-  }, [activities]);
+  }, [sourceActivities]);
 
   const mapActivities = useMemo<HeatmapActivity[]>(() => {
-    return activities
+    return sourceActivities
       .filter(a => {
         if (!a.map?.summary_polyline) return false;
         const year = getActivityDate(a).getFullYear();
@@ -85,7 +92,7 @@ export function HeatmapClient() {
         summary_polyline: a.map?.summary_polyline ?? null,
         color: getYearColor(getActivityDate(a).getFullYear()),
       }));
-  }, [activities, filters]);
+  }, [sourceActivities, filters]);
 
   const grouped = useMemo(() => {
     const groups: Record<number, typeof mapActivities> = {};
@@ -318,7 +325,7 @@ export function HeatmapClient() {
               <span className="font-mono text-[9px] text-zinc-500 uppercase">{language === 'zh' ? '轨迹' : 'Tracks'}</span>
               <span className="font-mono text-sm font-bold">{totalRuns}</span>
             </div>
-            {hasMore && (
+            {sourceHasMore && (
               <button
                 onClick={loadMore}
                 disabled={loadingMore}

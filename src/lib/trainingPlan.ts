@@ -3,6 +3,17 @@ import { formatPaceSeconds } from './paceFormat';
 import { formatSecondsToTime, getUserProfile } from './userProfile';
 
 export type RaceDistance = '5k' | '10k' | '21k' | '42k';
+export type AbilityGroupCode = 'A+' | 'A' | 'B' | 'C' | 'D' | 'N' | 'E';
+
+export interface AbilityGroup {
+  code: AbilityGroupCode;
+  label: string;
+  target10k: string;
+  equivalent10k: string;
+  target10kPace: string;
+  volumeBand: string;
+  description: string;
+}
 
 export interface WeeklyPlan {
   week: number;
@@ -10,6 +21,7 @@ export interface WeeklyPlan {
   totalDistance: number; // target km
   sessions: TrainingSession[];
   notes: string;
+  focus?: string;
 }
 
 export interface TrainingSession {
@@ -37,6 +49,7 @@ export interface TrainingPlan {
     pb42k?: number;
     weeklyVolume: number;
     lthr?: number;
+    abilityGroup?: AbilityGroup;
   };
   weeks: WeeklyPlan[];
 }
@@ -337,6 +350,61 @@ function getRaceDistanceName(distance: RaceDistance, en: boolean): string {
         : '5公里';
 }
 
+function getWeeklyVolumeBand(weeklyVolume: number, en: boolean): string {
+  if (weeklyVolume >= 65) return en ? 'High volume' : '高跑量';
+  if (weeklyVolume >= 45) return en ? 'Solid volume' : '稳定跑量';
+  if (weeklyVolume >= 25) return en ? 'Base volume' : '基础跑量';
+  return en ? 'Low volume' : '低跑量';
+}
+
+export function getTrainingAbilityGroup(
+  pb5kSec?: number,
+  weeklyVolume: number = 0,
+  locale: string = 'zh'
+): AbilityGroup {
+  const en = locale.startsWith('en');
+  const volumeBand = getWeeklyVolumeBand(weeklyVolume, en);
+
+  if (!pb5kSec || pb5kSec <= 0) {
+    return {
+      code: 'E',
+      label: en ? 'Entry group' : '入门组',
+      target10k: en ? 'Build consistency' : '先建立连续训练',
+      equivalent10k: '--',
+      target10kPace: '--',
+      volumeBand,
+      description: en
+        ? `No 5K PB yet. Use ${volumeBand.toLowerCase()} as the first anchor and keep most runs easy.`
+        : `尚未填写 5K PB，先以${volumeBand}为锚点，绝大多数训练保持轻松。`,
+    };
+  }
+
+  const equivalent10kSec = Math.round(predictTimeFrom5K(pb5kSec, 10));
+  const groups: Array<{ code: AbilityGroupCode; max10k: number; target: string; label: string }> = [
+    { code: 'A+', max10k: 36 * 60, target: 'sub36', label: en ? 'A+ group' : 'A+组' },
+    { code: 'A', max10k: 39 * 60, target: 'sub39', label: en ? 'A group' : 'A组' },
+    { code: 'B', max10k: 43 * 60, target: 'sub43', label: en ? 'B group' : 'B组' },
+    { code: 'C', max10k: 47 * 60, target: 'sub47', label: en ? 'C group' : 'C组' },
+    { code: 'D', max10k: 52 * 60, target: 'sub52', label: en ? 'D group' : 'D组' },
+    { code: 'N', max10k: 59 * 60, target: 'sub59', label: en ? 'New runner group' : '萌新组' },
+  ];
+  const group = groups.find((item) => equivalent10kSec <= item.max10k)
+    ?? { code: 'E' as const, max10k: 65 * 60, target: en ? 'finish strong' : '稳定完赛', label: en ? 'Entry group' : '入门组' };
+  const equivalent10k = formatSecondsToTime(equivalent10kSec);
+
+  return {
+    code: group.code,
+    label: group.label,
+    target10k: group.target,
+    equivalent10k,
+    target10kPace: formatPaceSeconds(group.max10k / 10),
+    volumeBand,
+    description: en
+      ? `Estimated 10K is ${equivalent10k}. Use ${group.label} paces with a ${volumeBand.toLowerCase()} guardrail.`
+      : `5K PB 推算 10K 约 ${equivalent10k}，按${group.label}配速组织训练，并用${volumeBand}控制负荷。`,
+  };
+}
+
 function assessGoal(
   distance: RaceDistance,
   targetTimeSeconds: number,
@@ -422,12 +490,14 @@ function buildEasyRun(
   const paceMin = fmtPace(zones.E.min);
   const paceMax = fmtPace(zones.E.max);
   const dist = Math.round((minutes * 60) / ((zones.E.min + zones.E.max) / 2));
+  const slowerMinPct = Math.round((zones.E.min / zones.M.min - 1) * 100);
+  const slowerMaxPct = Math.round((zones.E.max / zones.M.min - 1) * 100);
   const monNote = isMonday
     ? (en ? '\nNote: Monday easy run helps build weekly aerobic volume. Keep it truly easy.' : '\n提示：周一轻松跑用于累积周跑量，务必保持轻松体感。')
     : '';
   const desc = en
-    ? `Easy run ${minutes}min (~${dist}km)\nPace: ${paceMin}-${paceMax}/km (E zone, ${Math.round((zones.E.min / zones.M.min - 1) * 100)}-${Math.round((zones.E.max / zones.M.min - 1) * 100)}s slower than M pace)\nHR: ${hrZones.z2.min}-${hrZones.z2.max}bpm (Z2, 85-89% LTHR)\nFeel: conversational pace, natural stride, no pushing${monNote}`
-    : `轻松跑${minutes}min（约${dist}km）\n配速建议：${paceMin}-${paceMax}/km（E区，慢于M配速${Math.round((zones.E.min / zones.M.min - 1) * 100)}-${Math.round((zones.E.max / zones.M.min - 1) * 100)}s）\n心率建议：${hrZones.z2.min}-${hrZones.z2.max}bpm（Z2，LTHR的85-89%）\n体感：能完整对话的轻松配速，步频自然，不刻意加速${monNote}`;
+    ? `Easy run ${minutes}min (~${dist}km)\nPace: ${paceMin}-${paceMax}/km (E zone, about ${slowerMinPct}-${slowerMaxPct}% slower than M pace)\nHR: ${hrZones.z2.min}-${hrZones.z2.max}bpm (Z2, 85-89% LTHR)\nFeel: conversational pace, natural stride, no pushing${monNote}`
+    : `轻松跑${minutes}min（约${dist}km）\n配速建议：${paceMin}-${paceMax}/km（E区，约慢于M配速${slowerMinPct}-${slowerMaxPct}%）\n心率建议：${hrZones.z2.min}-${hrZones.z2.max}bpm（Z2，LTHR的85-89%）\n体感：能完整对话的轻松配速，步频自然，不刻意加速${monNote}`;
   const title = isMonday ? (en ? 'Easy' : '轻松跑') : (en ? 'Easy' : '轻松跑');
   return { day, type: 'easy', title, description: desc, distance: dist, paceZone: 'E' };
 }
@@ -444,7 +514,7 @@ function buildRecoveryRun(
   const desc = en
     ? `Recovery run ${minutes}min (~${dist}km)\nPace: slower than ${slowPace}/km (>60s slower than M pace)\nHR: <${hrZones.z2.min}bpm (Z1, <85% LTHR)\nFeel: very easy, can chat effortlessly, focus on relaxation and breathing\nTip: shorter stride, relaxed shoulders, nasal breathing if possible`
     : `恢复跑${minutes}min（约${dist}km）\n配速建议：慢于${slowPace}/km（慢于M配速60s以上）\n心率建议：<${hrZones.z2.min}bpm（Z1，LTHR的<85%）\n体感：极其轻松，可以边跑边聊天无压力\n要点：缩小步幅、放松肩膀、尝试鼻吸鼻呼`;
-  return { day, type: 'easy', title: en ? 'Recovery' : '恢复跑', description: desc, distance: dist, paceZone: 'E' };
+  return { day, type: 'recovery', title: en ? 'Recovery' : '恢复跑', description: desc, distance: dist, paceZone: 'E' };
 }
 
 function buildQualitySession(
@@ -594,7 +664,8 @@ function buildQualitySession(
     }
   }
 
-  return { day, type: 'interval', title, description: desc, distance: dist, paceZone: pz };
+  const type: TrainingSession['type'] = pz === 'T' || pz === 'M' ? 'tempo' : 'interval';
+  return { day, type, title, description: desc, distance: dist, paceZone: pz };
 }
 
 function buildLSD(
@@ -708,8 +779,8 @@ function buildWeekNotes(
         : `基础期：以有氧积累为主，所有轻松跑保持对话配速。`;
     case 'build':
       return en
-        ? `Build phase. Tuesday quality + Sunday LSD. Respect recovery between hard days.`
-        : `建立期：周二强度课+周日长距离，重视高强度日之间的恢复。`;
+        ? `Build phase. Wednesday quality + Sunday LSD. Respect recovery between hard days.`
+        : `建立期：周三强度课+周日长距离，重视高强度日之间的恢复。`;
     case 'peak':
       return en
         ? `Peak phase. Highest volume & intensity. Race-pace blocks in Sunday LSD.`
@@ -729,6 +800,44 @@ function buildWeekNotes(
     default:
       return '';
   }
+}
+
+function buildWeekFocus(
+  phase: WeeklyPlan['phase'],
+  w: number,
+  weeks: number,
+  distance: RaceDistance,
+  en: boolean
+): string {
+  const raceName = getRaceDistanceName(distance, en);
+  if (phase === 'recovery') {
+    return en
+      ? 'Recovery week: absorb the previous load and keep rhythm.'
+      : '恢复周：吸收前期训练负荷，保留跑步节奏。';
+  }
+  if (phase === 'base') {
+    return en
+      ? 'Base speed phase: build aerobic volume and relaxed mechanics.'
+      : '基础速度期：建立有氧容量和轻松跑姿。';
+  }
+  if (phase === 'build') {
+    return en
+      ? `${raceName} build phase: progress threshold and VO2max work without stacking fatigue.`
+      : `${raceName}专项建立期：推进阈值与 VO2max，但避免疲劳堆叠。`;
+  }
+  if (phase === 'peak') {
+    return en
+      ? `${raceName} peak phase: rehearse goal pace and protect the long run.`
+      : `${raceName}峰值专项期：熟悉目标配速，保护长距离质量。`;
+  }
+  if (w === weeks) {
+    return en
+      ? 'Race week: stay sharp, sleep well, and do not chase fitness.'
+      : '比赛周：保持锐度，保证睡眠，不再追求临时涨能力。';
+  }
+  return en
+    ? 'Taper phase: reduce volume while keeping light speed.'
+    : '赛前减量期：降低跑量，保留轻量速度刺激。';
 }
 
 function getEasyRunDuration(phase: WeeklyPlan['phase'], w: number, weeks: number): number {
@@ -811,6 +920,7 @@ export function generateFallbackTrainingPlan(
   // Calculate zones
   const zones = calculatePaceZones(pb5kSec);
   const hrZones = getHRZones(effectiveLthr);
+  const abilityGroup = getTrainingAbilityGroup(pb5kSec, weeklyVolume, locale);
 
   // Target M pace
   const targetDistKm = distance === '5k' ? 5 : distance === '10k' ? 10 : distance === '21k' ? 21.0975 : 42.195;
@@ -834,7 +944,9 @@ export function generateFallbackTrainingPlan(
     else if (w <= peakEnd) phase = 'peak';
     else phase = 'taper';
 
-    const isRecoveryWeek = (phase === 'build' || phase === 'peak') && (w > baseEnd && w > buildEnd && (phase === 'build' ? (w - baseEnd) % 3 === 0 : (w - buildEnd) % 3 === 0));
+    const isRecoveryWeek =
+      (phase === 'build' && w > baseEnd && (w - baseEnd) % 3 === 0)
+      || (phase === 'peak' && w > buildEnd && (w - buildEnd) % 3 === 0);
     const actualPhase = isRecoveryWeek ? 'recovery' : phase;
 
     // Target volume
@@ -863,35 +975,32 @@ export function generateFallbackTrainingPlan(
 
     const sessions: TrainingSession[] = [];
 
-    // Mon: Rest or easy run depending on phase & recovery status
-    if (phase === 'taper' && w >= weeks - 1) {
-      // Final 2 weeks of taper: rest on Monday
-      sessions.push(buildRestDay(0, en));
-    } else if (isRecoveryWeek) {
-      // Recovery weeks: Monday rest
-      sessions.push(buildRestDay(0, en));
-    } else {
-      // Base/Build/Peak normal weeks: Monday easy run to build volume
-      const monMin = Math.max(30, Math.min(50, Math.round(peakVol * 0.08)));
-      sessions.push(buildEasyRun(0, monMin, zones, hrZones, en, true));
-    }
+    // Mon: fixed rest day to keep the weekly rhythm easy to follow.
+    sessions.push(buildRestDay(0, en));
 
     // Tue: Easy run
     const tueMin = getEasyRunDuration(phase, w, weeks);
     sessions.push(buildEasyRun(1, tueMin, zones, hrZones, en));
 
     // Wed: Quality session
-    sessions.push(buildQualitySession(2, phase, w, weeks, distance, zones, hrZones, mPace, en));
+    const qualityPhase = isRecoveryWeek ? 'taper' : phase;
+    sessions.push(buildQualitySession(2, qualityPhase, w, weeks, distance, zones, hrZones, mPace, en));
 
     // Thu: Recovery run
     sessions.push(buildRecoveryRun(3, zones, hrZones, en, 40));
 
-    // Fri: Recovery run
-    sessions.push(buildRecoveryRun(4, zones, hrZones, en, 40));
+    // Fri: second aerobic support day. Recovery weeks keep it intentionally light.
+    const friMin = isRecoveryWeek ? 35 : Math.max(40, tueMin - 10);
+    sessions.push(isRecoveryWeek
+      ? buildRecoveryRun(4, zones, hrZones, en, friMin)
+      : buildEasyRun(4, friMin, zones, hrZones, en));
 
-    // Sat: Easy run (slightly shorter than Tue)
-    const satMin = Math.max(30, tueMin - 10);
-    sessions.push(buildEasyRun(5, satMin, zones, hrZones, en));
+    // Sat: recovery buffer before Sunday long run.
+    if (actualPhase === 'recovery' || (phase === 'taper' && w >= weeks - 1)) {
+      sessions.push(buildRestDay(5, en));
+    } else {
+      sessions.push(buildRecoveryRun(5, zones, hrZones, en, 40));
+    }
 
     // Sun: LSD or Race
     if (w === weeks) {
@@ -902,12 +1011,14 @@ export function generateFallbackTrainingPlan(
 
     const totalDistance = sessions.reduce((sum, s) => sum + s.distance, 0);
     const notes = buildWeekNotes(phase, w, weeks, distance, isRecoveryWeek, en);
+    const focus = buildWeekFocus(actualPhase, w, weeks, distance, en);
 
     weeksList.push({
       week: w,
       phase: actualPhase,
       totalDistance,
       notes,
+      focus,
       sessions,
     });
   }
@@ -916,7 +1027,7 @@ export function generateFallbackTrainingPlan(
     id: `plan_${Date.now()}`,
     createdAt: new Date().toISOString(),
     goal: { distance, targetTimeSeconds },
-    currentAbility: { pb5k: pb5kSec, weeklyVolume, lthr: effectiveLthr },
+    currentAbility: { pb5k: pb5kSec, weeklyVolume, lthr: effectiveLthr, abilityGroup },
     weeks: weeksList,
   };
 }

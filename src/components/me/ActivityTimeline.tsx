@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
-import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain, ListOrdered } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain, ListOrdered, Route } from 'lucide-react';
 import { formatLocalDateKey, getActivityDate, getActivityYear } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
 import { formatPaceSeconds } from '@/lib/paceFormat';
@@ -13,7 +13,10 @@ interface ActivityTimelineProps {
   activities: StravaActivity[];
 }
 
+const INITIAL_VISIBLE_ACTIVITIES = 12;
+
 export function ActivityTimeline({ activities }: ActivityTimelineProps) {
+  const hasInitializedExpansion = useRef(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(
     () => new Set(activities[0] ? [getActivityYear(activities[0])] : [])
   );
@@ -28,6 +31,12 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
     return Array.from(map.entries()).sort((a, b) => b[0] - a[0]);
   }, [activities]);
 
+  useEffect(() => {
+    if (hasInitializedExpansion.current || grouped.length === 0) return;
+    setExpandedYears(new Set([grouped[0][0]]));
+    hasInitializedExpansion.current = true;
+  }, [grouped]);
+
   const toggleYear = (year: number) => {
     setExpandedYears((prev) => {
       const next = new Set(prev);
@@ -38,15 +47,27 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
   };
 
   return (
-    <section className="px-4 py-6 sm:py-8">
+    <section className="px-4 py-5 sm:py-7">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-4">
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase text-fuchsia-300">
-            <ListOrdered size={14} />
-            activity archive
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-fuchsia-300">
+              <ListOrdered size={14} />
+              activity archive
+            </div>
+            <h2 className="text-lg font-black text-zinc-100">年度记录</h2>
+            <p className="mt-1 text-xs text-zinc-600">{activities.length} 条跑步记录，按年份归档</p>
           </div>
-          <h2 className="text-lg font-black text-zinc-100">年度记录</h2>
-          <p className="mt-1 text-xs text-zinc-600">{activities.length} 条跑步记录，按年份归档</p>
+          <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500">
+            <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1">
+              {grouped.length} 个年份
+            </span>
+            {grouped[0] && (
+              <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2.5 py-1 text-fuchsia-200">
+                最近 {grouped[0][0]}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -80,24 +101,34 @@ function YearGroup({
   const totalTime = acts.reduce((s, a) => s + a.moving_time, 0);
   const totalElev = acts.reduce((s, a) => s + (a.total_elevation_gain || 0), 0);
   const [showAll, setShowAll] = useState(false);
-  const visibleActs = showAll ? acts : acts.slice(0, 30);
+  const visibleActs = showAll ? acts : acts.slice(0, INITIAL_VISIBLE_ACTIVITIES);
   const hasHiddenActs = acts.length > visibleActs.length;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/70">
+    <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/70 shadow-lg shadow-black/10">
       <button
         onClick={onToggle}
-        className="flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors hover:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between"
+        aria-expanded={isExpanded}
+        className="flex w-full flex-col gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex min-w-0 items-center gap-3">
-          {isExpanded ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
-          <span className="text-sm font-bold text-zinc-300">{year}</span>
-          <span className="text-[10px] text-zinc-600">{acts.length} 次跑步</span>
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-800 bg-black/25 text-zinc-500">
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-base font-black text-zinc-200">{year}</span>
+              <span className="text-[10px] text-zinc-600">{acts.length} 次跑步</span>
+            </div>
+            <p className="mt-0.5 truncate text-[10px] text-zinc-600">
+              {formatLocalDateKey(getActivityDate(acts[acts.length - 1]))} - {formatLocalDateKey(getActivityDate(acts[0]))}
+            </p>
+          </div>
         </div>
-        <div className="ml-7 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-zinc-600 sm:ml-0">
-          <span>{(totalDist / 1000).toFixed(0)} km</span>
-          <span>{Math.floor(totalTime / 3600)}h</span>
-          <span>{Math.round(totalElev)}m</span>
+        <div className="grid grid-cols-3 gap-2 sm:min-w-[260px]">
+          <YearPill icon={<Route size={11} />} label="距离" value={`${(totalDist / 1000).toFixed(0)} km`} />
+          <YearPill icon={<Clock size={11} />} label="时间" value={`${Math.floor(totalTime / 3600)}h`} />
+          <YearPill icon={<Mountain size={11} />} label="爬升" value={`${Math.round(totalElev)}m`} />
         </div>
       </button>
 
@@ -114,12 +145,24 @@ function YearGroup({
               onClick={() => setShowAll((value) => !value)}
               className="mt-3 w-full rounded-md border border-zinc-800 px-3 py-2 text-center text-[10px] font-bold text-zinc-500 transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
             >
-              {hasHiddenActs ? `展开剩余 ${acts.length - visibleActs.length} 条 ${year} 年记录` : '收起到最近 30 条'}
+              {hasHiddenActs ? `展开剩余 ${acts.length - visibleActs.length} 条 ${year} 年记录` : `收起到最近 ${INITIAL_VISIBLE_ACTIVITIES} 条`}
             </button>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function YearPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <span className="min-w-0 rounded-md border border-zinc-800 bg-black/25 px-2 py-1.5">
+      <span className="flex items-center gap-1 text-[9px] text-zinc-600">
+        {icon}
+        {label}
+      </span>
+      <span className="mt-0.5 block truncate text-[10px] font-bold text-zinc-300">{value}</span>
+    </span>
   );
 }
 

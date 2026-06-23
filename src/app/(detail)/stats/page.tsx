@@ -9,6 +9,7 @@ import { useActivitiesStore, isActivitiesCacheStale } from '@/store/activities';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
+import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import { BarChart3, ChevronLeft, Loader2, Route } from 'lucide-react';
 
 const MAX_LOAD_PAGES = 10; // Safety limit for one automatic catch-up pass.
@@ -17,6 +18,7 @@ export default function StatsPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const isGuest = isGuestUser(user);
   const {
     activities,
     isLoading: storeLoading,
@@ -30,11 +32,16 @@ export default function StatsPage() {
     progress: historyProgress,
     error: historySyncError,
     syncHistory,
-  } = useActivityHistorySync(user?.accessToken);
+  } = useActivityHistorySync(isGuest ? null : user?.accessToken);
   const hasInitiatedRef = useRef(false);
+  const sourceActivities = React.useMemo(
+    () => (isGuest ? getGuestActivities() : activities),
+    [isGuest, activities]
+  );
 
   useEffect(() => {
     if (authLoading) return;
+    if (isGuest) return;
     if (!isAuthenticated || !user?.accessToken || hasInitiatedRef.current) {
       if (!isAuthenticated) router.push('/');
       return;
@@ -62,13 +69,13 @@ export default function StatsPage() {
     };
 
     loadAll();
-  }, [authLoading, isAuthenticated, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, isGuest, user?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (authLoading || !isAuthenticated) {
     return <PageLoadingShell title={t('nav.stats', '统计')} maxWidth="6xl" variant="dashboard" />;
   }
 
-  const isLoading = storeLoading || historySyncing;
+  const isLoading = isGuest ? false : storeLoading || historySyncing;
   const progressText = historyProgress?.phase === 'history' && historyProgress.page
     ? t('common.loading') + ` (${historyProgress.page} ${t('stats.pages', '页')})`
     : t('common.loading');
@@ -115,7 +122,7 @@ export default function StatsPage() {
           </div>
         </div>
 
-        {syncErrorText && activities.length > 0 && (
+        {syncErrorText && sourceActivities.length > 0 && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-3 dark:border-red-800 dark:bg-red-900/20">
             <p className="font-mono text-xs text-red-600 dark:text-red-400">
               {syncErrorText}
@@ -123,7 +130,7 @@ export default function StatsPage() {
           </div>
         )}
 
-        {isLoading && activities.length === 0 ? (
+        {isLoading && sourceActivities.length === 0 ? (
           <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <div className="text-center px-6">
               <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
@@ -135,7 +142,7 @@ export default function StatsPage() {
               </p>
             </div>
           </div>
-        ) : activities.length === 0 ? (
+        ) : sourceActivities.length === 0 ? (
           <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
             <div className="text-center px-6 max-w-sm">
               <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
@@ -148,7 +155,7 @@ export default function StatsPage() {
             </div>
           </div>
         ) : (
-          <VolumeDashboard activities={activities} />
+          <VolumeDashboard activities={sourceActivities} />
         )}
 
       </main>

@@ -33,6 +33,7 @@ export function Header() {
               alt="跑蓝"
               width={32}
               height={32}
+              loading="eager"
               className="w-8 h-8 object-contain"
             />
             <span className="font-mono text-xl font-bold tracking-tighter">

@@ -6,8 +6,10 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '@/store/settings';
+import { useAuthStore } from '@/store/auth';
 import i18n from '@/i18n';
 import { StravaConnect } from '@/components/StravaConnect';
+import { isGuestUser } from '@/lib/guestMode';
 import {
   AlertCircle,
   BarChart3,
@@ -25,6 +27,7 @@ export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { language, setLanguage } = useSettingsStore();
+  const authUser = useAuthStore((state) => state.user);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'info' } | null>(null);
@@ -46,6 +49,12 @@ export default function HomePage() {
     let cancelled = false;
 
     const checkAuth = async () => {
+      if (isGuestUser(authUser)) {
+        setIsAuthenticated(true);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const response = await fetch('/api/auth/session');
         if (!response.ok) return;
@@ -65,13 +74,13 @@ export default function HomePage() {
       } finally {
         if (!cancelled) setIsLoading(false);
       }
-    };
+  };
 
     checkAuth();
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [authUser, t]);
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) router.push('/activities');

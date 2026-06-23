@@ -9,6 +9,7 @@ import {
   shouldClearAuthStateForSessionError,
   shouldPromptReauthForSessionError,
 } from '@/lib/authPersistence';
+import { isGuestUser } from '@/lib/guestMode';
 
 export function useAuth() {
   const router = useRouter();
@@ -27,6 +28,13 @@ export function useAuth() {
 
   // Check auth status on mount
   useEffect(() => {
+    if (isGuestUser(user)) {
+      useAuthStore.getState().setLoading(false);
+      setNeedsReauth(false);
+      setIsReady(true);
+      return;
+    }
+
     // Skip only when the in-memory session already has a token. Persisted auth
     // deliberately strips tokens and must be hydrated from the HttpOnly cookie.
     if (user?.accessToken) {

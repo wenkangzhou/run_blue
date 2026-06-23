@@ -11,6 +11,7 @@ import { calculateWrapped, getAvailableWrappedYears, type WrappedPeriod } from '
 import { downloadPNG } from '@/lib/multiRouteCanvas';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { useActivitiesStore } from '@/store/activities';
+import { isGuestUser } from '@/lib/guestMode';
 import type { StravaActivity } from '@/types';
 import { X, Download, CheckCircle2, Calendar, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
@@ -27,13 +28,14 @@ export function WrappedShareModal({
 }: WrappedShareModalProps) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const isGuest = isGuestUser(user);
   const cachedActivities = useActivitiesStore((state) => state.activities);
   const {
     isSyncing: loadingHistory,
     error: historySyncError,
     syncHistory,
     reset: resetHistorySync,
-  } = useActivityHistorySync(user?.accessToken);
+  } = useActivityHistorySync(isGuest ? null : user?.accessToken);
   const locale = i18n.language;
 
   const [period, setPeriod] = useState<WrappedPeriod>('year');
@@ -47,13 +49,15 @@ export function WrappedShareModal({
 
   useEffect(() => {
     const merged = new Map<number, StravaActivity>();
-    cachedActivities.forEach((activity) => merged.set(activity.id, activity));
+    if (!isGuest) {
+      cachedActivities.forEach((activity) => merged.set(activity.id, activity));
+    }
     activities.forEach((activity) => merged.set(activity.id, activity));
     setAllActivities(Array.from(merged.values()));
-  }, [activities, cachedActivities]);
+  }, [activities, cachedActivities, isGuest]);
 
   useEffect(() => {
-    if (!isOpen || !user?.accessToken) return;
+    if (!isOpen || isGuest || !user?.accessToken) return;
     let cancelled = false;
 
     const loadAll = async () => {
@@ -75,7 +79,7 @@ export function WrappedShareModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, user?.accessToken, resetHistorySync, syncHistory]);
+  }, [isOpen, isGuest, user?.accessToken, resetHistorySync, syncHistory]);
 
   // Allow year navigation freely within a reasonable range regardless of loaded history
   const { minYear, maxYear } = useMemo(() => {

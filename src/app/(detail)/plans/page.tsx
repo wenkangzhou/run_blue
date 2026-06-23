@@ -13,6 +13,13 @@ import { PixelButton } from '@/components/ui';
 import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
 import { getActivityDate } from '@/lib/dates';
 import {
+  deleteGuestTrainingPlan,
+  generateGuestTrainingPlan,
+  getGuestTrainingPlans,
+  isGuestUser,
+  saveGuestTrainingPlan,
+} from '@/lib/guestMode';
+import {
   getDistanceLabel,
   getDistanceLabelEn,
   getStoredTrainingPlans,
@@ -74,7 +81,8 @@ function getPlanPhasePreview(plan: TrainingPlan) {
 
 export default function TrainingPlansListPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const isGuest = isGuestUser(user);
   const { activities } = useActivitiesStore();
   const { t, i18n } = useTranslation();
 
@@ -102,16 +110,20 @@ export default function TrainingPlansListPage() {
       };
     }
 
-    getStoredTrainingPlans()
-      .then((storedPlans) => {
-        if (!cancelled) setPlans(storedPlans);
-      })
-      .catch(() => {
-        if (!cancelled) setPlans([]);
-      });
+    if (isGuest) {
+      setPlans(getGuestTrainingPlans(i18n.language));
+    } else {
+      getStoredTrainingPlans()
+        .then((storedPlans) => {
+          if (!cancelled) setPlans(storedPlans);
+        })
+        .catch(() => {
+          if (!cancelled) setPlans([]);
+        });
+    }
 
     const profile = getUserProfile();
-    setHasPB(!!profile?.pbs?.['5k'] && profile.pbs['5k'] > 0);
+    setHasPB(isGuest || !!profile?.pbs?.['5k'] && profile.pbs['5k'] > 0);
 
     if (activities.length > 0) {
       const now = new Date();
@@ -126,7 +138,7 @@ export default function TrainingPlansListPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAuthenticated, router, activities]);
+  }, [authLoading, isAuthenticated, isGuest, router, activities, i18n.language]);
 
   if (authLoading || !isAuthenticated) {
     return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
@@ -158,6 +170,24 @@ export default function TrainingPlansListPage() {
     abortControllerRef.current = new AbortController();
 
     try {
+      if (isGuest) {
+        const plan = generateGuestTrainingPlan({
+          distance: data.distance,
+          targetTimeSeconds: targetSeconds,
+          weeks: data.weeks,
+          pb5kSec: pb5k,
+          weeklyVolume,
+          raceDate: data.raceDate,
+          locale: i18n.language,
+          lthr: profile?.lthr ?? 172,
+        });
+        saveGuestTrainingPlan(plan);
+        setPlans(getGuestTrainingPlans(i18n.language));
+        setShowForm(false);
+        router.push(`/plans/${plan.id}`);
+        return;
+      }
+
       const res = await fetch('/api/training-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,8 +232,13 @@ export default function TrainingPlansListPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      await deleteTrainingPlan(id);
-      setPlans(await getStoredTrainingPlans());
+      if (isGuest) {
+        deleteGuestTrainingPlan(id);
+        setPlans(getGuestTrainingPlans(i18n.language));
+      } else {
+        await deleteTrainingPlan(id);
+        setPlans(await getStoredTrainingPlans());
+      }
     }
   };
 

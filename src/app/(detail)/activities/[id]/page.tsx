@@ -12,6 +12,7 @@ import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } fro
 import { getActivityDateKey } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
+import { getGuestActivities, getGuestActivity, getGuestActivityStreams, getGuestSavedRoutes, isGuestUser } from '@/lib/guestMode';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { SplitsTable } from '@/components/SplitsTable';
@@ -25,9 +26,10 @@ import {
   BarChart3,
   CalendarDays,
   ChevronLeft,
-  Clock3,
   Gauge,
+  HeartPulse,
   MapPin,
+  Mountain,
   RefreshCw,
   Route,
   Share2,
@@ -46,12 +48,19 @@ export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
+  const isGuest = isGuestUser(user);
   const { resolvedTheme } = useTheme();
   const { t } = useTranslation();
   const isDark = resolvedTheme === 'dark';
   const activityId = parseInt(params.id as string, 10);
-  const { activities: allActivities, selectedActivity } = useActivitiesStore();
-  const selectedSeedActivity = selectedActivity?.id === activityId ? selectedActivity : null;
+  const { activities: storedActivities, selectedActivity } = useActivitiesStore();
+  const allActivities = useMemo(
+    () => (isGuest ? getGuestActivities() : storedActivities),
+    [isGuest, storedActivities]
+  );
+  const selectedSeedActivity = selectedActivity?.id === activityId
+    ? selectedActivity
+    : allActivities.find((candidate) => candidate.id === activityId) ?? null;
   const [activity, setActivity] = useState<StravaActivity | null>(() => selectedSeedActivity);
   const [streams, setStreams] = useState<Record<string, ActivityStream> | null>(null);
   const [loading, setLoading] = useState(() => !selectedSeedActivity);
@@ -94,7 +103,11 @@ export default function ActivityDetailPage() {
   }, [allActivities, activity]);
 
   // Route achievement data
-  const { savedRoutes } = useRoutesStore();
+  const { savedRoutes: storedSavedRoutes } = useRoutesStore();
+  const savedRoutes = useMemo(
+    () => (isGuest ? getGuestSavedRoutes() : storedSavedRoutes),
+    [isGuest, storedSavedRoutes]
+  );
   const routeAchievement = useMemo(() => {
     if (!activity) return null;
     // Find route that contains this activity
@@ -185,7 +198,7 @@ export default function ActivityDetailPage() {
   }, [activity, activityId, selectedActivity]);
 
   useEffect(() => {
-    if (!activityId || activity || checkedDetailCacheIdRef.current === activityId) return;
+    if (isGuest || !activityId || activity || checkedDetailCacheIdRef.current === activityId) return;
 
     let cancelled = false;
     checkedDetailCacheIdRef.current = activityId;
@@ -204,7 +217,7 @@ export default function ActivityDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [activity, activityId]);
+  }, [isGuest, activity, activityId]);
 
   // Handle 401 error - try refresh session or logout
   const handleAuthError = useCallback(async () => {
@@ -234,6 +247,26 @@ export default function ActivityDetailPage() {
 
   // Load data with cache-first strategy
   const loadData = useCallback(async (isRefresh = false) => {
+    if (isGuest) {
+      const guestActivity = getGuestActivity(activityId);
+      if (!guestActivity) {
+        setError('示例活动不存在');
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      setRefreshing(isRefresh);
+      setActivity(guestActivity);
+      setStreams(getGuestActivityStreams(activityId));
+      setError('');
+      setNeedsReauth(false);
+      setRateLimited(false);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!user?.accessToken || !activityId) return;
 
     // If not refreshing, try cache first
@@ -311,7 +344,7 @@ export default function ActivityDetailPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.accessToken, activityId, handleAuthError]);
+  }, [isGuest, user?.accessToken, activityId, handleAuthError]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -634,12 +667,14 @@ export default function ActivityDetailPage() {
           {activity && (
             <button
               onClick={() => loadData(true)}
-              disabled={refreshing || needsReauth || rateLimited}
+              disabled={isGuest || refreshing || needsReauth || rateLimited}
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
             >
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">
-                {rateLimited
+                {isGuest
+                  ? t('guest.demo', '示例')
+                  : rateLimited
                   ? t('errors.rateLimited', '限流中')
                   : refreshing
                     ? t('common.refreshing', '刷新中')
@@ -696,7 +731,14 @@ export default function ActivityDetailPage() {
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                  <SaveRouteButton activity={activity} />
+                  {isGuest ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 font-mono text-xs font-bold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
+                      <Route size={14} />
+                      {t('guest.demoRoute', '示例路线')}
+                    </span>
+                  ) : (
+                    <SaveRouteButton activity={activity} />
+                  )}
                   {routePolyline && (
                     <button
                       onClick={() => setIsShareOpen(true)}
@@ -715,24 +757,40 @@ export default function ActivityDetailPage() {
                   icon={<Route size={16} />}
                   label={t('activity.distance')}
                   value={formatDistance(activity.distance, 'km')}
+                  sub={activity.total_elevation_gain > 0 ? `+${Math.round(activity.total_elevation_gain)}m` : undefined}
                   tone="blue"
                 />
                 <StatCard
                   icon={<Timer size={16} />}
                   label={t('activity.time')}
                   value={formatDurationDetail(activity.moving_time)}
+                  sub={activity.elapsed_time && activity.elapsed_time !== activity.moving_time
+                    ? `${t('activity.elapsedTime', '用时')} ${formatDurationDetail(activity.elapsed_time)}`
+                    : undefined}
                   tone="emerald"
                 />
                 <StatCard
                   icon={<Gauge size={16} />}
                   label={t('activity.pace')}
                   value={formatPace(activity.distance, activity.moving_time, 'min/km')}
+                  sub={activity.max_speed
+                    ? `${t('activity.maxPace', '最快配速')} ${formatPace(1000, 1000 / activity.max_speed, 'min/km')}`
+                    : undefined}
                   tone="orange"
                 />
                 <StatCard
-                  icon={<Clock3 size={16} />}
-                  label={t('activity.elapsedTime', '用时')}
-                  value={formatDurationDetail(activity.elapsed_time)}
+                  icon={activity.average_heartrate ? <HeartPulse size={16} /> : <Mountain size={16} />}
+                  label={activity.average_heartrate
+                    ? t('activity.averageHeartRate', '平均心率')
+                    : t('activity.elevationGain', '爬升')}
+                  value={activity.average_heartrate
+                    ? `${Math.round(activity.average_heartrate)} bpm`
+                    : `${Math.round(activity.total_elevation_gain || 0)} m`}
+                  sub={activity.max_heartrate
+                    ? `${t('activity.maxHeartRate', '最大心率')} ${Math.round(activity.max_heartrate)} bpm`
+                    : activity.elev_high
+                      ? `${t('activity.maxElevation', '最高海拔')} ${Math.round(activity.elev_high)}m`
+                      : undefined}
                   tone="zinc"
                 />
               </div>
@@ -792,7 +850,7 @@ export default function ActivityDetailPage() {
                     onReady={() => setMapReady(true)}
                   />
                   {activity.workout_type !== undefined && activity.workout_type !== null && (
-                    <div className="absolute right-3 top-3 z-[400]">
+                    <div className="absolute right-3 top-3 z-[6]">
                       <span className="inline-flex items-center rounded-md border border-zinc-200 bg-white/90 px-2.5 py-1 font-mono text-[10px] font-bold shadow-sm backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90">
                         {activity.workout_type === 1 ? '比赛' :
                          activity.workout_type === 2 ? '长跑' :
@@ -818,11 +876,15 @@ export default function ActivityDetailPage() {
               </div>
 
               <div className="min-w-0">
-                <AIAnalysisCard
-                  activity={activity}
-                  streams={streams}
-                  enabled={isAuthenticated && Boolean(user?.accessToken) && !needsReauth}
-                />
+                {isGuest ? (
+                  <GuestAIAnalysisPreview activity={activity} />
+                ) : (
+                  <AIAnalysisCard
+                    activity={activity}
+                    streams={streams}
+                    enabled={isAuthenticated && Boolean(user?.accessToken) && !needsReauth}
+                  />
+                )}
               </div>
 
               {streams && (
@@ -1003,6 +1065,54 @@ export default function ActivityDetailPage() {
   );
 }
 
+function GuestAIAnalysisPreview({ activity }: { activity: StravaActivity }) {
+  const { t } = useTranslation();
+  const lapCount = activity.laps?.length ?? 0;
+  const isInterval = lapCount > 3;
+  const pace = formatPace(activity.distance, activity.moving_time, 'min/km');
+  const recovery = activity.distance >= 15000 || isInterval ? '36h' : '24h';
+
+  return (
+    <SectionCard
+      title={t('guest.aiPreviewTitle', 'AI 训练分析 · 示例')}
+      icon={<BarChart3 size={15} />}
+      aside={t('guest.demo', '示例')}
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          <BriefGuestMetric label={t('aiAnalysis.paceZone', '配速区间')} value={isInterval ? 'I-间歇' : 'E-有氧'} />
+          <BriefGuestMetric label={t('aiAnalysis.intensity', '强度')} value={isInterval ? '偏高' : '适中'} />
+          <BriefGuestMetric label={t('aiAnalysis.recovery', '恢复')} value={recovery} />
+        </div>
+        <p className="font-mono text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+          {isInterval
+            ? t('guest.aiIntervalSummary', '这是一条示例间歇课：圈数较多，适合观察快段与恢复段是否均匀。登录后会结合你的 PB、心率区间和历史训练生成真实分析。')
+            : t('guest.aiSummary', '这是一条示例训练：当前配速 {{pace}}，可用于体验摘要、依据和建议的呈现方式。登录后会基于你的真实历史生成分析。', { pace })}
+        </p>
+        <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+          <p className="font-mono text-[10px] font-bold uppercase text-zinc-400">
+            {t('aiAnalysis.analysisDetails', '分析依据与建议')}
+          </p>
+          <p className="mt-1 font-mono text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+            {isInterval
+              ? t('guest.aiIntervalHint', '优先看每组快段配速是否下滑、恢复段心率是否能降下来；下一次训练建议安排轻松跑。')
+              : t('guest.aiHint', '优先看配速稳定性、心率漂移和本周跑量占比；下一次训练建议保持低强度补量。')}
+          </p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function BriefGuestMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-2 text-center dark:border-zinc-800 dark:bg-zinc-950">
+      <p className="truncate font-mono text-[10px] text-zinc-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
+    </div>
+  );
+}
+
 function SectionCard({
   title,
   aside,
@@ -1096,11 +1206,13 @@ function StatCard({
   icon,
   label,
   value,
+  sub,
   tone = 'zinc',
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  sub?: string;
   tone?: StatTone;
 }) {
   return (
@@ -1112,6 +1224,11 @@ function StatCard({
       <p className="mt-1 break-words font-mono text-lg font-black leading-tight text-zinc-950 dark:text-zinc-50">
         {value}
       </p>
+      {sub && (
+        <p className="mt-1 truncate font-mono text-[10px] text-zinc-500 dark:text-zinc-400" title={sub}>
+          {sub}
+        </p>
+      )}
     </div>
   );
 }

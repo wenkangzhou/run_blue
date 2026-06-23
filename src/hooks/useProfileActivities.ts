@@ -6,6 +6,7 @@ import { ActivityHistorySyncProgress, useActivityHistorySync } from '@/hooks/use
 import { isActivitiesCacheStale, useActivitiesStore } from '@/store/activities';
 import { getActivityTimestamp } from '@/lib/dates';
 import { syncRecentActivities } from '@/lib/activitySync';
+import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import type { StravaActivity } from '@/types';
 
 interface UseProfileActivitiesResult {
@@ -90,10 +91,11 @@ export function useProfileActivities(): UseProfileActivitiesResult {
   const autoSyncTokenRef = useRef<string | null>(null);
 
   const stravaRuns = useMemo(() => sortRuns(cachedActivities), [cachedActivities]);
-  const shouldUseStrava = isAuthenticated && Boolean(user?.accessToken);
+  const isGuest = isGuestUser(user);
+  const shouldUseStrava = isAuthenticated && Boolean(user?.accessToken) && !isGuest;
 
   useEffect(() => {
-    if (authLoading || shouldUseStrava) return;
+    if (authLoading || shouldUseStrava || isGuest) return;
 
     let cancelled = false;
     setDemoLoading(!cachedDemoActivities);
@@ -116,7 +118,7 @@ export function useProfileActivities(): UseProfileActivitiesResult {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, shouldUseStrava]);
+  }, [authLoading, isGuest, shouldUseStrava]);
 
   useEffect(() => {
     if (!user?.accessToken || !shouldUseStrava || authLoading || !hasHydrated) return;
@@ -178,6 +180,23 @@ export function useProfileActivities(): UseProfileActivitiesResult {
       source: 'strava',
       syncProgress,
       syncError,
+    };
+  }
+
+  if (isGuest) {
+    return {
+      activities: getGuestActivities(),
+      canRefresh: false,
+      error: null,
+      isRefreshDisabled: false,
+      isRefreshing: false,
+      isLoading: authLoading,
+      isSyncing: false,
+      lastFetchedAt: null,
+      refresh,
+      source: 'demo',
+      syncProgress: null,
+      syncError: null,
     };
   }
 

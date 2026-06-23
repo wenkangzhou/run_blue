@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { TrainingPlanView } from '@/components/TrainingPlanView';
 import { getStoredTrainingPlan, deleteTrainingPlan } from '@/lib/trainingPlan';
+import { deleteGuestTrainingPlan, getGuestTrainingPlan, isGuestUser } from '@/lib/guestMode';
 import type { TrainingPlan } from '@/lib/trainingPlan';
 import { ChevronLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -14,8 +15,9 @@ import Link from 'next/link';
 export default function TrainingPlanDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { t } = useTranslation();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const isGuest = isGuestUser(user);
+  const { t, i18n } = useTranslation();
 
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -38,6 +40,18 @@ export default function TrainingPlanDetailPage() {
 
     const id = params.id as string;
     setNotFound(false);
+    if (isGuest) {
+      const found = getGuestTrainingPlan(id, i18n.language);
+      if (found) {
+        setPlan(found);
+      } else {
+        setNotFound(true);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
     getStoredTrainingPlan(id)
       .then((found) => {
         if (cancelled) return;
@@ -54,7 +68,7 @@ export default function TrainingPlanDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAuthenticated, router, params.id]);
+  }, [authLoading, isAuthenticated, isGuest, router, params.id, i18n.language]);
 
   if (authLoading || !isAuthenticated) {
     return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
@@ -91,7 +105,11 @@ export default function TrainingPlanDetailPage() {
 
   const handleDelete = async () => {
     if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      await deleteTrainingPlan(plan.id);
+      if (isGuest) {
+        deleteGuestTrainingPlan(plan.id);
+      } else {
+        await deleteTrainingPlan(plan.id);
+      }
       router.push('/plans');
     }
   };

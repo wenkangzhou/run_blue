@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useActivitiesStore } from '@/store/activities';
 import { useAuth } from '@/hooks/useAuth';
 import { StravaActivity } from '@/types';
+import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import {
   mergeIntoGearCache,
   getGearCacheActivities,
@@ -130,12 +131,17 @@ function calculateGearStats(activities: UnifiedActivity[]): Map<string, Omit<Gea
 export default function GearPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const activities = useActivitiesStore((s) => s.activities);
+  const isGuest = isGuestUser(user);
+  const storeActivities = useActivitiesStore((s) => s.activities);
+  const activities = React.useMemo(
+    () => (isGuest ? getGuestActivities() : storeActivities),
+    [isGuest, storeActivities]
+  );
   const {
     isSyncing: isLoadingAll,
     syncHistory,
     reset: resetHistorySync,
-  } = useActivityHistorySync(user?.accessToken);
+  } = useActivityHistorySync(isGuest ? null : user?.accessToken);
 
   const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
   const [loading, setLoading] = React.useState(false);
@@ -157,6 +163,8 @@ export default function GearPage() {
 
   // Merge all data sources: gear cache > activity caches > activities store
   const allActivities = React.useMemo((): UnifiedActivity[] => {
+    if (isGuest) return activities.map(toUnified);
+
     const merged = new Map<number, UnifiedActivity>();
 
     // 1. Gear cache (lightweight, can hold 1000+ activities)
@@ -181,7 +189,7 @@ export default function GearPage() {
     }
 
     return Array.from(merged.values());
-  }, [activities, gearCacheActivities]);
+  }, [isGuest, activities, gearCacheActivities]);
 
   const gearIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -208,6 +216,7 @@ export default function GearPage() {
 
   // Fetch gear details from Strava API
   React.useEffect(() => {
+    if (isGuest) return;
     if (gearIds.length === 0) return;
     const missingIds = gearIds.filter((id) => !gearDetails.has(id));
     if (missingIds.length === 0) return;
@@ -244,10 +253,11 @@ export default function GearPage() {
     }
     fetchGears();
     return () => { cancelled = true; };
-  }, [gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isGuest, gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the lightweight gear cache aligned without exposing sync mechanics in the UI.
   React.useEffect(() => {
+    if (isGuest) return;
     if (!user?.accessToken || backgroundSyncStartedRef.current) return;
     backgroundSyncStartedRef.current = true;
 
@@ -313,7 +323,7 @@ export default function GearPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.accessToken, isLoadingAll, resetHistorySync, syncHistory]);
+  }, [isGuest, user?.accessToken, isLoadingAll, resetHistorySync, syncHistory]);
 
   // Build final gear stats list (filter out retired)
   const gearStats: GearStats[] = React.useMemo(() => {

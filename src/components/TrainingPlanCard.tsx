@@ -54,6 +54,63 @@ function getFirstLine(text: string) {
   return text.split('\n').find((line) => line.trim().length > 0)?.trim() ?? '';
 }
 
+function cleanGuideValue(line?: string) {
+  if (!line) return '';
+  return line
+    .replace(/^(配速建议|心率建议|体感|执行要点|要点|提示|Pace|HR|Feel|Execution|Tip|Note):?\s*/i, '')
+    .replace(/^：\s*/, '')
+    .trim();
+}
+
+function getSessionGuides(description: string) {
+  const lines = description.split('\n').map((line) => line.trim()).filter(Boolean);
+  const findLine = (patterns: RegExp[]) => lines.find((line) => patterns.some((pattern) => pattern.test(line)));
+  return {
+    main: lines[0] || '',
+    pace: cleanGuideValue(findLine([/^配速建议/, /^Pace/i])),
+    heartRate: cleanGuideValue(findLine([/^心率建议/, /^HR/i])),
+    feel: cleanGuideValue(findLine([/^体感/, /^Feel/i])),
+    tip: cleanGuideValue(findLine([/^执行要点/, /^要点/, /^Tip/i, /^Execution/i])),
+  };
+}
+
+function getSessionPurpose(type: TrainingSession['type'], isZh: boolean) {
+  const purposes: Record<TrainingSession['type'], { zh: string; en: string }> = {
+    easy: { zh: '累积有氧，不制造疲劳', en: 'Build aerobic volume without fatigue' },
+    long: { zh: '提升耐力和补给熟悉度', en: 'Build endurance and fueling familiarity' },
+    tempo: { zh: '提高阈值和目标配速稳定性', en: 'Improve threshold and goal-pace control' },
+    interval: { zh: '刺激速度与最大摄氧能力', en: 'Stimulate speed and VO2max' },
+    recovery: { zh: '促进恢复，维持跑感', en: 'Recover while keeping running rhythm' },
+    rest: { zh: '吸收训练负荷', en: 'Absorb training load' },
+    race: { zh: '执行比赛策略', en: 'Execute race strategy' },
+  };
+  return isZh ? purposes[type].zh : purposes[type].en;
+}
+
+function getDowngradeRule(type: TrainingSession['type'], isZh: boolean) {
+  if (type === 'rest') return '';
+  if (type === 'long') {
+    return isZh ? '状态差则缩短 20-30%，不追最后加速' : 'Cut 20-30% if tired; skip late progression';
+  }
+  if (type === 'tempo' || type === 'interval') {
+    return isZh ? '疲劳高则改 40min E 区或休息' : 'Swap for 40min E or rest if fatigue is high';
+  }
+  if (type === 'race') {
+    return isZh ? '按当天体感调整目标配速' : 'Adjust goal pace by race-day feel';
+  }
+  return isZh ? '心率偏高就降速，必要时缩短' : 'Slow down if HR drifts; shorten if needed';
+}
+
+function GuideItem({ label, value }: { label: string; value: string }) {
+  if (!value) return null;
+  return (
+    <div className="border border-white/60 bg-white/70 px-2 py-1.5 dark:border-zinc-800 dark:bg-zinc-950/60">
+      <p className="font-mono text-[9px] text-zinc-400">{label}</p>
+      <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-zinc-600 dark:text-zinc-300">{value}</p>
+    </div>
+  );
+}
+
 export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
@@ -135,12 +192,12 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
               )}
             </div>
             <p className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-              {keySessions.length > 0
+              {week.focus || (keySessions.length > 0
                 ? t('trainingPlan.weekFocus', '{{count}} 个关键训练 · 长距离 {{distance}} km', {
                     count: keySessions.length,
                     distance: longRun?.distance ?? 0,
                   })
-                : t('trainingPlan.weekRecoveryFocus', '恢复与基础有氧周')}
+                : t('trainingPlan.weekRecoveryFocus', '恢复与基础有氧周'))}
             </p>
           </div>
           <div className="shrink-0 text-right">
@@ -197,7 +254,9 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
               }
 
               const title = session.title || defaultTitle(session.type);
-              const description = getFirstLine(session.description);
+              const guides = getSessionGuides(session.description);
+              const description = guides.main || getFirstLine(session.description);
+              const downgrade = getDowngradeRule(session.type, isZh);
 
               return (
                 <div
@@ -225,6 +284,15 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
                         <p className="mt-1 whitespace-pre-line font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
                           {description}
                         </p>
+                      )}
+                      {session.type !== 'rest' && (
+                        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                          <GuideItem label={isZh ? '目的' : 'Purpose'} value={getSessionPurpose(session.type, isZh)} />
+                          <GuideItem label={isZh ? '配速' : 'Pace'} value={guides.pace} />
+                          <GuideItem label={isZh ? '心率' : 'HR'} value={guides.heartRate} />
+                          <GuideItem label={isZh ? '体感' : 'Feel'} value={guides.feel || guides.tip} />
+                          <GuideItem label={isZh ? '降级' : 'Adjust'} value={downgrade} />
+                        </div>
                       )}
                     </div>
                   </div>

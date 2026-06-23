@@ -9,6 +9,8 @@ import { StravaActivity } from '@/types';
 import { getNextActivitiesPage, syncRecentActivities } from '@/lib/activitySync';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate } from '@/lib/dates';
+import { formatDistance, formatDuration } from '@/lib/strava';
+import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import { Loader2, RefreshCw, ChevronUp, SlidersHorizontal, X } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
@@ -23,10 +25,23 @@ function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'gener
   return 'generic';
 }
 
+function formatCompactListDistance(meters: number): string {
+  const km = meters / 1000;
+  if (km >= 1000) return `${Math.round(km).toLocaleString('en-US')} km`;
+  return formatDistance(meters, 'km');
+}
+
+function formatCompactListDuration(seconds: number): string {
+  const hours = seconds / 3600;
+  if (hours >= 100) return `${Math.round(hours).toLocaleString('en-US')} h`;
+  return formatDuration(seconds);
+}
+
 export default function ActivitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
+  const isGuest = isGuestUser(user);
   const { t } = useTranslation();
   const {
     activities,
@@ -42,7 +57,7 @@ export default function ActivitiesPage() {
   const {
     syncHistory,
     reset: resetHistorySync,
-  } = useActivityHistorySync(user?.accessToken);
+  } = useActivityHistorySync(isGuest ? null : user?.accessToken);
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,13 +90,23 @@ export default function ActivitiesPage() {
   // 直接记录下一页要加载的页码
   const nextPageRef = useRef(1);
   const backgroundHistorySyncStartedRef = useRef(false);
+  const sourceActivities = React.useMemo(
+    () => (isGuest ? getGuestActivities() : activities),
+    [isGuest, activities]
+  );
+  const sourceHasMore = isGuest ? false : hasMore;
+
+  const routeActivities = React.useMemo(() => {
+    return sourceActivities.filter((a: StravaActivity) => {
+      if (a.type !== 'Run') return false;
+      const hasRoute = a.map?.summary_polyline && a.map.summary_polyline.length > 10;
+      return Boolean(hasRoute);
+    });
+  }, [sourceActivities]);
 
   // Filter running activities with valid route data + user filters
   const runningActivities = React.useMemo(() => {
-    return activities.filter((a: StravaActivity) => {
-      if (a.type !== 'Run') return false;
-      const hasRoute = a.map?.summary_polyline && a.map.summary_polyline.length > 10;
-      if (!hasRoute) return false;
+    return routeActivities.filter((a: StravaActivity) => {
 
       // Date filter
       const activityDate = getActivityDate(a);
@@ -108,7 +133,17 @@ export default function ActivitiesPage() {
 
       return true;
     });
-  }, [activities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
+  }, [routeActivities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
+
+  const listTotals = React.useMemo(() => {
+    return runningActivities.reduce(
+      (total, activity) => ({
+        distance: total.distance + activity.distance,
+        time: total.time + activity.moving_time,
+      }),
+      { distance: 0, time: 0 }
+    );
+  }, [runningActivities]);
 
   const activeFilterCount = [
     startDate,
@@ -140,14 +175,92 @@ export default function ActivitiesPage() {
     });
   }, [updateFilterParams]);
 
+  const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = [];
+  if (startDate) {
+    activeFilterChips.push({
+      key: 'startDate',
+      label: `从 ${startDate}`,
+      onRemove: () => {
+        setStartDate('');
+        updateFilterParams({ startDate: '' });
+      },
+    });
+  }
+  if (endDate) {
+    activeFilterChips.push({
+      key: 'endDate',
+      label: `到 ${endDate}`,
+      onRemove: () => {
+        setEndDate('');
+        updateFilterParams({ endDate: '' });
+      },
+    });
+  }
+  if (minDistance) {
+    activeFilterChips.push({
+      key: 'minDistance',
+      label: `>= ${minDistance}km`,
+      onRemove: () => {
+        setMinDistance('');
+        updateFilterParams({ minDistance: '' });
+      },
+    });
+  }
+  if (maxDistance) {
+    activeFilterChips.push({
+      key: 'maxDistance',
+      label: `<= ${maxDistance}km`,
+      onRemove: () => {
+        setMaxDistance('');
+        updateFilterParams({ maxDistance: '' });
+      },
+    });
+  }
+  if (raceFilter) {
+    activeFilterChips.push({
+      key: 'race',
+      label: '比赛',
+      onRemove: () => {
+        setRaceFilter(false);
+        updateFilterParams({ race: '' });
+      },
+    });
+  }
+  if (withKidFilter) {
+    activeFilterChips.push({
+      key: 'withKid',
+      label: '带娃',
+      onRemove: () => {
+        setWithKidFilter(false);
+        updateFilterParams({ withKid: '' });
+      },
+    });
+  }
+  if (longRunFilter) {
+    activeFilterChips.push({
+      key: 'longRun',
+      label: '长跑',
+      onRemove: () => {
+        setLongRunFilter(false);
+        updateFilterParams({ longRun: '' });
+      },
+    });
+  }
+
   useEffect(() => {
-    if (activities.length > 0 && initialLoading) {
+    if (sourceActivities.length > 0 && initialLoading) {
       setInitialLoading(false);
     }
-  }, [activities.length, initialLoading]);
+  }, [sourceActivities.length, initialLoading]);
 
   // Load activities
   const loadActivities = useCallback(async (type: 'initial' | 'refresh') => {
+    if (isGuest) {
+      setInitialLoading(false);
+      setRefreshing(false);
+      setLoading(false);
+      return;
+    }
     if (!user?.accessToken) return;
 
     if (type === 'refresh') {
@@ -195,6 +308,7 @@ export default function ActivitiesPage() {
       setInitialLoading(false);
     }
   }, [
+    isGuest,
     user?.accessToken,
     activities.length,
     loadedPages,
@@ -211,6 +325,7 @@ export default function ActivitiesPage() {
   }, []);
 
   const startBackgroundHistorySync = useCallback(async () => {
+    if (isGuest) return;
     if (!user?.accessToken || backgroundHistorySyncStartedRef.current) return;
     if (refreshing) return;
     if (!hasMore && !isActivitiesCacheStale(lastFetchedAt)) return;
@@ -238,6 +353,7 @@ export default function ActivitiesPage() {
       }
     }
   }, [
+    isGuest,
     user?.accessToken,
     refreshing,
     hasMore,
@@ -254,6 +370,7 @@ export default function ActivitiesPage() {
 
   // 检查是否有新数据
   const checkForNewActivities = useCallback(async () => {
+    if (isGuest) return;
     if (!user?.accessToken || !latestActivityId) return;
 
     const now = Date.now();
@@ -270,6 +387,7 @@ export default function ActivitiesPage() {
       console.error('[CheckNew] failed:', err);
     }
   }, [
+    isGuest,
     user?.accessToken,
     latestActivityId,
   ]);
@@ -277,6 +395,13 @@ export default function ActivitiesPage() {
   // Initial load
   useEffect(() => {
     if (authLoading) return;
+    if (isGuest) {
+      setInitialLoading(false);
+      setLoading(false);
+      setError(null);
+      nextPageRef.current = 1;
+      return;
+    }
     if (!isAuthenticated) {
       if (activities.length > 0) {
         setInitialLoading(false);
@@ -303,14 +428,16 @@ export default function ActivitiesPage() {
       nextPageRef.current = getNextActivitiesPage(loadedPages, activities.length);
       checkForNewActivities();
     }
-  }, [authLoading, isAuthenticated, user?.accessToken, activities.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, isGuest, user?.accessToken, activities.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (isGuest) return;
     if (authLoading || !isAuthenticated || !user?.accessToken || activities.length === 0) return;
     startBackgroundHistorySync();
   }, [
     authLoading,
     isAuthenticated,
+    isGuest,
     user?.accessToken,
     activities.length,
     startBackgroundHistorySync,
@@ -326,9 +453,9 @@ export default function ActivitiesPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const canRenderCachedActivities = activities.length > 0;
+  const canRenderCachedActivities = sourceActivities.length > 0;
 
-  if (authLoading && activities.length === 0) {
+  if (authLoading && sourceActivities.length === 0) {
     return <ActivitiesPageSkeleton />;
   }
 
@@ -336,7 +463,7 @@ export default function ActivitiesPage() {
     return <ActivitiesPageSkeleton />;
   }
 
-  if (initialLoading && activities.length === 0) {
+  if (initialLoading && sourceActivities.length === 0) {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="flex items-center justify-center h-64">
@@ -349,7 +476,7 @@ export default function ActivitiesPage() {
     );
   }
 
-  if ((error || needsReauth) && activities.length === 0) {
+  if ((error || needsReauth) && sourceActivities.length === 0) {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="text-center">
@@ -376,48 +503,122 @@ export default function ActivitiesPage() {
   return (
     <div className="container mx-auto px-3 py-4">
       {/* Header */}
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+              Activities
+            </p>
+            <h1 className="mt-1 font-pixel text-xl font-bold text-zinc-950 dark:text-zinc-50">
+              活动路线
+            </h1>
+            <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+              {hasActiveFilters
+                ? `${runningActivities.length} / ${routeActivities.length} 条路线匹配`
+                : `${routeActivities.length} 条带轨迹跑步`}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => setShowFilters((s) => !s)}
+              className={`relative inline-flex h-10 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-xs font-bold transition-colors ${
+                showFilters || hasActiveFilters
+                  ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-300'
+                  : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900'
+              }`}
+              title={t('filter.title', '筛选')}
+            >
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">{t('filter.title', '筛选')}</span>
+              {hasActiveFilters && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[9px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={isGuest || refreshing || isLoading || !user?.accessToken}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 font-mono text-xs font-bold text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+              title={isGuest ? '游客示例数据不可同步' : '更新最新数据'}
+            >
+              <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{isGuest ? '示例' : refreshing ? '更新中' : '更新'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+            <p className="font-mono text-[10px] text-zinc-400">距离</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+              {formatCompactListDistance(listTotals.distance)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+            <p className="font-mono text-[10px] text-zinc-400">时间</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+              {formatCompactListDuration(listTotals.time)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+            <p className="font-mono text-[10px] text-zinc-400">次数</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+              {runningActivities.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {runningActivities.length > 0 && (
-            <div className="relative mb-1 shrink-0">
+            <div className="relative shrink-0">
               <RunningStats activities={runningActivities} />
             </div>
           )}
-          <p className="truncate font-mono text-[10px] text-zinc-400">
-            {hasActiveFilters
-              ? `${runningActivities.length} / ${activities.length} 条匹配`
-              : `${runningActivities.length} 条跑步路线`}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => setShowFilters((s) => !s)}
-            className={`relative inline-flex h-9 items-center gap-1 rounded-md px-2.5 font-mono text-xs transition-colors ${
-              showFilters || hasActiveFilters
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-300'
-            }`}
-            title={t('filter.title', '筛选')}
-          >
-            <SlidersHorizontal size={16} />
-            <span className="hidden sm:inline">{t('filter.title', '筛选')}</span>
-            {hasActiveFilters && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[9px] font-bold text-white">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <button onClick={handleRefresh} disabled={refreshing || isLoading || !user?.accessToken} className="inline-flex h-9 items-center gap-1 rounded-md px-2.5 font-mono text-xs text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-900 dark:hover:text-zinc-300" title="刷新数据">
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{refreshing ? '刷新中' : '刷新'}</span>
-          </button>
+          {hasActiveFilters && (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {activeFilterChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  onClick={chip.onRemove}
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 font-mono text-[10px] font-bold text-blue-600 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                >
+                  <span>{chip.label}</span>
+                  <X size={10} />
+                </button>
+              ))}
+              <button
+                onClick={resetFilters}
+                className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500 dark:hover:bg-zinc-900"
+              >
+                清空
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Filter Panel */}
       {showFilters && (
-        <div className="mb-4 space-y-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-4 space-y-4 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                筛选跑步记录
+              </h2>
+              <p className="mt-1 font-mono text-[11px] text-zinc-500">
+                日期、距离和类型会实时同步到地址栏，返回时会保留。
+              </p>
+            </div>
+            <button
+              onClick={() => setShowFilters(false)}
+              className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+              aria-label="关闭筛选"
+            >
+              <X size={16} />
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-mono text-[10px] uppercase text-zinc-400 mb-1">{t('filter.startDate', '开始日期')}</label>
@@ -425,7 +626,7 @@ export default function ActivitiesPage() {
                 type="date"
                 value={startDate}
                 onChange={(e) => { setStartDate(e.target.value); updateFilterParams({ startDate: e.target.value }); }}
-                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
               />
             </div>
             <div>
@@ -434,7 +635,7 @@ export default function ActivitiesPage() {
                 type="date"
                 value={endDate}
                 onChange={(e) => { setEndDate(e.target.value); updateFilterParams({ endDate: e.target.value }); }}
-                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
               />
             </div>
             <div>
@@ -446,7 +647,7 @@ export default function ActivitiesPage() {
                 value={minDistance}
                 onChange={(e) => { setMinDistance(e.target.value); updateFilterParams({ minDistance: e.target.value }); }}
                 placeholder="0"
-                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
               />
             </div>
             <div>
@@ -458,11 +659,13 @@ export default function ActivitiesPage() {
                 value={maxDistance}
                 onChange={(e) => { setMaxDistance(e.target.value); updateFilterParams({ maxDistance: e.target.value }); }}
                 placeholder="∞"
-                className="w-full px-2 py-1.5 font-mono text-xs border-2 border-zinc-200 dark:border-zinc-700 bg-transparent focus:border-blue-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
               />
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div>
+            <p className="mb-2 font-mono text-[10px] uppercase text-zinc-400">类型</p>
+            <div className="flex flex-wrap gap-2">
             {/* Workout type tags */}
             <button
               onClick={() => {
@@ -470,10 +673,10 @@ export default function ActivitiesPage() {
                 setRaceFilter(next);
                 updateFilterParams({ race: next ? '1' : '' });
               }}
-              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
                 raceFilter
-                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
-                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+                  ? 'border-blue-500 bg-blue-600 text-white'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
               比赛
@@ -484,10 +687,10 @@ export default function ActivitiesPage() {
                 setWithKidFilter(next);
                 updateFilterParams({ withKid: next ? '1' : '' });
               }}
-              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
                 withKidFilter
-                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
-                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+                  ? 'border-blue-500 bg-blue-600 text-white'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
               带娃
@@ -498,19 +701,20 @@ export default function ActivitiesPage() {
                 setLongRunFilter(next);
                 updateFilterParams({ longRun: next ? '1' : '' });
               }}
-              className={`px-2 py-1 font-mono text-[10px] border transition-colors ${
+              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
                 longRunFilter
-                  ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
-                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'
+                  ? 'border-blue-500 bg-blue-600 text-white'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
               长跑
             </button>
+            </div>
           </div>
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
-              className="inline-flex items-center gap-1 font-mono text-xs text-zinc-400 hover:text-red-500 transition-colors"
+              className="inline-flex items-center gap-1 rounded-lg px-1 font-mono text-xs font-bold text-zinc-400 transition-colors hover:text-red-500"
             >
               <X size={12} />
               {t('filter.clear', '清除筛选')}
@@ -520,7 +724,7 @@ export default function ActivitiesPage() {
       )}
 
       {/* Warning banner */}
-      {(needsReauth || rateLimited) && activities.length > 0 && (
+      {(needsReauth || rateLimited) && sourceActivities.length > 0 && (
         <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs text-amber-700 dark:text-amber-400">
@@ -538,7 +742,7 @@ export default function ActivitiesPage() {
         </div>
       )}
 
-      {error && !needsReauth && !rateLimited && activities.length > 0 && (
+      {error && !needsReauth && !rateLimited && sourceActivities.length > 0 && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-xs text-red-600 dark:text-red-400">
@@ -576,8 +780,8 @@ export default function ActivitiesPage() {
         <>
           <GroupedActivities
             activities={runningActivities}
-            hasMore={hasMore}
-            isLoading={isLoading}
+            hasMore={sourceHasMore}
+            isLoading={isGuest ? false : isLoading}
             onOpenPeriodShare={() => setIsPeriodShareOpen(true)}
           />
         </>
@@ -593,7 +797,7 @@ export default function ActivitiesPage() {
       <PeriodShareModal
         isOpen={isPeriodShareOpen}
         onClose={() => setIsPeriodShareOpen(false)}
-        activities={activities}
+        activities={sourceActivities}
       />
 
     </div>

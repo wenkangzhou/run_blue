@@ -1,7 +1,16 @@
 import type { User } from '@/types';
+import { GUEST_ACCESS_TOKEN } from '@/lib/guestMode';
 
 export function stripAuthTokens(user: User | null | undefined): User | null {
   if (!user) return null;
+  if (user.isGuest) {
+    return {
+      ...user,
+      accessToken: GUEST_ACCESS_TOKEN,
+      refreshToken: '',
+      expiresAt: 4102444800,
+    };
+  }
   return {
     ...user,
     accessToken: '',

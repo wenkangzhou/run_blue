@@ -78,26 +78,26 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
   const avgRunDistance = stats.totalRuns > 0 ? stats.totalDistance / stats.totalRuns : 0;
 
   return (
-    <section className="relative px-4 pb-8 pt-8 sm:pb-12 sm:pt-12">
+    <section className="relative px-3 pb-5 pt-5 sm:px-4 sm:pb-10 sm:pt-10">
       <div className="relative mx-auto max-w-6xl overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80 shadow-2xl shadow-black/30">
         <TrajectoryCanvas activities={activities} />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,9,11,0.98),rgba(8,9,11,0.9),rgba(8,9,11,0.72))]" />
-        <div className="relative grid min-h-[500px] gap-8 p-5 sm:min-h-[520px] sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_380px] lg:p-10">
-          <div className="flex flex-col justify-between gap-8">
+        <div className="relative grid min-h-[430px] gap-6 p-4 sm:min-h-[520px] sm:gap-8 sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_380px] lg:p-10">
+          <div className="flex flex-col justify-between gap-6 sm:gap-8">
             <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200 sm:mb-5">
                 <Sparkles size={13} />
                 跑蓝档案
               </div>
-              <h1 className="max-w-3xl text-4xl font-black leading-none tracking-normal text-zinc-50 sm:text-6xl">
+              <h1 className="max-w-3xl text-3xl font-black leading-none tracking-normal text-zinc-50 sm:text-6xl">
                 个人跑步档案
               </h1>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-400 sm:mt-5 sm:text-base sm:leading-7">
                 从 {firstYear ?? '--'} 到 {latestYear ?? '--'}，把路线、跑量和节奏变化整理成一份可以快速回看的训练记录。
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               <QuickStat icon={<Route size={15} />} label="今年跑量" value={formatDistance(currentYearDistance)} />
               <QuickStat icon={<CalendarDays size={15} />} label="近30天" value={formatDistance(recentDistance)} />
               <QuickStat icon={<Clock3 size={15} />} label="总时长" value={formatDuration(stats.totalTime)} />
@@ -105,7 +105,7 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
             </div>
           </div>
 
-          <div className="grid content-end gap-3">
+          <div className="grid content-end gap-2 sm:gap-3">
             <BigStat
               label="累计距离"
               value={Math.round(stats.totalDistance / 1000)}
@@ -134,7 +134,7 @@ export function HeroSection({ activities, stats }: HeroSectionProps) {
         </div>
       </div>
 
-      <div className="relative mx-auto mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="relative mx-auto mt-3 grid max-w-6xl grid-cols-1 gap-2 px-1 sm:mt-4 sm:grid-cols-3 sm:gap-3 sm:px-0">
         <InfoCard
           label="最长单次"
           value={formatDistance(longestRun.distance)}
@@ -166,9 +166,9 @@ function getYearFromDateString(dateString?: string): number | null {
 
 function BigStat({ label, value, suffix, sub }: { label: string; value: number; suffix: string; sub: string }) {
   return (
-    <div className="group relative rounded-lg border border-zinc-800 bg-zinc-950/80 p-4 transition-all duration-300 hover:border-cyan-400/30 sm:p-5">
+    <div className="group relative rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 transition-all duration-300 hover:border-cyan-400/30 sm:p-5">
       <div className="mb-2 text-[10px] text-zinc-500">{label}</div>
-      <div className="text-3xl font-black tracking-normal text-zinc-100 transition-colors group-hover:text-cyan-200 sm:text-4xl">
+      <div className="text-2xl font-black tracking-normal text-zinc-100 transition-colors group-hover:text-cyan-200 sm:text-4xl">
         <AnimatedNumber value={value} suffix={suffix} />
       </div>
       <div className="mt-1 text-xs text-zinc-600">{sub}</div>
@@ -178,7 +178,7 @@ function BigStat({ label, value, suffix, sub }: { label: string; value: number; 
 
 function InfoCard({ label, value, sub, date }: { label: string; value: string; sub: string; date: string }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3 sm:p-4">
       <div className="mb-1 text-[10px] text-zinc-500">{label}</div>
       <div className="text-lg font-black text-zinc-100 sm:text-xl">{value}</div>
       <div className="mt-1 truncate text-xs text-zinc-500">{sub}</div>
@@ -189,7 +189,7 @@ function InfoCard({ label, value, sub, date }: { label: string; value: string; s
 
 function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-black/30 p-3">
+    <div className="rounded-lg border border-zinc-800 bg-black/30 p-2.5 sm:p-3">
       <div className="mb-2 flex items-center gap-1.5 text-cyan-300">
         {icon}
         <span className="text-[10px] text-zinc-500">{label}</span>

@@ -3,7 +3,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TrainingPlan, TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
-import { calculatePaceZones, getDistanceLabel, getDistanceLabelEn } from '@/lib/trainingPlan';
+import {
+  calculatePaceZones,
+  getDistanceLabel,
+  getDistanceLabelEn,
+  getTrainingAbilityGroup,
+} from '@/lib/trainingPlan';
 import { TrainingPlanCard } from './TrainingPlanCard';
 import { PixelButton } from '@/components/ui';
 import {
@@ -11,7 +16,9 @@ import {
   Flag,
   Gauge,
   LineChart,
+  ListChecks,
   RefreshCw,
+  ShieldCheck,
   Target,
   Trash2,
   TrendingUp,
@@ -37,6 +44,9 @@ const DISTANCE_KM: Record<TrainingPlan['goal']['distance'], number> = {
   '21k': 21.0975,
   '42k': 42.195,
 };
+
+const DAY_LABELS_ZH = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const DAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -114,6 +124,91 @@ function StatTile({
   );
 }
 
+function getDayLabel(day: number, isZh: boolean) {
+  return isZh ? DAY_LABELS_ZH[day] : DAY_LABELS_EN[day];
+}
+
+function getSessionShort(session: TrainingSession, isZh: boolean) {
+  if (session.type === 'rest') return isZh ? '休' : 'Rest';
+  if (session.type === 'long') return isZh ? '长' : 'Long';
+  if (session.type === 'interval') return isZh ? '间' : 'VO2';
+  if (session.type === 'tempo') return isZh ? '阈' : 'T';
+  if (session.type === 'recovery') return isZh ? '恢' : 'Rec';
+  if (session.type === 'race') return isZh ? '赛' : 'Race';
+  return isZh ? '轻' : 'Easy';
+}
+
+function getSessionTone(type: TrainingSession['type']) {
+  const tones: Record<TrainingSession['type'], string> = {
+    easy: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300',
+    long: 'border-violet-100 bg-violet-50 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-300',
+    tempo: 'border-orange-100 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/20 dark:text-orange-300',
+    interval: 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300',
+    recovery: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300',
+    rest: 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500',
+    race: 'border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300',
+  };
+  return tones[type];
+}
+
+function getPlanGuardrails(isZh: boolean) {
+  return isZh
+    ? ['疲劳高：质量课改 40min E 区', '心率飘高：降速，不硬顶配速', '疼痛出现：休息，不补课']
+    : ['High fatigue: swap quality for 40min E', 'HR drift: slow down, do not force pace', 'Pain: rest, do not make up missed work'];
+}
+
+function ClassSchedulePreview({
+  week,
+  isZh,
+  t,
+}: {
+  week?: WeeklyPlan;
+  isZh: boolean;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  if (!week) return null;
+
+  return (
+    <div className="border border-blue-100 bg-white p-3 dark:border-blue-900/50 dark:bg-zinc-950">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="font-pixel text-xs font-bold text-zinc-950 dark:text-zinc-50">
+            {t('trainingPlan.classSchedule', isZh ? '本周课表' : 'Week Schedule')}
+          </p>
+          <p className="mt-1 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+            {week.focus || week.notes}
+          </p>
+        </div>
+        <ListChecks size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: 7 }, (_, day) => {
+          const session = week.sessions.find((item) => item.day === day);
+          return (
+            <div
+              key={day}
+              className={[
+                'min-h-[74px] border px-1.5 py-2',
+                session ? getSessionTone(session.type) : 'border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900',
+              ].join(' ')}
+            >
+              <p className="font-mono text-[9px] font-bold text-zinc-500 dark:text-zinc-400">
+                {getDayLabel(day, isZh)}
+              </p>
+              <p className="mt-2 font-mono text-base font-black">{session ? getSessionShort(session, isZh) : '-'}</p>
+              {session && session.type !== 'rest' && (
+                <p className="mt-1 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                  {session.distance > 0 ? `${session.distance}km` : session.duration}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanViewProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
@@ -133,6 +228,12 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
     : plan.weeks[0];
   const currentKeySessions = getWeekKeySessions(currentWeekPlan);
   const maxWeekDistance = Math.max(...plan.weeks.map((week) => week.totalDistance), 1);
+  const abilityGroup = plan.currentAbility.abilityGroup
+    ?? getTrainingAbilityGroup(plan.currentAbility.pb5k, plan.currentAbility.weeklyVolume, i18n.language);
+  const weeklyRhythm = isZh
+    ? '周一休息 / 周三质量 / 周日长距离'
+    : 'Mon rest / Wed quality / Sun long run';
+  const guardrails = getPlanGuardrails(isZh);
 
   const phaseLabel: Record<WeeklyPlan['phase'], string> = {
     base: t('trainingPlan.phaseBase', '基础期'),
@@ -199,6 +300,51 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
             value={`${averageWeeklyDistance}km`}
             accent="text-emerald-600 dark:text-emerald-300"
           />
+        </div>
+
+        <div className="border-t-2 border-zinc-100 p-3 dark:border-zinc-800">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+              <p className="font-mono text-[10px] text-zinc-500">
+                {t('trainingPlan.abilityGroup', isZh ? '能力分组' : 'Ability Group')}
+              </p>
+              <div className="mt-2 flex items-baseline gap-2">
+                <p className="font-pixel text-lg font-bold text-zinc-950 dark:text-zinc-50">{abilityGroup.label}</p>
+                <span className="border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] font-bold text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                  {abilityGroup.target10k}
+                </span>
+              </div>
+              <p className="mt-2 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                {abilityGroup.description}
+              </p>
+            </div>
+            <div className="border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+              <p className="font-mono text-[10px] text-zinc-500">
+                {t('trainingPlan.weekRhythm', isZh ? '固定周节奏' : 'Weekly Rhythm')}
+              </p>
+              <p className="mt-2 font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">{weeklyRhythm}</p>
+              <p className="mt-2 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                {isZh
+                  ? '把强度、恢复和长距离错开，减少临时补课和连续疲劳。'
+                  : 'Hard days, recovery, and long run are separated to avoid stacked fatigue.'}
+              </p>
+            </div>
+            <div className="border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-300" />
+                <p className="font-mono text-[10px] text-zinc-500">
+                  {t('trainingPlan.guardrails', isZh ? '执行边界' : 'Guardrails')}
+                </p>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {guardrails.map((item) => (
+                  <p key={item} className="font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                    {item}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -285,11 +431,13 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
             <LineChart size={18} className="text-blue-600 dark:text-blue-300" />
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <ClassSchedulePreview week={currentWeekPlan} isZh={isZh} t={t} />
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {(currentKeySessions.length > 0 ? currentKeySessions : currentWeekPlan.sessions.filter((session) => session.type !== 'rest').slice(0, 2)).map((session) => (
               <div key={`${session.day}-${session.type}`} className="border border-blue-100 bg-white px-3 py-3 dark:border-blue-900/50 dark:bg-zinc-950">
                 <p className="font-mono text-[10px] text-zinc-500">
-                  {isZh ? `周${['一','二','三','四','五','六','日'][session.day]}` : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][session.day]}
+                  {getDayLabel(session.day, isZh)}
                 </p>
                 <p className="mt-1 font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
                   {getSessionTitle(session, isZh, t)}

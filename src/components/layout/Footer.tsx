@@ -18,6 +18,7 @@ export function Footer() {
               alt="跑蓝"
               width={24}
               height={24}
+              loading="eager"
               className="w-6 h-6 object-contain"
             />
             <span className="font-mono text-sm font-bold">{t('common.appName')}</span>
