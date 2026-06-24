@@ -51,6 +51,7 @@ writeFileSync(
       tempo: '节奏跑',
       progression: '渐进跑',
       'long-run': '长距离',
+      workout: '训练',
       easy: '轻松跑',
       recovery: '恢复跑',
       hill: '坡跑',
@@ -66,6 +67,7 @@ writeFileSync(
       tempo: 'Tempo',
       progression: 'Progression',
       'long-run': 'Long run',
+      workout: 'Workout',
       easy: 'Easy run',
       recovery: 'Recovery run',
       hill: 'Hill workout',
@@ -337,6 +339,24 @@ test('buildProfessionalPrompt localizes confidence labels in Chinese prompts', (
   assert.match(prompt, /主训练类型: 恢复跑（置信度: 中等）/);
   assert.doesNotMatch(prompt, /置信度: medium/);
   assert.doesNotMatch(prompt, /置信度low|置信度medium|置信度high/);
+});
+
+test('buildProfessionalPrompt keeps generic Strava workouts evidence-based', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({ workout_type: 3 }),
+    null,
+    makeProfile(),
+    makeClassification({
+      workoutType: 'workout',
+      workoutTypeConfidence: 'high',
+      workoutTypeEvidence: ['Strava workout_type=3'],
+    }),
+    'zh'
+  );
+
+  assert.match(prompt, /主训练类型: 训练/);
+  assert.match(prompt, /不要凭空编造间歇、节奏或阈值目标/);
+  assert.match(prompt, /只有圈数、分段、配速或心率提供证据时才能继续推断子类型/);
 });
 
 test('buildProfessionalPrompt treats muggy but not hot weather as minor context', () => {

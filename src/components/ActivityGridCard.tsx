@@ -8,7 +8,11 @@ import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
+import {
+  ACTIVITY_WORKOUT_TRANSLATION_KEYS,
+  getActivityWorkoutCategory,
+  type ActivityWorkoutCategory,
+} from '@/lib/activityWorkoutType';
 
 interface ActivityGridCardProps {
   activity: StravaActivity;
@@ -16,15 +20,12 @@ interface ActivityGridCardProps {
 
 const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-function getActivityTag(activity: StravaActivity, t: TFunction): string | null {
-  const distanceKm = activity.distance / 1000;
-
-  if (activity.workout_type === 1) return t('activity.race');
-  if (activity.workout_type === 2 || distanceKm >= 15) return t('activity.longRun');
-  if (activity.workout_type === 0) return t('activity.withKid');
-
-  return null;
-}
+const TAG_STYLES: Record<ActivityWorkoutCategory, string> = {
+  normal: 'border border-zinc-200 bg-white/90 text-zinc-500 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300',
+  race: 'bg-red-600 text-white',
+  longRun: 'bg-blue-600 text-white',
+  workout: 'bg-orange-500 text-white',
+};
 
 export const ActivityGridCard = React.memo(function ActivityGridCard({ activity }: ActivityGridCardProps) {
   const { t } = useTranslation();
@@ -39,7 +40,7 @@ export const ActivityGridCard = React.memo(function ActivityGridCard({ activity 
   const distance = formatDistance(activity.distance, 'km');
   const duration = formatDuration(activity.moving_time);
   const pace = formatPace(activity.distance, activity.moving_time, 'min/km').replace('/km', '');
-  const tag = getActivityTag(activity, t);
+  const workoutCategory = getActivityWorkoutCategory(activity);
 
   return (
     <Link
@@ -64,9 +65,9 @@ export const ActivityGridCard = React.memo(function ActivityGridCard({ activity 
           <span className="font-mono text-xs font-bold leading-none text-zinc-900 dark:text-zinc-100">{day}</span>
         </div>
 
-        {tag && (
-          <div className="absolute right-2 top-2 rounded-lg bg-blue-600 px-1.5 py-1 font-mono text-[9px] font-bold leading-none text-white shadow-sm">
-            {tag}
+        {workoutCategory && (
+          <div className={`absolute right-2 top-2 rounded-lg px-1.5 py-1 font-mono text-[9px] font-bold leading-none shadow-sm ${TAG_STYLES[workoutCategory]}`}>
+            {t(ACTIVITY_WORKOUT_TRANSLATION_KEYS[workoutCategory])}
           </div>
         )}
 

@@ -4,12 +4,17 @@ import React from 'react';
 import { StravaActivity } from '@/types';
 import { ActivityGridCard } from './ActivityGridCard';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
-import { Clock, Route, Calendar, ImageIcon, Gauge } from 'lucide-react';
+import { Clock, Route, Calendar, ImageIcon, Gauge, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { addLocalDays, getActivityDate, getISOWeek, getLocalWeekStart } from '@/lib/dates';
 
 type GroupBy = 'week' | 'month' | 'year';
+const GROUP_BATCH_SIZE: Record<GroupBy, number> = {
+  week: 10,
+  month: 12,
+  year: 6,
+};
 
 interface GroupedActivitiesProps {
   activities: StravaActivity[];
@@ -32,10 +37,17 @@ interface ActivityGroup {
 export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActivitiesProps) {
   const { t, i18n } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
+  const [visibleGroupCount, setVisibleGroupCount] = React.useState(GROUP_BATCH_SIZE.week);
 
   const groups = React.useMemo(() => {
     return groupActivities(activities, groupBy, t, i18n.language);
   }, [activities, groupBy, t, i18n.language]);
+  const visibleGroups = groups.slice(0, visibleGroupCount);
+  const hiddenGroupCount = Math.max(0, groups.length - visibleGroupCount);
+
+  React.useEffect(() => {
+    setVisibleGroupCount(GROUP_BATCH_SIZE[groupBy]);
+  }, [activities, groupBy]);
 
   return (
     <div>
@@ -80,7 +92,7 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
 
       {/* Grouped Lists */}
       <div className="space-y-6">
-        {groups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.key} className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
             {/* Group Header */}
             <div className="mb-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
@@ -119,6 +131,22 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
           </div>
         ))}
       </div>
+
+      {hiddenGroupCount > 0 && (
+        <div className="mt-6 flex flex-col items-center gap-2 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={() => setVisibleGroupCount((count) => count + GROUP_BATCH_SIZE[groupBy])}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 font-mono text-xs font-bold text-zinc-700 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-blue-800 dark:hover:text-blue-300"
+          >
+            <ChevronDown size={15} />
+            {t('activity.loadOlderGroups')}
+          </button>
+          <p className="font-mono text-[10px] text-zinc-400">
+            {t('activity.olderGroupsRemaining', { count: hiddenGroupCount })}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

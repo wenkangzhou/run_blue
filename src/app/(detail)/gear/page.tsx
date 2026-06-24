@@ -5,128 +5,42 @@ import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useActivitiesStore } from '@/store/activities';
 import { useAuth } from '@/hooks/useAuth';
-import { StravaActivity } from '@/types';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import {
   mergeIntoGearCache,
   getGearCacheActivities,
+  getGearCacheDetails,
   setGearCache,
+  setGearCacheDetails,
+  type CachedGearDetail,
   LightGearActivity,
 } from '@/lib/gearCache';
+import {
+  buildGearStats,
+  getShoeMileageState,
+  mergeGearActivities,
+  SHOE_MILEAGE_REFERENCE_METERS,
+  sortGearStats,
+  type GearSortMode,
+  type GearStats,
+} from '@/lib/gearStats';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import {
+  Archive,
+  CheckCircle2,
   ChevronLeft,
   Footprints,
   Clock,
+  ExternalLink,
   Route,
+  Search,
   TrendingUp,
   Zap,
 } from 'lucide-react';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
 
-interface GearStats {
-  gearId: string;
-  name: string;
-  stravaDistance: number;
-  activityDistance: number;
-  activityTime: number;
-  activityCount: number;
-  avgPace: number;
-  retired: boolean;
-}
-
-interface StravaGear {
-  id: string;
-  name: string;
-  distance: number;
-  brand_name?: string;
-  model_name?: string;
-  retired: boolean;
-}
-
-interface CachedActivityEntry {
-  activity: StravaActivity;
-  timestamp: number;
-}
-
-const CACHE_PREFIX = 'run_blue_cache_activity_';
-
-/** Scan localStorage for activity caches that contain gear data. */
-function scanActivityCaches(): StravaActivity[] {
-  if (typeof window === 'undefined') return [];
-  const activities: StravaActivity[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith(CACHE_PREFIX)) continue;
-    try {
-      const data: CachedActivityEntry = JSON.parse(localStorage.getItem(key)!);
-      if (data?.activity && (data.activity.gear_id || data.activity.gear)) {
-        activities.push(data.activity);
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return activities;
-}
-
-/** Unified activity interface for gear stats calculation. */
-interface UnifiedActivity {
-  id: number;
-  distance: number;
-  moving_time: number;
-  type: string;
-  sport_type: string;
-  gear_id: string | null;
-  gear?: { id: string; name: string; distance: number };
-  average_speed: number;
-}
-
-function toUnified(a: StravaActivity | LightGearActivity): UnifiedActivity {
-  return {
-    id: a.id,
-    distance: a.distance,
-    moving_time: a.moving_time,
-    type: a.type,
-    sport_type: a.sport_type,
-    gear_id: a.gear_id || a.gear?.id || null,
-    gear: a.gear,
-    average_speed: a.average_speed,
-  };
-}
-
-function calculateGearStats(activities: UnifiedActivity[]): Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>> {
-  const stats = new Map<string, { distance: number; time: number; count: number; speedSum: number; speedCount: number }>();
-
-  for (const a of activities) {
-    const gearId = a.gear_id || a.gear?.id;
-    if (!gearId) continue;
-    if (a.sport_type !== 'Run' && a.type !== 'Run') continue;
-
-    const s = stats.get(gearId) || { distance: 0, time: 0, count: 0, speedSum: 0, speedCount: 0 };
-    s.distance += a.distance;
-    s.time += a.moving_time;
-    s.count += 1;
-    if (a.average_speed > 0) {
-      s.speedSum += a.average_speed;
-      s.speedCount += 1;
-    }
-    stats.set(gearId, s);
-  }
-
-  const result = new Map<string, Omit<GearStats, 'name' | 'stravaDistance' | 'retired'>>();
-  for (const [gearId, s] of stats) {
-    result.set(gearId, {
-      gearId,
-      activityDistance: s.distance,
-      activityTime: s.time,
-      activityCount: s.count,
-      avgPace: s.speedCount > 0 ? s.speedSum / s.speedCount : 0,
-    });
-  }
-  return result;
-}
+const GEAR_DETAILS_TTL = 1000 * 60 * 60 * 24;
 
 export default function GearPage() {
   const { t } = useTranslation();
@@ -143,52 +57,37 @@ export default function GearPage() {
     reset: resetHistorySync,
   } = useActivityHistorySync(isGuest ? null : user?.accessToken);
 
-  const [gearDetails, setGearDetails] = React.useState<Map<string, StravaGear>>(new Map());
+  const [gearDetails, setGearDetails] = React.useState<Map<string, CachedGearDetail>>(new Map());
+  const [gearDetailsFetchedAt, setGearDetailsFetchedAt] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [gearCacheActivities, setGearCacheActivities] = React.useState<LightGearActivity[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [sortMode, setSortMode] = React.useState<GearSortMode>('distance');
+  const [showRetired, setShowRetired] = React.useState(false);
   const backgroundSyncStartedRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
-    getGearCacheActivities()
-      .then((cachedActivities) => {
-        if (!cancelled) setGearCacheActivities(cachedActivities);
+    Promise.all([getGearCacheActivities(), getGearCacheDetails()])
+      .then(([cachedActivities, cachedDetails]) => {
+        if (cancelled) return;
+        setGearCacheActivities(cachedActivities);
+        setGearDetails(new Map(cachedDetails.gearDetails.map((gear) => [gear.id, gear])));
+        setGearDetailsFetchedAt(cachedDetails.fetchedAt);
       })
       .catch(() => {
-        if (!cancelled) setGearCacheActivities([]);
+        if (cancelled) return;
+        setGearCacheActivities([]);
+        setGearDetails(new Map());
+        setGearDetailsFetchedAt(0);
       });
     return () => { cancelled = true; };
   }, []);
 
-  // Merge all data sources: gear cache > activity caches > activities store
-  const allActivities = React.useMemo((): UnifiedActivity[] => {
-    if (isGuest) return activities.map(toUnified);
-
-    const merged = new Map<number, UnifiedActivity>();
-
-    // 1. Gear cache (lightweight, can hold 1000+ activities)
-    for (const a of gearCacheActivities) {
-      merged.set(a.id, toUnified(a));
-    }
-
-    // 2. Activity caches from detail pages
-    for (const a of scanActivityCaches()) {
-      merged.set(a.id, toUnified(a));
-    }
-
-    // 3. Activities store
-    for (const a of activities) {
-      const existing = merged.get(a.id);
-      // Prefer existing if it has gear data that store activity lacks
-      if (existing && (existing.gear_id || existing.gear) && !(a.gear_id || a.gear)) {
-        // keep existing
-      } else {
-        merged.set(a.id, toUnified(a));
-      }
-    }
-
-    return Array.from(merged.values());
+  const allActivities = React.useMemo(() => {
+    if (isGuest) return mergeGearActivities([], activities);
+    return mergeGearActivities(gearCacheActivities, activities);
   }, [isGuest, activities, gearCacheActivities]);
 
   const gearIds = React.useMemo(() => {
@@ -202,24 +101,15 @@ export default function GearPage() {
     return Array.from(ids);
   }, [allActivities]);
 
-  const gearNameFromCache = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const a of allActivities) {
-      if (a.gear?.id && a.gear.name) {
-        map.set(a.gear.id, a.gear.name);
-      }
-    }
-    return map;
-  }, [allActivities]);
-
-  const activityStats = React.useMemo(() => calculateGearStats(allActivities), [allActivities]);
-
   // Fetch gear details from Strava API
   React.useEffect(() => {
     if (isGuest) return;
     if (gearIds.length === 0) return;
-    const missingIds = gearIds.filter((id) => !gearDetails.has(id));
-    if (missingIds.length === 0) return;
+    const detailsAreStale = Date.now() - gearDetailsFetchedAt > GEAR_DETAILS_TTL;
+    const idsToFetch = detailsAreStale
+      ? gearIds
+      : gearIds.filter((id) => !gearDetails.has(id));
+    if (idsToFetch.length === 0) return;
 
     let cancelled = false;
     async function fetchGears() {
@@ -229,14 +119,15 @@ export default function GearPage() {
         const res = await fetch('/api/gear', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ gearIds: missingIds }),
+          body: JSON.stringify({ gearIds: idsToFetch }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `HTTP ${res.status}`);
         }
-        const data = (await res.json()) as { gears?: StravaGear[] };
+        const data = (await res.json()) as { gears?: CachedGearDetail[] };
         if (!cancelled) {
+          const fetchedAt = Date.now();
           setGearDetails((prev) => {
             const next = new Map(prev);
             for (const g of data.gears || []) {
@@ -244,6 +135,8 @@ export default function GearPage() {
             }
             return next;
           });
+          setGearDetailsFetchedAt(fetchedAt);
+          await setGearCacheDetails(data.gears || [], fetchedAt);
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'load_failed');
@@ -253,7 +146,7 @@ export default function GearPage() {
     }
     fetchGears();
     return () => { cancelled = true; };
-  }, [isGuest, gearIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isGuest, gearIds, gearDetails, gearDetailsFetchedAt]);
 
   // Keep the lightweight gear cache aligned without exposing sync mechanics in the UI.
   React.useEffect(() => {
@@ -325,34 +218,36 @@ export default function GearPage() {
     };
   }, [isGuest, user?.accessToken, isLoadingAll, resetHistorySync, syncHistory]);
 
-  // Build final gear stats list (filter out retired)
-  const gearStats: GearStats[] = React.useMemo(() => {
-    const list: GearStats[] = [];
-    for (const [gearId, stats] of activityStats) {
-      const detail = gearDetails.get(gearId);
-      if (detail?.retired) continue;
-      const name = detail?.name || gearNameFromCache.get(gearId) || gearId;
-      list.push({
-        gearId,
-        name,
-        stravaDistance: detail?.distance || 0,
-        retired: detail?.retired || false,
-        activityDistance: stats.activityDistance,
-        activityTime: stats.activityTime,
-        activityCount: stats.activityCount,
-        avgPace: stats.avgPace,
-      });
-    }
-    list.sort((a, b) => b.activityDistance - a.activityDistance);
-    return list;
-  }, [activityStats, gearDetails, gearNameFromCache]);
+  const allGearStats = React.useMemo(
+    () => buildGearStats(allActivities, Array.from(gearDetails.values())),
+    [allActivities, gearDetails]
+  );
+  const gearStats = React.useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    const filtered = allGearStats.filter((gear) => {
+      if (!showRetired && gear.retired) return false;
+      if (!normalizedQuery) return true;
+      return [gear.name, gear.brandName, gear.modelName]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(normalizedQuery);
+    });
+    return sortGearStats(filtered, sortMode);
+  }, [allGearStats, searchQuery, showRetired, sortMode]);
 
-  const hasData = gearStats.length > 0;
+  const hasData = allGearStats.length > 0;
+  const hasFilteredData = gearStats.length > 0;
+  const activeGearCount = allGearStats.filter((gear) => !gear.retired).length;
+  const retiredGearCount = allGearStats.length - activeGearCount;
   const totalRunningActivities = allActivities.filter(
     (a) => a.sport_type === 'Run' || a.type === 'Run'
   ).length;
-  const linkedRunningActivities = gearStats.reduce((sum, gear) => sum + gear.activityCount, 0);
+  const linkedRunningActivities = allGearStats.reduce((sum, gear) => sum + gear.activityCount, 0);
   const unlinkedRunningActivities = Math.max(0, totalRunningActivities - linkedRunningActivities);
+  const coverageRate = totalRunningActivities > 0
+    ? Math.round((linkedRunningActivities / totalRunningActivities) * 100)
+    : 0;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -371,16 +266,42 @@ export default function GearPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Info bar */}
-        <div className="mb-4 flex flex-col gap-1 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
-          <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-            {t('gear.basedOnActivities', '基于 {{count}} 条跑步记录', { count: totalRunningActivities })}
+      <main className="mx-auto max-w-5xl px-3 py-5 sm:px-4 md:py-8">
+        <div className="mb-6 flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-2 font-mono text-[11px] font-bold uppercase text-blue-600 dark:text-blue-400">
+              {t('gear.kicker')}
+            </p>
+            <h2 className="font-mono text-2xl font-black tracking-normal text-zinc-950 dark:text-zinc-50 md:text-3xl">
+              {t('gear.pageTitle')}
+            </h2>
+            <p className="mt-2 max-w-xl text-sm text-zinc-500 dark:text-zinc-400">
+              {t('gear.pageDescription')}
+            </p>
           </div>
           {hasData && (
-            <div className="font-mono text-[10px] text-zinc-400">
-              {gearStats.length} 双跑鞋 · {linkedRunningActivities} 次已绑定
-              {unlinkedRunningActivities > 0 ? ` · ${unlinkedRunningActivities} 次未绑定` : ''}
+            <div className="min-w-56 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-[10px] font-bold uppercase text-zinc-400">
+                  {t('gear.coverage')}
+                </span>
+                <span className="font-mono text-xs font-black text-zinc-800 dark:text-zinc-100">
+                  {coverageRate}%
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-[width]"
+                  style={{ width: `${coverageRate}%` }}
+                />
+              </div>
+              <p className="mt-2 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                {t('gear.coverageValue', {
+                  rate: coverageRate,
+                  linked: linkedRunningActivities,
+                  total: totalRunningActivities,
+                })}
+              </p>
             </div>
           )}
         </div>
@@ -414,109 +335,267 @@ export default function GearPage() {
         )}
 
         {hasData && (
-          <div className="space-y-4">
-            {/* Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
-                  <Footprints size={14} />
-                  <span className="font-mono text-xs uppercase">{t('gear.totalShoes', '跑鞋数量')}</span>
-                </div>
-                <div className="font-pixel text-xl font-bold">{gearStats.length}</div>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
-                  <Route size={14} />
-                  <span className="font-mono text-xs uppercase">{t('gear.totalRuns', '跑步次数')}</span>
-                </div>
-                <div className="font-pixel text-xl font-bold">
-                  {gearStats.reduce((sum, g) => sum + g.activityCount, 0)}
-                </div>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
-                  <TrendingUp size={14} />
-                  <span className="font-mono text-xs uppercase">{t('gear.totalDistance', '总距离')}</span>
-                </div>
-                <div className="font-pixel text-xl font-bold">
-                  {formatDistance(gearStats.reduce((sum, g) => sum + g.activityDistance, 0))}
-                </div>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-1">
-                  <Clock size={14} />
-                  <span className="font-mono text-xs uppercase">{t('gear.totalTime', '总用时')}</span>
-                </div>
-                <div className="font-pixel text-xl font-bold">
-                  {formatDuration(gearStats.reduce((sum, g) => sum + g.activityTime, 0))}
-                </div>
+          <div>
+            <div className="mb-5 grid grid-cols-2 border-y border-zinc-200 dark:border-zinc-800 md:grid-cols-4">
+              <GearSummaryItem
+                icon={<Footprints size={15} />}
+                label={t('gear.activeShoes')}
+                value={String(activeGearCount)}
+              />
+              <GearSummaryItem
+                icon={<Archive size={15} />}
+                label={t('gear.retiredShoes')}
+                value={String(retiredGearCount)}
+              />
+              <GearSummaryItem
+                icon={<Route size={15} />}
+                label={t('gear.totalRuns')}
+                value={String(linkedRunningActivities)}
+              />
+              <GearSummaryItem
+                icon={<TrendingUp size={15} />}
+                label={t('gear.totalDistance')}
+                value={formatDistance(allGearStats.reduce((sum, gear) => sum + gear.activityDistance, 0))}
+              />
+            </div>
+
+            <div className="mb-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <label className="relative block">
+                <span className="sr-only">{t('gear.searchLabel')}</span>
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={t('gear.searchPlaceholder')}
+                  className="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 font-mono text-xs outline-none transition-colors placeholder:text-zinc-400 focus:border-blue-500 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500"
+                />
+              </label>
+
+              <label className="relative block sm:w-40">
+                <span className="sr-only">{t('gear.sortLabel')}</span>
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as GearSortMode)}
+                  className="h-10 w-full appearance-none rounded-lg border border-zinc-200 bg-white px-3 pr-8 font-mono text-xs font-bold outline-none focus:border-blue-500 dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <option value="distance">{t('gear.sortDistance')}</option>
+                  <option value="runs">{t('gear.sortRuns')}</option>
+                  <option value="pace">{t('gear.sortPace')}</option>
+                  <option value="name">{t('gear.sortName')}</option>
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[9px] text-zinc-400">▼</span>
+              </label>
+
+              <div className="grid h-10 grid-cols-2 rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
+                <button
+                  type="button"
+                  onClick={() => setShowRetired(false)}
+                  className={`min-w-20 rounded-md px-3 font-mono text-[11px] font-bold transition-colors ${
+                    !showRetired
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  {t('gear.activeOnly')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRetired(true)}
+                  className={`min-w-20 rounded-md px-3 font-mono text-[11px] font-bold transition-colors ${
+                    showRetired
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  {t('gear.allShoes')}
+                </button>
               </div>
             </div>
 
-            {/* Gear Cards */}
-            <div className="space-y-3">
+            {unlinkedRunningActivities > 0 && (
+              <p className="mb-4 font-mono text-[10px] text-zinc-400">
+                {t('gear.unlinkedRuns', { count: unlinkedRunningActivities })}
+              </p>
+            )}
+
+            {!hasFilteredData ? (
+              <div className="border-y border-zinc-200 py-14 text-center dark:border-zinc-800">
+                <Search size={28} className="mx-auto mb-3 text-zinc-300 dark:text-zinc-700" />
+                <p className="font-mono text-sm font-bold">{t('gear.noFilteredShoes')}</p>
+                <p className="mt-2 text-xs text-zinc-500">{t('gear.noFilteredShoesHint')}</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
               {gearStats.map((gear) => (
-                <div
+                <article
                   key={gear.gearId}
-                  className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                  className="flex min-h-64 flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20"
                 >
-                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
-                        <Footprints size={20} className="text-zinc-500 dark:text-zinc-400" />
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-blue-100 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/40">
+                        <Footprints size={19} className="text-blue-600 dark:text-blue-300" />
                       </div>
                       <div className="min-w-0">
                         <h3 className="break-words font-mono text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
                           {gear.name}
                         </h3>
-                        <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
-                          {t('gear.officialDistance', '官方里程')}: {formatDistance(gear.stravaDistance)}
-                        </p>
+                        {(gear.brandName || gear.modelName) && (
+                          <p className="mt-0.5 truncate text-xs text-zinc-400">
+                            {[gear.brandName, gear.modelName].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    <div className="shrink-0 sm:text-right">
-                      <div className="font-mono text-[10px] uppercase text-zinc-400">
-                        本地统计
+                    <GearStatusBadge gear={gear} />
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-[10px] uppercase text-zinc-400">
+                          {gear.stravaDistance > 0 ? t('gear.officialDistance') : t('gear.localDistance')}
+                        </p>
+                        <p className="mt-1 font-mono text-2xl font-black text-zinc-950 dark:text-zinc-50">
+                          {formatDistance(gear.displayDistance)}
+                        </p>
                       </div>
-                      <div className="font-pixel text-lg font-bold text-blue-600 dark:text-blue-400">
-                        {formatDistance(gear.activityDistance)}
-                      </div>
+                      {gear.stravaDistance > 0 && Math.abs(gear.stravaDistance - gear.activityDistance) > 1000 && (
+                        <p className="text-right font-mono text-[10px] text-zinc-400">
+                          {t('gear.localDistance')}<br />
+                          <span className="text-zinc-600 dark:text-zinc-300">
+                            {formatDistance(gear.activityDistance)}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                      <div
+                        className={`h-full rounded-full ${
+                          getShoeMileageState(gear.displayDistance) === 'replace'
+                            ? 'bg-red-500'
+                            : getShoeMileageState(gear.displayDistance) === 'watch'
+                              ? 'bg-amber-500'
+                              : 'bg-blue-600'
+                        }`}
+                        style={{
+                          width: `${Math.min(100, (gear.displayDistance / SHOE_MILEAGE_REFERENCE_METERS) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[10px] text-zinc-400">
+                      <span>{t('gear.mileageReference')}</span>
+                      <span>{Math.round(gear.displayDistance / 1000)} / 800 km</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                    <div>
-                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500 uppercase mb-1">
-                        {t('activity.averagePace')}
-                      </div>
-                      <div className="font-mono text-sm font-bold flex items-center gap-1">
-                        <Zap size={12} className="text-amber-500" />
-                        {gear.avgPace > 0 ? formatPaceFromSeconds(1000 / gear.avgPace) + '/km' : '-'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500 uppercase mb-1">
-                        {t('activity.time')}
-                      </div>
-                      <div className="font-mono text-sm font-bold">
-                        {formatDuration(gear.activityTime)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500 uppercase mb-1">
-                        {t('gear.totalRuns', '跑步次数')}
-                      </div>
-                      <div className="font-mono text-sm font-bold">
-                        {gear.activityCount} {t('stats.runs')}
-                      </div>
-                    </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                    <GearMetric
+                      icon={<Zap size={12} className="text-amber-500" />}
+                      label={t('activity.averagePace')}
+                      value={gear.avgSpeed > 0 ? `${formatPaceFromSeconds(1000 / gear.avgSpeed)}/km` : '-'}
+                    />
+                    <GearMetric
+                      icon={<Clock size={12} className="text-blue-500" />}
+                      label={t('activity.time')}
+                      value={formatDuration(gear.activityTime)}
+                    />
+                    <GearMetric
+                      icon={<Route size={12} className="text-emerald-500" />}
+                      label={t('gear.totalRuns')}
+                      value={`${gear.activityCount} ${t('stats.runs')}`}
+                    />
                   </div>
-                </div>
+
+                  <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+                    <p className="max-w-64 text-[10px] leading-4 text-zinc-400">
+                      {t('gear.mileageReferenceHint')}
+                    </p>
+                    <Link
+                      href={`/activities?gear=${encodeURIComponent(gear.gearId)}`}
+                      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 px-3 font-mono text-[10px] font-bold text-zinc-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                    >
+                      {t('gear.viewActivities')}
+                      <ExternalLink size={12} />
+                    </Link>
+                  </div>
+                </article>
               ))}
+              </div>
+            )}
             </div>
-          </div>
         )}
+      </main>
+    </div>
+  );
+}
+
+function GearSummaryItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 border-b border-r border-zinc-200 px-3 py-4 last:border-r-0 dark:border-zinc-800 md:border-b-0">
+      <div className="flex items-center gap-2 text-zinc-400">
+        {icon}
+        <span className="truncate font-mono text-[10px] font-bold uppercase">{label}</span>
+      </div>
+      <p className="mt-2 truncate font-mono text-lg font-black text-zinc-950 dark:text-zinc-50">{value}</p>
+    </div>
+  );
+}
+
+function GearMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-mono text-[9px] uppercase text-zinc-400">{label}</p>
+      <div className="mt-1 flex min-w-0 items-center gap-1">
+        <span className="shrink-0">{icon}</span>
+        <span className="truncate font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">{value}</span>
       </div>
     </div>
+  );
+}
+
+function GearStatusBadge({ gear }: { gear: GearStats }) {
+  const { t } = useTranslation();
+  if (gear.retired) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-[9px] font-bold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800">
+        <Archive size={11} />
+        {t('gear.retired')}
+      </span>
+    );
+  }
+
+  const state = getShoeMileageState(gear.displayDistance);
+  const styles = state === 'replace'
+    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300'
+    : state === 'watch'
+      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300';
+
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 font-mono text-[9px] font-bold ${styles}`}>
+      <CheckCircle2 size={11} />
+      {t(`gear.mileage${state === 'fresh' ? 'Fresh' : state === 'watch' ? 'Watch' : 'Replace'}`)}
+    </span>
   );
 }

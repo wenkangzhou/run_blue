@@ -10,6 +10,11 @@ import { getActivity, getActivityStreams, formatDateTime, formatDistance, format
 import { formatPaceSeconds } from '@/lib/paceFormat';
 import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
 import { getActivityDateKey } from '@/lib/dates';
+import {
+  ACTIVITY_WORKOUT_TRANSLATION_KEYS,
+  getActivityWorkoutCategory,
+  type ActivityWorkoutCategory,
+} from '@/lib/activityWorkoutType';
 import { useActivitiesStore } from '@/store/activities';
 import { useRoutesStore } from '@/store/routes';
 import { getGuestActivities, getGuestActivity, getGuestActivityStreams, getGuestSavedRoutes, isGuestUser } from '@/lib/guestMode';
@@ -43,6 +48,12 @@ import { useTranslation } from 'react-i18next';
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
 const LAP_DISTANCE_THRESHOLD = 20; // km
 const DESCRIPTION_PREVIEW_LENGTH = 128;
+const WORKOUT_TYPE_BADGE_STYLES: Record<ActivityWorkoutCategory, string> = {
+  normal: 'border-zinc-200 bg-white/90 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300',
+  race: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/70 dark:bg-red-950/50 dark:text-red-300',
+  longRun: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/70 dark:bg-blue-950/50 dark:text-blue-300',
+  workout: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/50 dark:text-orange-300',
+};
 
 export default function ActivityDetailPage() {
   const router = useRouter();
@@ -514,6 +525,7 @@ export default function ActivityDetailPage() {
   const isPageReady = hasShownContent || Boolean(activity);
   const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
   const activityDescription = activity?.description?.trim() ?? '';
+  const workoutCategory = activity ? getActivityWorkoutCategory(activity) : null;
   const shouldCollapseDescription = activityDescription.length > DESCRIPTION_PREVIEW_LENGTH;
   const displayedDescription = shouldCollapseDescription && !descriptionExpanded
     ? `${activityDescription.slice(0, DESCRIPTION_PREVIEW_LENGTH)}...`
@@ -849,14 +861,10 @@ export default function ActivityDetailPage() {
                     isDark={isDark}
                     onReady={() => setMapReady(true)}
                   />
-                  {activity.workout_type !== undefined && activity.workout_type !== null && (
+                  {workoutCategory && (
                     <div className="absolute right-3 top-3 z-[6]">
-                      <span className="inline-flex items-center rounded-md border border-zinc-200 bg-white/90 px-2.5 py-1 font-mono text-[10px] font-bold shadow-sm backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90">
-                        {activity.workout_type === 1 ? '比赛' :
-                         activity.workout_type === 2 ? '长跑' :
-                         activity.workout_type === 3 ? '锻炼' :
-                         activity.workout_type === 0 ? '带娃' :
-                         `类型${activity.workout_type}`}
+                      <span className={`inline-flex items-center rounded-md border px-2.5 py-1 font-mono text-[10px] font-bold shadow-sm backdrop-blur ${WORKOUT_TYPE_BADGE_STYLES[workoutCategory]}`}>
+                        {t(ACTIVITY_WORKOUT_TRANSLATION_KEYS[workoutCategory])}
                       </span>
                     </div>
                   )}

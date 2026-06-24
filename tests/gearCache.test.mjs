@@ -39,8 +39,10 @@ const {
   clearGearCache,
   getGearCache,
   getGearCacheActivities,
+  getGearCacheDetails,
   mergeIntoGearCache,
   setGearCache,
+  setGearCacheDetails,
 } = require(compiledPath);
 
 test.afterEach(cleanupBrowserStorage);
@@ -79,6 +81,8 @@ const legacyCache = {
       average_speed: 3.33,
     },
   ],
+  gearDetails: [],
+  gearDetailsFetchedAt: 0,
   loadedPages: 2,
   hasMore: true,
   lastFetchedAt: 1770000000000,
@@ -146,4 +150,33 @@ test('mergeIntoGearCache keeps only lightweight gear activity fields and dedupes
   });
   assert.equal(Object.hasOwn(activities[0], 'map'), false);
   assert.equal(localStorage.data.has(cacheKey), true);
+});
+
+test('gear cache persists reusable Strava gear details', async () => {
+  installBrowserStorage();
+
+  await setGearCacheDetails([
+    {
+      id: 'shoe-1',
+      name: 'Daily Trainer',
+      distance: 720000,
+      brand_name: 'Run Blue',
+      model_name: 'Tempo 1',
+      retired: false,
+    },
+  ], 1234);
+
+  assert.deepEqual(await getGearCacheDetails(), {
+    gearDetails: [
+      {
+        id: 'shoe-1',
+        name: 'Daily Trainer',
+        distance: 720000,
+        brand_name: 'Run Blue',
+        model_name: 'Tempo 1',
+        retired: false,
+      },
+    ],
+    fetchedAt: 1234,
+  });
 });

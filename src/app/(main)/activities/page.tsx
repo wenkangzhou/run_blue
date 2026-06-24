@@ -11,13 +11,20 @@ import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate } from '@/lib/dates';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
-import { Loader2, RefreshCw, ChevronUp, SlidersHorizontal, X } from 'lucide-react';
+import { getGearCacheDetails } from '@/lib/gearCache';
+import {
+  getActivityWorkoutSearchTerms,
+  matchesActivityWorkoutCategory,
+  type ActivityWorkoutCategory,
+} from '@/lib/activityWorkoutType';
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, SlidersHorizontal, X, Search, CalendarDays } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
 import { PeriodShareModal } from '@/components/PeriodShareModal';
 
 const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const ACTIVITY_OVERVIEW_EXPANDED_KEY = 'runblue_activity_overview_expanded';
 function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'generic' {
   const message = error instanceof Error ? error.message : '';
   if (message.includes('401') || message.includes('Unauthorized')) return 'auth';
@@ -66,15 +73,25 @@ export default function ActivitiesPage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isPeriodShareOpen, setIsPeriodShareOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   // Read filter params from URL
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+  const [selectedYear, setSelectedYear] = useState(searchParams.get('year') || '');
   const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [minDistance, setMinDistance] = useState(searchParams.get('minDistance') || '');
   const [maxDistance, setMaxDistance] = useState(searchParams.get('maxDistance') || '');
+  const [gearFilter, setGearFilter] = useState(searchParams.get('gear') || '');
+  const [normalRunFilter, setNormalRunFilter] = useState(
+    searchParams.get('normal') === '1' ||
+    searchParams.get('withKid') === '1' ||
+    searchParams.get('recovery') === '1'
+  );
   const [raceFilter, setRaceFilter] = useState(searchParams.get('race') === '1');
-  const [withKidFilter, setWithKidFilter] = useState(searchParams.get('withKid') === '1');
   const [longRunFilter, setLongRunFilter] = useState(searchParams.get('longRun') === '1');
+  const [workoutFilter, setWorkoutFilter] = useState(searchParams.get('workout') === '1');
+  const [cachedGearNames, setCachedGearNames] = useState<Map<string, string>>(new Map());
 
   // Sync URL when filters change
   const updateFilterParams = useCallback((patch: Record<string, string>) => {
@@ -95,6 +112,27 @@ export default function ActivitiesPage() {
     [isGuest, activities]
   );
   const sourceHasMore = isGuest ? false : hasMore;
+  const deferredSearchQuery = React.useDeferredValue(searchQuery.trim().toLocaleLowerCase());
+
+  useEffect(() => {
+    try {
+      setIsOverviewExpanded(localStorage.getItem(ACTIVITY_OVERVIEW_EXPANDED_KEY) === '1');
+    } catch {
+      setIsOverviewExpanded(false);
+    }
+  }, []);
+
+  const toggleOverview = useCallback(() => {
+    setIsOverviewExpanded((expanded) => {
+      const next = !expanded;
+      try {
+        localStorage.setItem(ACTIVITY_OVERVIEW_EXPANDED_KEY, next ? '1' : '0');
+      } catch {
+        // The preference is optional when storage is unavailable.
+      }
+      return next;
+    });
+  }, []);
 
   const routeActivities = React.useMemo(() => {
     return sourceActivities.filter((a: StravaActivity) => {
@@ -104,12 +142,70 @@ export default function ActivitiesPage() {
     });
   }, [sourceActivities]);
 
+  const activityYears = React.useMemo(() => {
+    const years = new Set<number>();
+    routeActivities.forEach((activity) => years.add(getActivityDate(activity).getFullYear()));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [routeActivities]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getGearCacheDetails()
+      .then(({ gearDetails }) => {
+        if (!cancelled) {
+          setCachedGearNames(new Map(gearDetails.map((gear) => [gear.id, gear.name])));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCachedGearNames(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activityGears = React.useMemo(() => {
+    const gears = new Map<string, string>();
+    routeActivities.forEach((activity) => {
+      const gearId = activity.gear_id || activity.gear?.id;
+      if (!gearId) return;
+      gears.set(gearId, activity.gear?.name || cachedGearNames.get(gearId) || gearId);
+    });
+    return Array.from(gears, ([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [routeActivities, cachedGearNames]);
+  const selectedGearName = activityGears.find((gear) => gear.id === gearFilter)?.name || gearFilter;
+
+  useEffect(() => {
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery === searchQuery.trim()) return;
+    const timer = window.setTimeout(() => {
+      updateFilterParams({ q: searchQuery.trim() });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, searchParams, updateFilterParams]);
+
+  useEffect(() => {
+    if (!searchParams.has('withKid') && !searchParams.has('recovery')) return;
+    updateFilterParams({
+      normal: '1',
+      withKid: '',
+      recovery: '',
+    });
+  }, [searchParams, updateFilterParams]);
+
   // Filter running activities with valid route data + user filters
   const runningActivities = React.useMemo(() => {
-    return routeActivities.filter((a: StravaActivity) => {
+    const workoutCategoryFilters: ActivityWorkoutCategory[] = [];
+    if (normalRunFilter) workoutCategoryFilters.push('normal');
+    if (raceFilter) workoutCategoryFilters.push('race');
+    if (longRunFilter) workoutCategoryFilters.push('longRun');
+    if (workoutFilter) workoutCategoryFilters.push('workout');
 
+    return routeActivities.filter((a: StravaActivity) => {
       // Date filter
       const activityDate = getActivityDate(a);
+      if (selectedYear && activityDate.getFullYear() !== Number(selectedYear)) return false;
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
@@ -125,15 +221,42 @@ export default function ActivitiesPage() {
       const distKm = a.distance / 1000;
       if (minDistance && distKm < parseFloat(minDistance)) return false;
       if (maxDistance && distKm > parseFloat(maxDistance)) return false;
+      if (gearFilter && (a.gear_id || a.gear?.id) !== gearFilter) return false;
 
-      // Workout type / tag filters
-      if (raceFilter && a.workout_type !== 1) return false;
-      if (longRunFilter && a.workout_type !== 2 && a.distance < 15000) return false;
-      if (withKidFilter && a.workout_type !== 0) return false;
+      if (!matchesActivityWorkoutCategory(a, workoutCategoryFilters)) return false;
+
+      if (deferredSearchQuery) {
+        const searchableText = [
+          a.name,
+          a.description,
+          a.location_city,
+          a.location_state,
+          a.location_country,
+          a.gear?.name,
+          ...getActivityWorkoutSearchTerms(a),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase();
+        if (!searchableText.includes(deferredSearchQuery)) return false;
+      }
 
       return true;
     });
-  }, [routeActivities, startDate, endDate, minDistance, maxDistance, raceFilter, withKidFilter, longRunFilter]);
+  }, [
+    routeActivities,
+    deferredSearchQuery,
+    selectedYear,
+    startDate,
+    endDate,
+    minDistance,
+    maxDistance,
+    gearFilter,
+    normalRunFilter,
+    raceFilter,
+    longRunFilter,
+    workoutFilter,
+  ]);
 
   const listTotals = React.useMemo(() => {
     return runningActivities.reduce(
@@ -146,36 +269,67 @@ export default function ActivitiesPage() {
   }, [runningActivities]);
 
   const activeFilterCount = [
+    searchQuery.trim(),
+    selectedYear,
     startDate,
     endDate,
     minDistance,
     maxDistance,
+    gearFilter,
+    normalRunFilter,
     raceFilter,
-    withKidFilter,
     longRunFilter,
+    workoutFilter,
   ].filter(Boolean).length;
   const hasActiveFilters = activeFilterCount > 0;
 
   const resetFilters = useCallback(() => {
+    setSearchQuery('');
+    setSelectedYear('');
     setStartDate('');
     setEndDate('');
     setMinDistance('');
     setMaxDistance('');
+    setGearFilter('');
+    setNormalRunFilter(false);
     setRaceFilter(false);
-    setWithKidFilter(false);
     setLongRunFilter(false);
+    setWorkoutFilter(false);
     updateFilterParams({
+      q: '',
+      year: '',
       startDate: '',
       endDate: '',
       minDistance: '',
       maxDistance: '',
+      gear: '',
+      normal: '',
       race: '',
       withKid: '',
       longRun: '',
+      workout: '',
+      recovery: '',
     });
   }, [updateFilterParams]);
 
   const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = [];
+  if (searchQuery.trim()) {
+    activeFilterChips.push({
+      key: 'q',
+      label: t('activity.searchChip', { query: searchQuery.trim() }),
+      onRemove: () => setSearchQuery(''),
+    });
+  }
+  if (selectedYear) {
+    activeFilterChips.push({
+      key: 'year',
+      label: selectedYear,
+      onRemove: () => {
+        setSelectedYear('');
+        updateFilterParams({ year: '' });
+      },
+    });
+  }
   if (startDate) {
     activeFilterChips.push({
       key: 'startDate',
@@ -216,6 +370,26 @@ export default function ActivitiesPage() {
       },
     });
   }
+  if (gearFilter) {
+    activeFilterChips.push({
+      key: 'gear',
+      label: t('activity.gearChip', { gear: selectedGearName }),
+      onRemove: () => {
+        setGearFilter('');
+        updateFilterParams({ gear: '' });
+      },
+    });
+  }
+  if (normalRunFilter) {
+    activeFilterChips.push({
+      key: 'normal',
+      label: t('activity.normalRun'),
+      onRemove: () => {
+        setNormalRunFilter(false);
+        updateFilterParams({ normal: '' });
+      },
+    });
+  }
   if (raceFilter) {
     activeFilterChips.push({
       key: 'race',
@@ -226,16 +400,6 @@ export default function ActivitiesPage() {
       },
     });
   }
-  if (withKidFilter) {
-    activeFilterChips.push({
-      key: 'withKid',
-      label: t('activity.withKid'),
-      onRemove: () => {
-        setWithKidFilter(false);
-        updateFilterParams({ withKid: '' });
-      },
-    });
-  }
   if (longRunFilter) {
     activeFilterChips.push({
       key: 'longRun',
@@ -243,6 +407,16 @@ export default function ActivitiesPage() {
       onRemove: () => {
         setLongRunFilter(false);
         updateFilterParams({ longRun: '' });
+      },
+    });
+  }
+  if (workoutFilter) {
+    activeFilterChips.push({
+      key: 'workout',
+      label: t('activity.workout'),
+      onRemove: () => {
+        setWorkoutFilter(false);
+        updateFilterParams({ workout: '' });
       },
     });
   }
@@ -521,6 +695,19 @@ export default function ActivitiesPage() {
 
           <div className="flex items-center gap-1.5 shrink-0">
             <button
+              type="button"
+              onClick={toggleOverview}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 font-mono text-xs font-bold text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+              title={isOverviewExpanded ? t('activity.collapseOverview') : t('activity.expandOverview')}
+              aria-label={isOverviewExpanded ? t('activity.collapseOverview') : t('activity.expandOverview')}
+              aria-expanded={isOverviewExpanded}
+            >
+              {isOverviewExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <span className="hidden md:inline">
+                {isOverviewExpanded ? t('activity.collapseOverview') : t('activity.expandOverview')}
+              </span>
+            </button>
+            <button
               onClick={() => setShowFilters((s) => !s)}
               className={`relative inline-flex h-10 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-xs font-bold transition-colors ${
                 showFilters || hasActiveFilters
@@ -549,26 +736,88 @@ export default function ActivitiesPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">{t('activity.distance')}</p>
-            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
-              {formatCompactListDistance(listTotals.distance)}
-            </p>
-          </div>
-          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">{t('activity.time')}</p>
-            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
-              {formatCompactListDuration(listTotals.time)}
-            </p>
-          </div>
-          <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">{t('stats.totalActivities')}</p>
-            <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
-              {runningActivities.length}
-            </p>
-          </div>
-        </div>
+        {isOverviewExpanded && (
+          <>
+            <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="relative block min-w-0">
+                <span className="sr-only">{t('activity.searchLabel')}</span>
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={t('activity.searchPlaceholder')}
+                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 pl-9 pr-9 font-mono text-xs text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    aria-label={t('activity.clearSearch')}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </label>
+
+              <label className="relative block min-w-0 sm:w-36">
+                <span className="sr-only">{t('activity.yearFilter')}</span>
+                <CalendarDays
+                  size={14}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                />
+                <select
+                  value={selectedYear}
+                  onChange={(event) => {
+                    setSelectedYear(event.target.value);
+                    updateFilterParams({ year: event.target.value });
+                  }}
+                  className="h-10 w-full appearance-none rounded-lg border border-zinc-200 bg-zinc-50 pl-9 pr-8 font-mono text-xs font-bold text-zinc-700 outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+                >
+                  <option value="">{t('activity.allYears')}</option>
+                  {activityYears.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[9px] text-zinc-400">▼</span>
+              </label>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+                <p className="font-mono text-[10px] text-zinc-400">{t('activity.distance')}</p>
+                <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+                  {formatCompactListDistance(listTotals.distance)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+                <p className="font-mono text-[10px] text-zinc-400">{t('activity.time')}</p>
+                <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+                  {formatCompactListDuration(listTotals.time)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
+                <p className="font-mono text-[10px] text-zinc-400">{t('stats.totalActivities')}</p>
+                <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+                  {runningActivities.length}
+                </p>
+              </div>
+            </div>
+
+            {(searchQuery.trim() || selectedYear) && (
+              <p className="mt-2 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                {t('activity.searchResults', {
+                  matched: runningActivities.length,
+                  total: routeActivities.length,
+                })}
+              </p>
+            )}
+          </>
+        )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {runningActivities.length > 0 && (
@@ -662,11 +911,43 @@ export default function ActivitiesPage() {
                 className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
               />
             </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block font-mono text-[10px] uppercase text-zinc-400">
+                {t('activity.gearFilter')}
+              </label>
+              <select
+                value={gearFilter}
+                onChange={(event) => {
+                  setGearFilter(event.target.value);
+                  updateFilterParams({ gear: event.target.value });
+                }}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs outline-none transition-colors focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+              >
+                <option value="">{t('activity.allGear')}</option>
+                {activityGears.map((gear) => (
+                  <option key={gear.id} value={gear.id}>{gear.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <p className="mb-2 font-mono text-[10px] uppercase text-zinc-400">{t('activity.workoutType')}</p>
             <div className="flex flex-wrap gap-2">
             {/* Workout type tags */}
+            <button
+              onClick={() => {
+                const next = !normalRunFilter;
+                setNormalRunFilter(next);
+                updateFilterParams({ normal: next ? '1' : '' });
+              }}
+              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
+                normalRunFilter
+                  ? 'border-zinc-700 bg-zinc-800 text-white dark:border-zinc-300 dark:bg-zinc-100 dark:text-zinc-900'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
+              }`}
+            >
+              {t('activity.normalRun')}
+            </button>
             <button
               onClick={() => {
                 const next = !raceFilter;
@@ -675,25 +956,11 @@ export default function ActivitiesPage() {
               }}
               className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
                 raceFilter
-                  ? 'border-blue-500 bg-blue-600 text-white'
+                  ? 'border-red-600 bg-red-600 text-white'
                   : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
               {t('activity.race')}
-            </button>
-            <button
-              onClick={() => {
-                const next = !withKidFilter;
-                setWithKidFilter(next);
-                updateFilterParams({ withKid: next ? '1' : '' });
-              }}
-              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
-                withKidFilter
-                  ? 'border-blue-500 bg-blue-600 text-white'
-                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
-              }`}
-            >
-              {t('activity.withKid')}
             </button>
             <button
               onClick={() => {
@@ -708,6 +975,20 @@ export default function ActivitiesPage() {
               }`}
             >
               {t('activity.longRun')}
+            </button>
+            <button
+              onClick={() => {
+                const next = !workoutFilter;
+                setWorkoutFilter(next);
+                updateFilterParams({ workout: next ? '1' : '' });
+              }}
+              className={`rounded-lg border px-3 py-2 font-mono text-xs font-bold transition-colors ${
+                workoutFilter
+                  ? 'border-orange-500 bg-orange-500 text-white'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-orange-300 hover:text-orange-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-orange-800 dark:hover:text-orange-300'
+              }`}
+            >
+              {t('activity.workout')}
             </button>
             </div>
           </div>

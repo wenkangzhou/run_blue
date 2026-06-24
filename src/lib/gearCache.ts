@@ -22,9 +22,21 @@ export interface LightGearActivity {
   average_speed: number;
 }
 
+export interface CachedGearDetail {
+  id: string;
+  name: string;
+  distance: number;
+  brand_name?: string;
+  model_name?: string;
+  description?: string;
+  retired: boolean;
+}
+
 interface GearCacheData {
   version: number;
   activities: LightGearActivity[];
+  gearDetails: CachedGearDetail[];
+  gearDetailsFetchedAt: number;
   loadedPages: number;
   hasMore: boolean;
   lastFetchedAt: number;
@@ -42,6 +54,8 @@ function getEmptyGearCache(): GearCacheData {
   return {
     version: GEAR_CACHE_VERSION,
     activities: [],
+    gearDetails: [],
+    gearDetailsFetchedAt: 0,
     loadedPages: 0,
     hasMore: true,
     lastFetchedAt: 0,
@@ -54,6 +68,7 @@ function normalizeGearCache(data: Partial<GearCacheData> | null | undefined): Ge
     ...getEmptyGearCache(),
     ...data,
     activities: Array.isArray(data.activities) ? data.activities : [],
+    gearDetails: Array.isArray(data.gearDetails) ? data.gearDetails : [],
   };
 }
 
@@ -227,6 +242,32 @@ export async function mergeIntoGearCache(activities: StravaActivity[]): Promise<
 
 export async function getGearCacheActivities(): Promise<LightGearActivity[]> {
   return (await getGearCache())?.activities || [];
+}
+
+export async function getGearCacheDetails(): Promise<{
+  gearDetails: CachedGearDetail[];
+  fetchedAt: number;
+}> {
+  const cache = await getGearCache();
+  return {
+    gearDetails: cache?.gearDetails || [],
+    fetchedAt: cache?.gearDetailsFetchedAt || 0,
+  };
+}
+
+export async function setGearCacheDetails(
+  gearDetails: CachedGearDetail[],
+  fetchedAt = Date.now()
+): Promise<void> {
+  const existing = await getGearCache();
+  const byId = new Map<string, CachedGearDetail>();
+  existing?.gearDetails.forEach((gear) => byId.set(gear.id, gear));
+  gearDetails.forEach((gear) => byId.set(gear.id, gear));
+
+  await setGearCache({
+    gearDetails: Array.from(byId.values()),
+    gearDetailsFetchedAt: fetchedAt,
+  });
 }
 
 export async function clearGearCache(): Promise<void> {

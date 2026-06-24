@@ -34,6 +34,7 @@ export type WorkoutType =
   | 'tempo'
   | 'progression'
   | 'long-run'
+  | 'workout'
   | 'easy'
   | 'recovery'
   | 'hill'
@@ -271,6 +272,7 @@ const WORKOUT_TYPE_LABELS: Record<WorkoutType, string> = {
   tempo: '节奏跑',
   progression: '渐进跑',
   'long-run': '长距离',
+  workout: '训练',
   easy: '轻松跑',
   recovery: '恢复跑',
   hill: '坡跑',
@@ -289,6 +291,7 @@ export function getWorkoutTypeLabel(workoutType: WorkoutType, locale: string = '
       tempo: 'Tempo',
       progression: 'Progression',
       'long-run': 'Long run',
+      workout: 'Workout',
       easy: 'Easy run',
       recovery: 'Recovery run',
       hill: 'Hill workout',
@@ -589,6 +592,11 @@ function inferWorkoutType(
   const durationMinutes = activity.moving_time / 60;
   const paceZone = paceAssessment.zone;
   const hrAssessment = assessHeartRateForActivity(activity, lthr);
+  const isExplicitWorkout = activity.workout_type === 3;
+
+  if (isExplicitWorkout) {
+    evidence.push('Strava workout_type=3');
+  }
 
   if (activity.workout_type === 1) {
     return {
@@ -691,6 +699,18 @@ function inferWorkoutType(
       workoutTypeConfidence: 'high',
       workoutTypeEvidence: evidence,
       intensity: 'hard',
+    };
+  }
+
+  if (isExplicitWorkout) {
+    if (structure.splitPattern !== 'unknown') {
+      evidence.push(`split pattern ${structure.splitPattern}`);
+    }
+    return {
+      workoutType: 'workout',
+      workoutTypeConfidence: 'high',
+      workoutTypeEvidence: evidence,
+      intensity: paceZone === 'T' || paceZone === 'I' || paceZone === 'R' ? 'hard' : 'moderate',
     };
   }
 
@@ -884,6 +904,7 @@ function areWorkoutTypesComparable(left: WorkoutType, right: WorkoutType): boole
     ['easy', 'recovery'],
     ['threshold', 'tempo'],
     ['interval', 'fartlek'],
+    ['workout', 'interval', 'fartlek', 'threshold', 'tempo', 'progression', 'hill'],
     ['treadmill', 'easy', 'recovery'],
   ];
   return groups.some((group) => group.includes(left) && group.includes(right));

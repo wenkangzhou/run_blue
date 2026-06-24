@@ -297,6 +297,9 @@ function getWorkoutSpecificGuidance(
       lines.push('For long runs, prioritize durability, fueling, hydration, stable effort, and recovery cost over raw speed.');
       lines.push('Do not infer dehydration or physiological self-protection from heart-rate changes alone. Mention hydration as a possibility only when duration, heat, humidity, or subjective evidence supports it.');
       lines.push('Do not turn an ordinary long run into an M-pace workout. Mention marathon-pace inserts only if the data clearly shows this was already a quality long run or the next-session context explicitly calls for it.');
+    } else if (type === 'workout') {
+      lines.push('Strava marks this as a workout, but the exact subtype is not clear. Evaluate the visible lap, split, pace, and heart-rate structure without inventing interval, tempo, or threshold targets.');
+      lines.push('State which quality-session interpretation is most plausible and what evidence is missing. Keep recommendations consistent with the observed load rather than the generic workout label alone.');
     } else if (type === 'easy' || type === 'recovery') {
       lines.push('For easy/recovery runs, success means low stress and relaxed aerobic work. Do not ask the athlete to run faster unless the workout intent was misclassified.');
       lines.push('If HR seems high for an easy run, consider heat, fatigue, sleep, illness, and accumulated load before calling it poor execution.');
@@ -323,6 +326,9 @@ function getWorkoutSpecificGuidance(
       lines.push('如果是长距离，优先评估耐受力、补给补水、努力程度稳定性和恢复成本，不要只看绝对速度。');
       lines.push('不要仅凭心率变化推断脱水或“身体自我保护”。只有时长、温度、湿度或主观证据支持时，才把补水作为可能因素提出。');
       lines.push('不要把普通长距离自动改造成 M 配速质量课。只有数据明确显示这本来就是质量长距离，或下次训练上下文明示需要时，才提马配穿插。');
+    } else if (type === 'workout') {
+      lines.push('Strava 已将本次标记为“训练”，但具体子类型尚不明确。请依据圈数、分段、配速和心率结构判断，不要凭空编造间歇、节奏或阈值目标。');
+      lines.push('说明最可能的质量课解释及当前缺少的证据；建议必须与实际负荷一致，不能只根据“训练”标签下结论。');
     } else if (type === 'easy' || type === 'recovery') {
       lines.push('如果是轻松跑/恢复跑，成功标准是低压力和放松的有氧刺激。除非训练意图识别明显错误，否则不要建议跑更快。');
       lines.push('如果轻松跑心率偏高，先考虑高温、疲劳、睡眠、疾病或累计负荷，再判断是否执行不佳。');
@@ -748,8 +754,8 @@ export function buildProfessionalPrompt(
       ? `\n2. Training purpose: Based on pace and distance, clearly state the main purpose (aerobic recovery / aerobic base / threshold / VO2max / speed).`
       : `\n2. 训练目的: 基于本次配速和距离，明确说明这次训练主要目的是什么（有氧恢复/有氧基础/阈值提升/VO2max/速度训练）。`;
     prompt += en
-      ? `\n2a. Respect the supplied workout type. If it is interval/fartlek, analyze rep quality, recovery contrast, and execution consistency instead of judging the whole run by average pace. If it is progression, focus on pacing build. If it is recovery/easy but heart rate looks high, discuss heat/fatigue possibilities before calling it underperformance. If confidence is low, explicitly acknowledge uncertainty.`
-      : `\n2a. 请尊重上面给出的训练类型。如果是间歇/法特莱克，要重点分析重复段质量、恢复段对比和执行一致性，不要只拿全程平均配速下结论。如果是渐进跑，重点看配速构建。如果是恢复跑/轻松跑但心率偏高，先讨论高温或疲劳可能，再决定是否表现不佳。如果识别置信度低，要明确说明不确定性。`;
+      ? `\n2a. Respect the supplied workout type. If it is interval/fartlek, analyze rep quality, recovery contrast, and execution consistency instead of judging the whole run by average pace. If it is progression, focus on pacing build. If it is recovery/easy but heart rate looks high, discuss heat/fatigue possibilities before calling it underperformance. If it is the generic Workout type, infer a subtype only when laps/splits/pace/HR provide evidence. If confidence is low, explicitly acknowledge uncertainty.`
+      : `\n2a. 请尊重上面给出的训练类型。如果是间歇/法特莱克，要重点分析重复段质量、恢复段对比和执行一致性，不要只拿全程平均配速下结论。如果是渐进跑，重点看配速构建。如果是恢复跑/轻松跑但心率偏高，先讨论高温或疲劳可能，再决定是否表现不佳。如果只是泛化“训练”类型，只有圈数、分段、配速或心率提供证据时才能继续推断子类型。如果识别置信度低，要明确说明不确定性。`;
     prompt += en
       ? `\n2b. For progression or warmup/cooldown structures, a slower final segment after a fast segment is usually cooldown or a deliberate structure change. Do NOT write overconfident phrases like "monitoring failure", "poor execution", or "insufficient reserves" solely because pace and heart rate dropped together.`
       : `\n2b. 对渐进跑或热身/冷身结构，快段之后的末段降速通常是主动冷身或结构调整。不要仅因为配速和心率同时下降，就写出“监控不足”“执行失败”“体能储备不足”等过度笃定结论。`;

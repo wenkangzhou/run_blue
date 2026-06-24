@@ -12,7 +12,8 @@ mkdirSync(tempDir, { recursive: true });
 
 const sourcePath = path.resolve('src/lib/authPersistence.ts');
 const compiledPath = path.join(tempDir, 'authPersistence.cjs');
-const source = readFileSync(sourcePath, 'utf8');
+const source = readFileSync(sourcePath, 'utf8')
+  .replace("'@/lib/guestMode'", "'./guestMode'");
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -22,6 +23,10 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 
 writeFileSync(compiledPath, compiled);
+writeFileSync(
+  path.join(tempDir, 'guestMode.js'),
+  "exports.GUEST_ACCESS_TOKEN = 'guest-demo-access';\n"
+);
 
 const {
   shouldClearAuthStateForSessionError,

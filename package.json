@@ -8,7 +8,7 @@
     "start": "next start",
     "data:update-activities": "node scripts/update-activities-json.mjs",
     "lint": "eslint src",
-    "test:core": "node --test tests/routeClustering.test.mjs tests/routeSync.test.mjs tests/routesStore.test.mjs tests/dates.test.mjs tests/userProfile.test.mjs tests/trainingPlanRequest.test.mjs tests/trainingPlan.test.mjs tests/activitySync.test.mjs tests/activityDetailCache.test.mjs tests/gearCache.test.mjs tests/gearRequest.test.mjs tests/segmentBounds.test.mjs tests/aiAnalyzeRequest.test.mjs tests/aiAnalysisCacheKey.test.mjs tests/aiAnalysisCache.test.mjs tests/aiAnalysis.test.mjs tests/aiPrompt.test.mjs tests/trainingAnalysis.test.mjs tests/authCookies.test.mjs tests/authRedirect.test.mjs tests/authPersistence.test.mjs tests/paceFormat.test.mjs",
+    "test:core": "node --test tests/routeClustering.test.mjs tests/routeSync.test.mjs tests/routesStore.test.mjs tests/dates.test.mjs tests/userProfile.test.mjs tests/trainingPlanRequest.test.mjs tests/trainingPlan.test.mjs tests/activitySync.test.mjs tests/activityDetailCache.test.mjs tests/activityWorkoutType.test.mjs tests/gearCache.test.mjs tests/gearStats.test.mjs tests/gearRequest.test.mjs tests/segmentBounds.test.mjs tests/aiAnalyzeRequest.test.mjs tests/aiAnalysisCacheKey.test.mjs tests/aiAnalysisCache.test.mjs tests/aiAnalysis.test.mjs tests/aiPrompt.test.mjs tests/trainingAnalysis.test.mjs tests/authCookies.test.mjs tests/authRedirect.test.mjs tests/authPersistence.test.mjs tests/paceFormat.test.mjs",
     "test:routes": "npm run test:core"
   },
   "dependencies": {

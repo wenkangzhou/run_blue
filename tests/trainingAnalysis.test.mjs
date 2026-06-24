@@ -148,6 +148,60 @@ test('classifyActivity recognizes interval workouts from lap structure', () => {
   assert.ok(classification.workoutTypeEvidence.some((evidence) => evidence.includes('short reps')));
 });
 
+test('classifyActivity does not treat Strava type zero as a recovery marker', () => {
+  const activity = makeActivity(101, {
+    name: 'Morning run',
+    workout_type: 0,
+    distance: 8000,
+    moving_time: 2600,
+    average_heartrate: 150,
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200), 'medium', 176);
+
+  assert.equal(classification.workoutTypeEvidence.some((evidence) => evidence.startsWith('Strava workout_type=')), false);
+});
+
+test('classifyActivity uses generic workout when Strava marks a workout without subtype evidence', () => {
+  const activity = makeActivity(102, {
+    name: 'Morning run',
+    workout_type: 3,
+    distance: 8000,
+    moving_time: 2600,
+    average_heartrate: 150,
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200), 'medium', 176);
+
+  assert.equal(classification.workoutType, 'workout');
+  assert.equal(classification.workoutTypeConfidence, 'high');
+  assert.ok(classification.workoutTypeEvidence.includes('Strava workout_type=3'));
+});
+
+test('classifyActivity refines Strava workout type when interval structure is available', () => {
+  const activity = makeActivity(103, {
+    name: 'Track session',
+    workout_type: 3,
+    distance: 7600,
+    moving_time: 2500,
+    laps: [
+      makeLap(0, 1600, 520),
+      makeLap(1, 400, 88),
+      makeLap(2, 200, 80),
+      makeLap(3, 400, 87),
+      makeLap(4, 200, 82),
+      makeLap(5, 400, 89),
+      makeLap(6, 200, 81),
+      makeLap(7, 1600, 560),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200));
+
+  assert.equal(classification.workoutType, 'interval');
+  assert.ok(classification.workoutTypeEvidence.includes('Strava workout_type=3'));
+});
+
 test('classifyActivity treats repeated lap workouts as interval candidates before threshold pace guesses', () => {
   const activity = makeActivity(25, {
     name: 'Morning run',

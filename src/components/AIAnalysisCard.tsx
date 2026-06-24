@@ -47,6 +47,8 @@ function getAppropriatePaceProLabel(workoutType: ActivityClassification['workout
       return '渐进节奏清晰';
     case 'long-run':
       return '耐力节奏稳定';
+    case 'workout':
+      return '训练结构可辨';
     case 'interval':
     case 'fartlek':
       return '重复段强度匹配';
@@ -229,6 +231,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (i18n.language.startsWith('en')) return evidence;
 
     if (evidence === 'Strava workout_type=1') return 'Strava 将本次活动标记为比赛';
+    if (evidence === 'Strava workout_type=3') return 'Strava 将本次活动标记为训练';
     if (evidence === 'activity name matches race keywords') return '活动名称包含比赛关键词';
     if (evidence === 'name/description indicates treadmill') return '名称或描述显示这是跑步机训练';
     if (evidence === 'trainer/VirtualRun flag') return '活动标记为 trainer / VirtualRun';

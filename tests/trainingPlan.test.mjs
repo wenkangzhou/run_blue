@@ -26,6 +26,7 @@ function compileLibFile(sourceFile, outputFile) {
 }
 
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
+compileLibFile('src/lib/paceFormat.ts', 'paceFormat.js');
 compileLibFile('src/lib/userProfile.ts', 'userProfile.js');
 compileLibFile('src/lib/trainingPlan.ts', 'trainingPlan.js');
 
