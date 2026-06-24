@@ -108,10 +108,19 @@ export function useAuth() {
   }, [setUser]);
 
   const handleLogin = () => {
+    if (isGuestUser(user)) {
+      logout();
+    }
     router.push('/api/auth/signin/strava');
   };
 
   const handleLogout = async () => {
+    if (isGuestUser(user)) {
+      logout();
+      router.push('/');
+      return;
+    }
+
     await fetch('/api/auth/signout', { method: 'POST' });
     logout();
     router.push('/');

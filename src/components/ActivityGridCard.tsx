@@ -7,6 +7,8 @@ import { RouteCanvasThumbnail } from '@/components/map/RouteCanvasThumbnail';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 interface ActivityGridCardProps {
   activity: StravaActivity;
@@ -14,17 +16,18 @@ interface ActivityGridCardProps {
 
 const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-function getActivityTag(activity: StravaActivity): string | null {
+function getActivityTag(activity: StravaActivity, t: TFunction): string | null {
   const distanceKm = activity.distance / 1000;
 
-  if (activity.workout_type === 1) return '比赛';
-  if (activity.workout_type === 2 || distanceKm >= 15) return '长跑';
-  if (activity.workout_type === 0) return '带娃';
+  if (activity.workout_type === 1) return t('activity.race');
+  if (activity.workout_type === 2 || distanceKm >= 15) return t('activity.longRun');
+  if (activity.workout_type === 0) return t('activity.withKid');
 
   return null;
 }
 
 export const ActivityGridCard = React.memo(function ActivityGridCard({ activity }: ActivityGridCardProps) {
+  const { t } = useTranslation();
   const selectActivity = useActivitiesStore((state) => state.selectActivity);
   const date = getActivityDate(activity);
   const primeActivity = React.useCallback(() => {
@@ -36,7 +39,7 @@ export const ActivityGridCard = React.memo(function ActivityGridCard({ activity 
   const distance = formatDistance(activity.distance, 'km');
   const duration = formatDuration(activity.moving_time);
   const pace = formatPace(activity.distance, activity.moving_time, 'min/km').replace('/km', '');
-  const tag = getActivityTag(activity);
+  const tag = getActivityTag(activity, t);
 
   return (
     <Link
@@ -79,13 +82,13 @@ export const ActivityGridCard = React.memo(function ActivityGridCard({ activity 
 
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div>
-              <p className="font-mono text-[9px] text-zinc-400">距离</p>
+              <p className="font-mono text-[9px] text-zinc-400">{t('activity.distance')}</p>
               <p className="truncate font-mono text-sm font-bold leading-tight text-zinc-950 dark:text-zinc-50">
                 {distance}
               </p>
             </div>
             <div>
-              <p className="font-mono text-[9px] text-zinc-400">配速</p>
+              <p className="font-mono text-[9px] text-zinc-400">{t('activity.pace')}</p>
               <p className="truncate font-mono text-sm font-bold leading-tight text-blue-600 dark:text-blue-300">
                 {pace}
               </p>

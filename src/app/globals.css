@@ -167,16 +167,17 @@ body {
 }
 
 .heatmap-map {
-  background: #eef3f4;
+  background: #edf3f5;
 }
 
 .heatmap-map .leaflet-tile {
-  filter: saturate(0.58) contrast(0.9) brightness(1.08);
+  filter: saturate(0.44) contrast(0.92) brightness(1.1);
 }
 
 .heatmap-map .heatmap-polyline {
   stroke-linecap: round;
   stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.05));
 }
 
 .heatmap-map .heatmap-polyline-hit {
@@ -211,6 +212,10 @@ body {
 .mini-map-line {
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.heatmap-map .heatmap-polyline-selected {
+  filter: drop-shadow(0 2px 4px rgba(249, 115, 22, 0.20));
 }
 
 .heatmap-map .heatmap-segment-line {

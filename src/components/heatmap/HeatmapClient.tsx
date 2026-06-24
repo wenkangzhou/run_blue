@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
-import { ChevronLeft, ChevronRight, MapPin, X, Filter, BarChart3, Loader2, Download, Route, ArrowLeft } from 'lucide-react';
+import { Activity, ArrowUpRight, ChevronLeft, MapPin, X, Filter, Loader2, Download, Route, ArrowLeft, Layers, List } from 'lucide-react';
 
 interface FilterState {
   years: number[];
@@ -111,6 +111,11 @@ export function HeatmapClient() {
   }, [mapActivities]);
 
   const totalRuns = mapActivities.length;
+  const totalDistance = useMemo(
+    () => mapActivities.reduce((sum, activity) => sum + activity.distance, 0),
+    [mapActivities]
+  );
+  const hasFiltered = filters.years.length > 0 || filters.types.length !== 1 || filters.types[0] !== 'Run';
 
   const handleSelect = useCallback((id: number | null) => {
     setSelectedId(id);
@@ -193,7 +198,7 @@ export function HeatmapClient() {
   }, [loadingSegments]);
 
   return (
-    <div className="h-screen w-full relative bg-zinc-50 dark:bg-zinc-950 flex overflow-hidden">
+    <div className="relative flex h-[100dvh] w-full overflow-hidden bg-[#edf3f5] text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       {/* Map Area */}
       <div className="flex-1 relative">
         <RouteMap
@@ -206,9 +211,75 @@ export function HeatmapClient() {
           segments={showSegments ? segments : []}
         />
 
-        {/* Floating popup card on map (left side, below filter) */}
+        {/* Top toolbar */}
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[1000] flex items-start justify-between gap-2">
+          <div className="pointer-events-auto flex max-w-[calc(100%-64px)] gap-1 overflow-x-auto rounded-2xl border border-white/80 bg-white/88 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/88">
+            <button
+              onClick={handleBack}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
+            >
+              <ArrowLeft size={14} />
+              {t('common.back')}
+            </button>
+            <button
+              onClick={() => {
+                setFilterOpen(!filterOpen);
+                setSidebarOpen(false);
+                setPopupActivity(null);
+              }}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold transition-colors ${
+                filterOpen || hasFiltered
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
+              }`}
+            >
+              <Filter size={14} />
+              {t('heatmap.filters')}
+              {hasFiltered && (
+                <span className="ml-0.5 rounded-full bg-white/20 px-1.5 text-[9px]">
+                  {filters.years.length || t('heatmap.allYears')}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                if (!showSegments && segments.length === 0) {
+                  loadSegments();
+                }
+                setShowSegments(!showSegments);
+              }}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold transition-colors ${
+                showSegments
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
+              }`}
+              title={showSegments ? t('heatmap.hideSegments') : t('heatmap.showSegments')}
+            >
+              {loadingSegments ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
+              {t('heatmap.segments')}
+            </button>
+          </div>
+
+          {!sidebarOpen && (
+            <button
+              onClick={() => {
+                setSidebarOpen(true);
+                setFilterOpen(false);
+                setPopupActivity(null);
+              }}
+              className="pointer-events-auto inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-white/80 bg-white/90 px-3 font-mono text-xs font-bold text-zinc-800 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-colors hover:bg-white dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              aria-label={t('heatmap.list')}
+            >
+              <List size={15} />
+              <span className="hidden sm:inline">{t('heatmap.list')}</span>
+              <ChevronLeft size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Floating popup card on map */}
         {popupActivity && !sidebarOpen && (
-          <div className="absolute top-14 left-3 z-[1000] w-56 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border border-zinc-200 dark:border-zinc-700 shadow-lg px-3 py-2">
+          <div className="absolute left-3 top-16 z-[1000] w-64 rounded-2xl border border-white/80 bg-white/92 px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/92">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-mono text-xs font-bold truncate">{popupActivity.name}</p>
@@ -219,120 +290,101 @@ export function HeatmapClient() {
               <button
                 onClick={() => { setPopupActivity(null); setSelectedId(null); }}
                 className="flex-shrink-0 p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded"
+                aria-label={t('common.close')}
               >
                 <X size={13} />
               </button>
             </div>
             <Link
               href={`/activities/${popupActivity.id}`}
-              className="inline-flex items-center gap-1 mt-1 font-mono text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
             >
               <MapPin size={10} />
-              {language === 'zh' ? '查看详情' : 'View Details'}
+              {t('heatmap.viewDetails')}
             </Link>
           </div>
         )}
 
-        {/* Back Button */}
-        <button
-          onClick={handleBack}
-          className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
-        >
-          <ArrowLeft size={14} />
-          {language === 'zh' ? '返回' : 'Back'}
-        </button>
-
-        {/* Filter Toggle */}
-        <button
-          onClick={() => setFilterOpen(!filterOpen)}
-          className="absolute top-3 left-20 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
-        >
-          <Filter size={14} />
-          {t('common.filter')}
-        </button>
-
-        {/* Segments Toggle */}
-        <button
-          onClick={() => {
-            if (!showSegments && segments.length === 0) {
-              loadSegments();
-            }
-            setShowSegments(!showSegments);
-          }}
-          className={`absolute top-3 left-36 z-[1000] flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border font-mono text-xs font-bold shadow-sm transition-colors ${
-            showSegments
-              ? 'border-orange-400 text-orange-600 dark:text-orange-400'
-              : 'border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-900'
-          }`}
-        >
-          <Route size={14} />
-          {language === 'zh' ? '路段' : 'Segments'}
-        </button>
-
         {/* Filter Panel */}
         {filterOpen && (
-          <div className="absolute top-12 left-3 z-[1000] w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border border-zinc-200 dark:border-zinc-700 shadow-lg p-3">
+          <div className="absolute left-3 top-16 z-[1000] w-[min(20rem,calc(100vw-24px))] rounded-2xl border border-white/80 bg-white/94 p-3 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/94">
             <div className="mb-1">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-mono text-[10px] font-bold uppercase text-zinc-500">{language === 'zh' ? '年份' : 'Year'}</span>
-                <button onClick={() => setFilters(prev => ({ ...prev, years: [] }))} className="font-mono text-[10px] text-blue-500 hover:underline">{language === 'zh' ? '全部' : 'All'}</button>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">{t('heatmap.years')}</span>
+                <button onClick={() => setFilters(prev => ({ ...prev, years: [] }))} className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40">{t('heatmap.allYears')}</button>
               </div>
               <div className="flex flex-wrap gap-1">
                 {allYears.map(year => (
                   <button key={year} onClick={() => toggleYear(year)}
-                    className={`px-2 py-0.5 font-mono text-[10px] border transition-colors ${
+                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] font-bold transition-colors ${
                       filters.years.length === 0 || filters.years.includes(year)
-                        ? 'border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900'
-                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-400'
+                        ? 'border-blue-500 bg-blue-600 text-white'
+                        : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900'
                     }`}>{year}</button>
                 ))}
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <span className="font-mono text-[10px] font-bold uppercase text-zinc-500 block mb-1">{language === 'zh' ? '运动' : 'Sport'}</span>
-              <span className="font-mono text-[10px] px-2 py-0.5 border border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900">{t(TYPE_LABELS['Run'])}</span>
+            <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <span className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">{t('heatmap.sport')}</span>
+              <span className="inline-flex rounded-full border border-zinc-900 bg-zinc-900 px-2.5 py-1 font-mono text-[10px] font-bold text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-950">{t(TYPE_LABELS['Run'])}</span>
             </div>
+            <p className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 font-mono text-[10px] leading-4 text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-400">
+              {t('heatmap.denseModeHint')}
+            </p>
           </div>
         )}
 
-        {/* Sidebar Toggle */}
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="absolute top-3 right-3 z-[1000] flex items-center gap-1 px-2 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors"
-          >
-            <BarChart3 size={14} />
-            <span className="hidden sm:inline">{language === 'zh' ? '列表' : 'List'}</span>
-            <ChevronLeft size={14} />
-          </button>
-        )}
+        <div className="pointer-events-none absolute bottom-3 left-3 z-[900] hidden max-w-[calc(100%-24px)] rounded-2xl border border-white/75 bg-white/82 px-3 py-2 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/82 sm:block">
+          <div className="flex items-center gap-3 font-mono text-[10px] text-zinc-600 dark:text-zinc-300">
+            <span className="inline-flex items-center gap-1 font-bold text-zinc-900 dark:text-zinc-100">
+              <Activity size={12} />
+              {t('heatmap.visibleTracks', { count: totalRuns })}
+            </span>
+            <span>{t('heatmap.visibleDistance', { distance: formatDistance(totalDistance) })}</span>
+            {hasFiltered && (
+              <span className="text-blue-600 dark:text-blue-300">
+                {t('heatmap.filteredMatches', { matched: totalRuns, total: sourceActivities.length })}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Sidebar */}
       {sidebarOpen && (
-        <div className="absolute md:relative top-0 right-0 h-full w-56 md:w-56 border-l border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur md:backdrop-blur-none md:bg-white md:dark:bg-zinc-950 flex flex-col z-[100] shadow-2xl md:shadow-none">
+        <div className="absolute right-3 top-3 z-[1001] flex h-[calc(100%-24px)] w-[min(22rem,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-white/80 bg-white/94 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/94 md:right-0 md:top-0 md:h-full md:w-80 md:rounded-none md:border-y-0 md:border-r-0 md:shadow-none">
           {/* Header */}
-          <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <h2 className="font-mono text-xs font-bold">{language === 'zh' ? '跑步地图' : 'Running Map'}</h2>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-              <ChevronRight size={16} />
-            </button>
+          <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">{t('nav.heatmap')}</p>
+                <h2 className="mt-1 truncate font-mono text-sm font-black text-zinc-950 dark:text-zinc-50">{t('heatmap.title')}</h2>
+                <p className="mt-1 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{t('heatmap.subtitle')}</p>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100" aria-label={t('common.close')}>
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Stats */}
-          <div className="px-3 py-1.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-[9px] text-zinc-500 uppercase">{language === 'zh' ? '轨迹' : 'Tracks'}</span>
-              <span className="font-mono text-sm font-bold">{totalRuns}</span>
+          <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
+              <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-500">{t('heatmap.tracks')}</p>
+              <p className="mt-1 font-mono text-base font-black">{totalRuns}</p>
+            </div>
+            <div className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
+              <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-500">{t('activity.distance')}</p>
+              <p className="mt-1 truncate font-mono text-base font-black">{formatDistance(totalDistance)}</p>
             </div>
             {sourceHasMore && (
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
-                title={language === 'zh' ? '加载更多' : 'Load More'}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 text-zinc-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
+                title={t('heatmap.loadMore')}
               >
-                {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                {loadingMore ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
               </button>
             )}
           </div>
@@ -340,17 +392,18 @@ export function HeatmapClient() {
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {grouped.length === 0 ? (
-              <div className="p-3 text-center">
-                <p className="font-mono text-xs text-zinc-400">{language === 'zh' ? '暂无数据' : 'No data'}</p>
+              <div className="px-4 py-10 text-center">
+                <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-200">{t('heatmap.noData')}</p>
+                <p className="mt-2 font-mono text-xs leading-5 text-zinc-500">{t('heatmap.noDataHint')}</p>
               </div>
             ) : (
               <>
                 {showSegments && segments.length > 0 && (
                   <div className="border-b border-zinc-100 dark:border-zinc-900">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-orange-50 dark:bg-orange-900/10">
+                    <div className="flex items-center justify-between bg-amber-50 px-4 py-2 dark:bg-amber-950/20">
                       <div className="flex items-center gap-1.5">
                         <Route size={12} className="text-orange-500" />
-                        <span className="font-mono text-[11px] font-bold">{language === 'zh' ? '附近路段' : 'Nearby Segments'}</span>
+                        <span className="font-mono text-[11px] font-bold">{t('heatmap.nearbySegments')}</span>
                       </div>
                       <span className="font-mono text-[9px] text-zinc-400">{segments.length}</span>
                     </div>
@@ -361,13 +414,13 @@ export function HeatmapClient() {
                           href={`https://www.strava.com/segments/${seg.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                          className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
                         >
                           <span className="w-1 h-1 rounded-full flex-shrink-0 bg-orange-400" />
                           <div className="min-w-0 flex-1">
                             <p className="font-mono text-[10px] truncate">{seg.name}</p>
                             <p className="font-mono text-[9px] text-zinc-400">
-                              {(seg.distance / 1000).toFixed(1)} km · {seg.avg_grade?.toFixed(1) ?? 0}% · {seg.effort_count} efforts
+                              {(seg.distance / 1000).toFixed(1)} km · {seg.avg_grade?.toFixed(1) ?? 0}% · {seg.effort_count} {t('heatmap.efforts')}
                             </p>
                           </div>
                         </a>
@@ -378,30 +431,48 @@ export function HeatmapClient() {
 
                 {grouped.map(({ year, items }) => (
                   <div key={year} className="border-b border-zinc-100 dark:border-zinc-900 last:border-b-0">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-50 dark:bg-zinc-900/50">
+                    <div className="sticky top-0 z-10 flex items-center justify-between bg-zinc-50/95 px-4 py-2 backdrop-blur dark:bg-zinc-900/90">
                       <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getYearColor(year) }} />
                         <span className="font-mono text-[11px] font-bold">{year}</span>
                       </div>
-                      <span className="font-mono text-[9px] text-zinc-400">{items.length}</span>
+                      <span className="font-mono text-[9px] text-zinc-400">
+                        {items.length} · {formatDistance(items.reduce((sum, item) => sum + item.distance, 0))}
+                      </span>
                     </div>
                     <div>
                       {items.map(activity => (
-                        <button
+                        <div
                           key={activity.id}
-                          onClick={() => handleListClick(activity)}
-                          className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors ${
-                            selectedId === activity.id ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                          className={`group flex items-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                            selectedId === activity.id ? 'bg-blue-50 dark:bg-blue-950/25' : ''
                           }`}
                         >
-                          <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: activity.color }} />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-mono text-[10px] truncate">{activity.name}</p>
-                            <p className="font-mono text-[9px] text-zinc-400">
-                              {getActivityDate(activity).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })}
-                            </p>
-                          </div>
-                        </button>
+                          <button
+                            onClick={() => handleListClick(activity)}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5 text-left"
+                          >
+                            <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: activity.color }} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-mono text-[11px] font-bold text-zinc-800 dark:text-zinc-100">{activity.name}</span>
+                              <span className="mt-0.5 block font-mono text-[9px] text-zinc-400">
+                                {getActivityDate(activity).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })}
+                                <span className="mx-1">·</span>
+                                {formatDistance(activity.distance)}
+                              </span>
+                            </span>
+                          </button>
+                          <Link
+                            href={`/activities/${activity.id}`}
+                            className={`mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-600 transition-all hover:bg-white dark:text-blue-300 dark:hover:bg-zinc-950 ${
+                              selectedId === activity.id ? 'opacity-100' : 'opacity-60 md:opacity-0 md:group-hover:opacity-100'
+                            }`}
+                            aria-label={`${activity.name} ${t('heatmap.viewDetails')}`}
+                            title={t('heatmap.viewDetails')}
+                          >
+                            <ArrowUpRight size={14} />
+                          </Link>
+                        </div>
                       ))}
                     </div>
                   </div>

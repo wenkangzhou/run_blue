@@ -10,7 +10,8 @@ import { UserProfileModal } from '@/components/UserProfileModal';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { Menu, X, Dumbbell, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff } from 'lucide-react';
+import { isGuestUser } from '@/lib/guestMode';
+import { Menu, X, Dumbbell, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff, LogIn } from 'lucide-react';
 
 export function Header() {
   const { t } = useTranslation();
@@ -18,6 +19,7 @@ export function Header() {
   const isOnline = useOnlineStatus();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
+  const isGuest = isGuestUser(user);
 
   return (
     <header 
@@ -155,6 +157,35 @@ export function Header() {
             </button>
           </div>
         </div>
+
+        {isGuest && (
+          <div className="border-t border-blue-200 bg-blue-50 px-1 py-2 dark:border-blue-900/70 dark:bg-blue-950/35">
+            <div className="flex flex-col gap-2 text-xs font-mono text-blue-900 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between">
+              <span className="min-w-0 truncate font-bold">
+                {t('guest.banner', '游客模式 · 当前使用示例数据体验功能')}
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={login}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-300 bg-white px-2 font-bold text-blue-700 transition-colors hover:border-blue-500 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100 dark:hover:bg-blue-900"
+                >
+                  <LogIn size={12} />
+                  {t('auth.loginWithStrava', '登录 Strava')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void logout();
+                  }}
+                  className="h-7 rounded-md border border-zinc-300 bg-white px-2 font-bold text-zinc-600 transition-colors hover:border-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  {t('guest.exitDemo', '退出示例')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Offline indicator bar */}
         {!isOnline && (

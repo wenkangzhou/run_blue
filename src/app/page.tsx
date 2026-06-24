@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import i18n from '@/i18n';
 import { StravaConnect } from '@/components/StravaConnect';
-import { isGuestUser } from '@/lib/guestMode';
+import { GUEST_USER, isGuestUser } from '@/lib/guestMode';
 import {
   AlertCircle,
   BarChart3,
@@ -28,6 +28,8 @@ export default function HomePage() {
   const searchParams = useSearchParams();
   const { language, setLanguage } = useSettingsStore();
   const authUser = useAuthStore((state) => state.user);
+  const setAuthUser = useAuthStore((state) => state.setUser);
+  const wantsDemo = searchParams.get('demo') === '1' || searchParams.get('guest') === '1';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'info' } | null>(null);
@@ -46,6 +48,14 @@ export default function HomePage() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (wantsDemo) {
+      setAuthUser(GUEST_USER);
+      setIsAuthenticated(true);
+      setIsLoading(false);
+      router.replace('/activities');
+      return;
+    }
+
     let cancelled = false;
 
     const checkAuth = async () => {
@@ -80,7 +90,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [authUser, t]);
+  }, [authUser, router, setAuthUser, t, wantsDemo]);
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) router.push('/activities');

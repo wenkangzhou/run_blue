@@ -72,6 +72,7 @@ function useActivitiesStoreHydrated() {
 
 export function useProfileActivities(): UseProfileActivitiesResult {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const isGuest = isGuestUser(user);
   const cachedActivities = useActivitiesStore((state) => state.activities);
   const hasMore = useActivitiesStore((state) => state.hasMore);
   const lastFetchedAt = useActivitiesStore((state) => state.lastFetchedAt);
@@ -81,7 +82,7 @@ export function useProfileActivities(): UseProfileActivitiesResult {
     progress: syncProgress,
     syncHistory,
     reset: resetHistorySync,
-  } = useActivityHistorySync(user?.accessToken);
+  } = useActivityHistorySync(isGuest ? null : user?.accessToken);
 
   const [demoActivities, setDemoActivities] = useState<StravaActivity[]>(cachedDemoActivities || []);
   const [demoLoading, setDemoLoading] = useState(!cachedDemoActivities);
@@ -91,7 +92,6 @@ export function useProfileActivities(): UseProfileActivitiesResult {
   const autoSyncTokenRef = useRef<string | null>(null);
 
   const stravaRuns = useMemo(() => sortRuns(cachedActivities), [cachedActivities]);
-  const isGuest = isGuestUser(user);
   const shouldUseStrava = isAuthenticated && Boolean(user?.accessToken) && !isGuest;
 
   useEffect(() => {

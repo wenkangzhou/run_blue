@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 import { Activity, AlertCircle, BarChart3, Database, ListChecks, LogIn, RefreshCw, UserRound } from 'lucide-react';
 import { useProfileActivities } from '@/hooks/useProfileActivities';
 import type { ActivityHistorySyncProgress } from '@/hooks/useActivityHistorySync';
@@ -16,6 +17,7 @@ import { TerminalLoader } from '@/components/me/TerminalLoader';
 
 
 export default function MePage() {
+  const { t } = useTranslation();
   const {
     activities,
     canRefresh,
@@ -99,8 +101,14 @@ export default function MePage() {
 
         <footer className="border-t border-zinc-800/80 px-4 py-10">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 text-xs text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>跑蓝个人档案</span>
-            <span>{stats?.totalRuns ?? 0} 次记录 · {stats?.yearCount ?? 0} 年跑步数据 · {source === 'strava' ? 'Strava 数据' : 'Demo 数据'}</span>
+            <span>{t('profile.archiveTitle')}</span>
+            <span>
+              {t('profile.dataSummary', {
+                runs: stats?.totalRuns ?? 0,
+                years: stats?.yearCount ?? 0,
+                source: source === 'strava' ? t('profile.stravaData') : t('guest.demoData'),
+              })}
+            </span>
           </div>
         </footer>
       </div>
@@ -127,12 +135,13 @@ function ProfileSyncBar({
   syncProgress: ActivityHistorySyncProgress | null;
   syncError: string | null;
 }) {
+  const { t } = useTranslation();
   const isBackgroundSyncing = syncProgress?.phase === 'recent' || syncProgress?.phase === 'history';
   const showStatusLine = Boolean(syncError) || source === 'demo';
   const statusText = syncError
     ? syncError
     : source === 'demo'
-      ? 'Demo 数据 · 登录后使用你的 Strava 记录'
+      ? t('guest.profileStatus')
       : isBackgroundSyncing
         ? getSyncProgressText(syncProgress)
         : '';
@@ -147,7 +156,7 @@ function ProfileSyncBar({
             </span>
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-black text-zinc-100">个人档案</span>
+                <span className="truncate text-sm font-black text-zinc-100">{t('profile.title')}</span>
                 <span
                   className={[
                     'shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]',

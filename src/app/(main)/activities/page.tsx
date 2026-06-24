@@ -179,7 +179,7 @@ export default function ActivitiesPage() {
   if (startDate) {
     activeFilterChips.push({
       key: 'startDate',
-      label: `从 ${startDate}`,
+      label: t('filter.fromDate', { date: startDate }),
       onRemove: () => {
         setStartDate('');
         updateFilterParams({ startDate: '' });
@@ -189,7 +189,7 @@ export default function ActivitiesPage() {
   if (endDate) {
     activeFilterChips.push({
       key: 'endDate',
-      label: `到 ${endDate}`,
+      label: t('filter.toDate', { date: endDate }),
       onRemove: () => {
         setEndDate('');
         updateFilterParams({ endDate: '' });
@@ -219,7 +219,7 @@ export default function ActivitiesPage() {
   if (raceFilter) {
     activeFilterChips.push({
       key: 'race',
-      label: '比赛',
+      label: t('activity.race'),
       onRemove: () => {
         setRaceFilter(false);
         updateFilterParams({ race: '' });
@@ -229,7 +229,7 @@ export default function ActivitiesPage() {
   if (withKidFilter) {
     activeFilterChips.push({
       key: 'withKid',
-      label: '带娃',
+      label: t('activity.withKid'),
       onRemove: () => {
         setWithKidFilter(false);
         updateFilterParams({ withKid: '' });
@@ -239,7 +239,7 @@ export default function ActivitiesPage() {
   if (longRunFilter) {
     activeFilterChips.push({
       key: 'longRun',
-      label: '长跑',
+      label: t('activity.longRun'),
       onRemove: () => {
         setLongRunFilter(false);
         updateFilterParams({ longRun: '' });
@@ -507,15 +507,15 @@ export default function ActivitiesPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
-              Activities
+              {t('activity.routeListKicker')}
             </p>
             <h1 className="mt-1 font-pixel text-xl font-bold text-zinc-950 dark:text-zinc-50">
-              活动路线
+              {t('activity.routeListTitle')}
             </h1>
             <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">
               {hasActiveFilters
-                ? `${runningActivities.length} / ${routeActivities.length} 条路线匹配`
-                : `${routeActivities.length} 条带轨迹跑步`}
+                ? t('activity.routeMatches', { matched: runningActivities.length, total: routeActivities.length })
+                : t('activity.routeRunsWithTrack', { count: routeActivities.length })}
             </p>
           </div>
 
@@ -541,29 +541,29 @@ export default function ActivitiesPage() {
               onClick={handleRefresh}
               disabled={isGuest || refreshing || isLoading || !user?.accessToken}
               className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 font-mono text-xs font-bold text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
-              title={isGuest ? '游客示例数据不可同步' : '更新最新数据'}
+              title={isGuest ? t('guest.cannotSync') : t('activity.updateLatest')}
             >
               <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{isGuest ? '示例' : refreshing ? '更新中' : '更新'}</span>
+              <span className="hidden sm:inline">{isGuest ? t('guest.demo') : refreshing ? t('activity.updating') : t('activity.update')}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">距离</p>
+            <p className="font-mono text-[10px] text-zinc-400">{t('activity.distance')}</p>
             <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
               {formatCompactListDistance(listTotals.distance)}
             </p>
           </div>
           <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">时间</p>
+            <p className="font-mono text-[10px] text-zinc-400">{t('activity.time')}</p>
             <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
               {formatCompactListDuration(listTotals.time)}
             </p>
           </div>
           <div className="rounded-lg bg-zinc-50 px-2.5 py-2 dark:bg-zinc-900">
-            <p className="font-mono text-[10px] text-zinc-400">次数</p>
+            <p className="font-mono text-[10px] text-zinc-400">{t('stats.totalActivities')}</p>
             <p className="mt-1 truncate font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
               {runningActivities.length}
             </p>
@@ -592,7 +592,7 @@ export default function ActivitiesPage() {
                 onClick={resetFilters}
                 className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500 dark:hover:bg-zinc-900"
               >
-                清空
+                {t('filter.clear')}
               </button>
             </div>
           )}
@@ -605,16 +605,16 @@ export default function ActivitiesPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                筛选跑步记录
+                {t('activity.filterRunsTitle')}
               </h2>
               <p className="mt-1 font-mono text-[11px] text-zinc-500">
-                日期、距离和类型会实时同步到地址栏，返回时会保留。
+                {t('activity.filterRunsHint')}
               </p>
             </div>
             <button
               onClick={() => setShowFilters(false)}
               className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
-              aria-label="关闭筛选"
+              aria-label={t('filter.close')}
             >
               <X size={16} />
             </button>
@@ -664,7 +664,7 @@ export default function ActivitiesPage() {
             </div>
           </div>
           <div>
-            <p className="mb-2 font-mono text-[10px] uppercase text-zinc-400">类型</p>
+            <p className="mb-2 font-mono text-[10px] uppercase text-zinc-400">{t('activity.workoutType')}</p>
             <div className="flex flex-wrap gap-2">
             {/* Workout type tags */}
             <button
@@ -679,7 +679,7 @@ export default function ActivitiesPage() {
                   : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
-              比赛
+              {t('activity.race')}
             </button>
             <button
               onClick={() => {
@@ -693,7 +693,7 @@ export default function ActivitiesPage() {
                   : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
-              带娃
+              {t('activity.withKid')}
             </button>
             <button
               onClick={() => {
@@ -707,7 +707,7 @@ export default function ActivitiesPage() {
                   : 'border-zinc-200 bg-zinc-50 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
               }`}
             >
-              长跑
+              {t('activity.longRun')}
             </button>
             </div>
           </div>
@@ -761,10 +761,10 @@ export default function ActivitiesPage() {
       {runningActivities.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-200 bg-white py-14 text-center dark:border-zinc-800 dark:bg-zinc-900">
           <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-200">
-            {hasActiveFilters ? '没有匹配的跑步路线' : t('activity.noActivities')}
+            {hasActiveFilters ? t('activity.noMatchedRoutes') : t('activity.noActivities')}
           </p>
           <p className="mt-2 font-mono text-xs text-zinc-500">
-            {hasActiveFilters ? '可以放宽日期、距离或类型筛选后再看。' : '同步完成后，这里会显示带路线的跑步记录。'}
+            {hasActiveFilters ? t('activity.noMatchedRoutesHint') : t('activity.routeEmptyHint')}
           </p>
           {hasActiveFilters && (
             <button
@@ -772,7 +772,7 @@ export default function ActivitiesPage() {
               className="mt-4 inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 font-mono text-xs font-bold text-zinc-700 transition-colors hover:border-blue-400 hover:text-blue-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-blue-500 dark:hover:text-blue-400"
             >
               <X size={13} />
-              清除筛选
+              {t('filter.clear')}
             </button>
           )}
         </div>

@@ -30,12 +30,12 @@ interface ActivityGroup {
 }
 
 export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActivitiesProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [groupBy, setGroupBy] = React.useState<GroupBy>('week');
 
   const groups = React.useMemo(() => {
-    return groupActivities(activities, groupBy, t);
-  }, [activities, groupBy, t]);
+    return groupActivities(activities, groupBy, t, i18n.language);
+  }, [activities, groupBy, t, i18n.language]);
 
   return (
     <div>
@@ -43,7 +43,7 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
       <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex min-w-0 items-center gap-2">
           <span className="hidden shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400 sm:inline">
-            分组
+            {t('activity.groupBy')}
           </span>
           <div className="flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-zinc-50 p-1 dark:bg-zinc-900">
             {(['week', 'month', 'year'] as GroupBy[]).map((type) => (
@@ -126,7 +126,8 @@ export function GroupedActivities({ activities, onOpenPeriodShare }: GroupedActi
 function groupActivities(
   activities: StravaActivity[],
   groupBy: GroupBy,
-  t: TFunction
+  t: TFunction,
+  locale: string
 ): ActivityGroup[] {
   const groups = new Map<string, ActivityGroup>();
 
@@ -155,14 +156,14 @@ function groupActivities(
       
       startDate = new Date(year, month, 1);
       endDate = new Date(year, month + 1, 0);
-      label = formatMonthLabel(year, month, t);
+      label = formatMonthLabel(year, month, t, locale);
     } else {
       const year = date.getFullYear();
       key = `${year}`;
       
       startDate = new Date(year, 0, 1);
       endDate = new Date(year, 11, 31);
-      label = formatYearLabel(year);
+      label = formatYearLabel(year, locale);
     }
 
     if (!groups.has(key)) {
@@ -196,7 +197,7 @@ function formatWeekLabel(start: Date, end: Date): string {
   return `${yearStr} ${startStr}-${endStr}`;
 }
 
-function formatMonthLabel(year: number, month: number, t: TFunction): string {
+function formatMonthLabel(year: number, month: number, t: TFunction, locale: string): string {
   const monthNames = [
     t('months.jan', '1月'),
     t('months.feb', '2月'),
@@ -211,9 +212,9 @@ function formatMonthLabel(year: number, month: number, t: TFunction): string {
     t('months.nov', '11月'),
     t('months.dec', '12月'),
   ];
-  return `${year}年 ${monthNames[month]}`;
+  return locale.startsWith('zh') ? `${year}年 ${monthNames[month]}` : `${monthNames[month]} ${year}`;
 }
 
-function formatYearLabel(year: number): string {
-  return `${year}年`;
+function formatYearLabel(year: number, locale: string): string {
+  return locale.startsWith('zh') ? `${year}年` : `${year}`;
 }

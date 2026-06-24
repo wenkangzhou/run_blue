@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 import { decodePolyline } from '@/lib/strava';
 import { useMapTileLayer } from '@/hooks/useMapTileLayer';
 import { TILE_LAYERS } from '@/lib/mapTileLayers';
@@ -10,6 +12,7 @@ import {
   getValidRoutePoints,
   getVisualRouteKey,
 } from '@/lib/routeMapVisuals';
+import { useTranslation } from 'react-i18next';
 import type {
   LatLngBounds,
   Layer,
@@ -19,6 +22,7 @@ import type {
   Polyline,
   TileLayer,
   TileLayerOptions,
+  Tooltip,
 } from 'leaflet';
 
 type LeafletModule = typeof import('leaflet');
@@ -60,17 +64,17 @@ interface RouteMapProps {
 }
 
 const CLUSTER_DETAIL_ZOOM = 14;
-const ROUTE_OPACITY = 0.36;
-const ROUTE_DETAIL_OPACITY = 0.74;
-const ROUTE_DIMMED_OPACITY = 0.08;
+const SINGLE_ROUTE_DETAIL_ZOOM = 15;
+const DENSE_DETAIL_ROUTE_LIMIT = 140;
+const ROUTE_DETAIL_OPACITY = 0.34;
+const ROUTE_DIMMED_OPACITY = 0.1;
 const ROUTE_SELECTED_OPACITY = 0.98;
-const ROUTE_WEIGHT = 2.8;
-const ROUTE_DETAIL_WEIGHT = 5.2;
-const ROUTE_HIT_WEIGHT = 18;
-const ROUTE_SELECTED_WEIGHT = 6.8;
-const HIGHLIGHT_COLOR = '#d97706';
-const ROUTE_GROUP_COLOR = '#0f766e';
-const ROUTE_SINGLE_COLOR = '#147f93';
+const ROUTE_WEIGHT = 2.6;
+const ROUTE_DETAIL_WEIGHT = 3.2;
+const ROUTE_HIT_WEIGHT = 22;
+const ROUTE_SELECTED_WEIGHT = 6.2;
+const HIGHLIGHT_COLOR = '#f97316';
+const ROUTE_BASE_COLOR = '#2563eb';
 
 interface DisplayRouteGroup {
   key: string;
@@ -117,9 +121,9 @@ interface Cluster {
 type ClusterCell = { latSum: number; lngSum: number; count: number; anchorPoints: Array<[number, number]> };
 
 function getClusterCellSizePx(zoom: number): number {
-  if (zoom <= 9) return 64;
-  if (zoom <= 11) return 72;
-  return 84;
+  if (zoom <= 9) return 48;
+  if (zoom <= 11) return 56;
+  return 64;
 }
 
 function getRouteAnchorPoint(points: Array<[number, number]>): [number, number] | null {
@@ -237,26 +241,25 @@ function getBoundsSpanMeters(bounds: LatLngBounds): number {
   return bounds.getNorthWest().distanceTo(bounds.getSouthEast());
 }
 
-function getRouteDisplayColor(count: number) {
-  if (count > 1) return ROUTE_GROUP_COLOR;
-  return ROUTE_SINGLE_COLOR;
+function getRouteDisplayColor() {
+  return ROUTE_BASE_COLOR;
 }
 
 function getRouteDisplayWeight(count: number, zoom: number) {
-  const baseWeight = zoom >= CLUSTER_DETAIL_ZOOM ? ROUTE_DETAIL_WEIGHT : ROUTE_WEIGHT;
+  const baseWeight = zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? ROUTE_DETAIL_WEIGHT : ROUTE_WEIGHT;
   if (count <= 1) return baseWeight;
-  return Math.min(7.4, baseWeight + Math.log2(count + 1) * 0.86);
+  return Math.min(6.4, baseWeight + Math.log2(count + 1) * 0.58);
 }
 
 function getRouteDisplayOpacity(count: number, zoom: number) {
-  const baseOpacity = zoom >= CLUSTER_DETAIL_ZOOM ? ROUTE_DETAIL_OPACITY : ROUTE_OPACITY;
-  if (count <= 1) return baseOpacity;
-  return Math.min(0.82, baseOpacity + Math.log2(count + 1) * 0.034);
+  if (count <= 1) return zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? 0.26 : 0.2;
+  const baseOpacity = zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? ROUTE_DETAIL_OPACITY : 0.42;
+  return Math.min(0.68, baseOpacity + Math.log2(count + 1) * 0.026);
 }
 
 function getRouteHaloOpacity(isDimmed: boolean, zoom: number) {
-  if (isDimmed) return 0.12;
-  return zoom >= CLUSTER_DETAIL_ZOOM ? 0.86 : 0.42;
+  if (isDimmed) return 0.08;
+  return zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? 0.36 : 0.44;
 }
 
 function buildDisplayRouteGroups(activities: MapActivity[]): DisplayRouteGroup[] {
@@ -278,7 +281,7 @@ function buildDisplayRouteGroups(activities: MapActivity[]): DisplayRouteGroup[]
       existing.activities.push(activity);
       existing.activityIds.add(activity.id);
       existing.count += 1;
-      existing.color = getRouteDisplayColor(existing.count);
+      existing.color = getRouteDisplayColor();
       return;
     }
 
@@ -287,7 +290,7 @@ function buildDisplayRouteGroups(activities: MapActivity[]): DisplayRouteGroup[]
       activities: [activity],
       representative: activity,
       points,
-      color: getRouteDisplayColor(1),
+      color: getRouteDisplayColor(),
       count: 1,
       activityIds: new Set([activity.id]),
     });
@@ -296,9 +299,9 @@ function buildDisplayRouteGroups(activities: MapActivity[]): DisplayRouteGroup[]
   return Array.from(groups.values()).sort((a, b) => a.count - b.count);
 }
 
-function getRouteGroupLabel(route: DisplayRouteGroup) {
+function getRouteGroupLabel(route: DisplayRouteGroup, runsLabel: string) {
   return route.count > 1
-    ? `${route.representative.name} · ${route.count} runs`
+    ? `${route.representative.name} · ${route.count} ${runsLabel}`
     : route.representative.name;
 }
 
@@ -306,10 +309,10 @@ function formatChoiceDistance(meters: number) {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
 }
 
-function formatChoiceDate(value: string) {
+function formatChoiceDate(value: string, locale: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  return date.toLocaleDateString(locale.startsWith('zh') ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
 }
 
 function pointSegmentDistance(point: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {
@@ -335,10 +338,13 @@ export const RouteMap = React.forwardRef(function RouteMap(
   { activities, selectedId, onSelect, onShowPopup, sidebarOpen, isDark = false, segments }: RouteMapProps,
   forwardedRef: React.Ref<RouteMapHandle>
 ) {
+  const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const routeLayerGroupRef = useRef<LayerGroup | null>(null);
   const routeLayersRef = useRef<Map<string, RouteLayerBundle>>(new Map());
+  const hoverTooltipRef = useRef<Tooltip | null>(null);
+  const hoveredRouteKeyRef = useRef<string | null>(null);
   const selectedRouteLayerRef = useRef<LayerGroup | null>(null);
   const clusterLayerRef = useRef<LayerGroup | null>(null);
   const clusterClickLock = useRef(false);
@@ -352,6 +358,16 @@ export const RouteMap = React.forwardRef(function RouteMap(
   const activitiesRef = useRef(activities);
   const sidebarOpenRef = useRef(sidebarOpen);
   const [routeChoice, setRouteChoice] = useState<RouteChoiceState | null>(null);
+
+  function closeRouteTooltip(map: LeafletMap) {
+    if (hoverTooltipRef.current) {
+      try {
+        map.closeTooltip(hoverTooltipRef.current);
+      } catch {}
+    }
+    hoverTooltipRef.current = null;
+    hoveredRouteKeyRef.current = null;
+  }
 
   useEffect(() => { isDarkRef.current = isDark; });
   useEffect(() => { layerRef.current = layer; });
@@ -387,6 +403,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
         // Zoom listener: toggle clusters + start/end markers
         map.on('zoomend', () => {
+          closeRouteTooltip(map);
+          setRouteChoice(null);
           if (map.getZoom() < CLUSTER_DETAIL_ZOOM) {
             renderClusters(map, L, activitiesRef.current);
           } else {
@@ -395,6 +413,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
           renderPolylines(map, L, activitiesRef.current);
         });
         map.on('click', () => {
+          closeRouteTooltip(map);
           setRouteChoice(null);
           onSelect(null);
           onShowPopup(null);
@@ -417,6 +436,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
         mapInstanceRef.current = null;
       }
       routeLayers.clear();
+      hoverTooltipRef.current = null;
+      hoveredRouteKeyRef.current = null;
       routeLayerGroupRef.current = null;
       selectedRouteLayerRef.current = null;
       clusterLayerRef.current = null;
@@ -467,6 +488,17 @@ export const RouteMap = React.forwardRef(function RouteMap(
       renderSegments(map, L);
     })();
   }, [segments]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    (async () => {
+      const L = (await import('leaflet')).default;
+      renderPolylines(map, L, activitiesRef.current);
+    })();
+    // Tooltip labels depend on language; layer data is read from refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i18n.language]);
 
   function getFitPadding(): { paddingTopLeft: [number, number]; paddingBottomRight: [number, number] } {
     const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
@@ -555,7 +587,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
     clusterLayerRef.current = group;
 
     clusters.forEach(c => {
-      const size = Math.max(32, Math.min(52, 18 + c.count * 1.2));
+      const size = Math.max(30, Math.min(48, 24 + Math.log2(c.count + 1) * 3.6));
       const half = size / 2;
 
       const zoomToCluster = (e: LeafletMouseEvent) => {
@@ -587,12 +619,12 @@ export const RouteMap = React.forwardRef(function RouteMap(
         className: 'heatmap-cluster-marker',
         html: `<div style="
           width:${size}px;height:${size}px;border-radius:50%;
-          background:linear-gradient(135deg, rgba(83,141,180,0.96), rgba(110,166,199,0.94));
+          background:linear-gradient(135deg, rgba(37,99,235,0.95), rgba(20,184,166,0.90));
           color:#fff;display:flex;align-items:center;justify-content:center;
           font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
           font-size:${Math.max(10, Math.min(15, 10 + c.count * 0.08))}px;
           font-weight:bold;border:2px solid rgba(255,255,255,0.92);
-          box-shadow:0 5px 14px rgba(46,75,96,0.22), inset 0 1px 0 rgba(255,255,255,0.26);
+          box-shadow:0 8px 18px rgba(37,99,235,0.20), inset 0 1px 0 rgba(255,255,255,0.30);
           cursor:pointer;user-select:none;
           outline:none;-webkit-tap-highlight-color:transparent;
         ">${c.count}</div>`,
@@ -612,7 +644,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
       const hitRadius = (size / 2) + 12;
       const hitLayer = L.circleMarker([c.lat, c.lng], {
         radius: hitRadius,
-        fillColor: '#6aa5c8',
+        fillColor: '#2563eb',
         fillOpacity: 0.01,
         stroke: false,
         interactive: true,
@@ -639,9 +671,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
       if (pts.length < 2) return;
       const latLngs = pts.map((p: [number, number]) => L.latLng(p[0], p[1]));
       L.polyline(latLngs, {
-        color: '#b56f40',
-        weight: 3.2,
-        opacity: 0.86,
+        color: '#b7791f',
+        weight: 2.8,
+        opacity: 0.72,
         dashArray: '6, 4',
         lineJoin: 'round',
         className: 'heatmap-segment-line',
@@ -654,10 +686,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
         className: 'heatmap-segment-label',
         html: `<div style="
           font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-          font-size:9px;font-weight:bold;color:#9a5d35;
-          background:rgba(255,255,255,0.86);padding:1px 4px;
-          border-radius:2px;white-space:nowrap;pointer-events:none;
-          box-shadow:0 1px 4px rgba(54,45,34,0.16);
+          font-size:9px;font-weight:bold;color:#8a5a12;
+          background:rgba(255,255,255,0.88);padding:2px 5px;
+          border-radius:999px;white-space:nowrap;pointer-events:none;
+          box-shadow:0 1px 6px rgba(54,45,34,0.12);
         ">${escapeHtml(seg.name)}</div>`,
         iconSize: [120, 14],
         iconAnchor: [60, 7],
@@ -667,7 +699,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
   }
 
   function getNearbyActivitiesAtPoint(map: LeafletMap, point: { x: number; y: number }, acts: MapActivity[]) {
-    const thresholdPx = map.getZoom() >= CLUSTER_DETAIL_ZOOM ? 12 : 16;
+    const thresholdPx = map.getZoom() >= CLUSTER_DETAIL_ZOOM ? 18 : 24;
 
     return acts
       .map((activity) => {
@@ -697,23 +729,33 @@ export const RouteMap = React.forwardRef(function RouteMap(
   }
 
   function renderPolylines(map: LeafletMap, L: LeafletModule, acts: MapActivity[]) {
+    closeRouteTooltip(map);
     if (routeLayerGroupRef.current) {
       try { map.removeLayer(routeLayerGroupRef.current); } catch {}
       routeLayerGroupRef.current = null;
     }
     routeLayersRef.current.clear();
 
+    const zoom = map.getZoom();
+    if (zoom < CLUSTER_DETAIL_ZOOM) {
+      if (selectedRouteLayerRef.current) {
+        try { map.removeLayer(selectedRouteLayerRef.current); } catch {}
+        selectedRouteLayerRef.current = null;
+      }
+      setRouteChoice(null);
+      return;
+    }
+
     const allRoutes = buildDisplayRouteGroups(acts);
     const repeatedRoutes = allRoutes.filter(route => route.count > 1);
-    const shouldCondense = map.getZoom() < CLUSTER_DETAIL_ZOOM && repeatedRoutes.length >= 8;
-    const routes = shouldCondense ? repeatedRoutes : allRoutes;
+    const shouldCondense = zoom < SINGLE_ROUTE_DETAIL_ZOOM && allRoutes.length > DENSE_DETAIL_ROUTE_LIMIT && repeatedRoutes.length > 0;
+    const routes = shouldCondense ? repeatedRoutes.slice(-DENSE_DETAIL_ROUTE_LIMIT) : allRoutes;
 
     if (routes.length === 0) {
       renderSelectedRoute(map, L);
       return;
     }
 
-    const zoom = map.getZoom();
     const currentSelected = selectedRef.current;
     const groupLayer = L.layerGroup().addTo(map);
     routeLayerGroupRef.current = groupLayer;
@@ -729,7 +771,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
         const halo = L.polyline(latLngs, {
           color: '#ffffff',
-          weight: weight + (zoom >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+          weight: weight + (zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? 2.6 : 2.2),
           opacity: getRouteHaloOpacity(isDimmed, zoom),
           lineJoin: 'round',
           interactive: false,
@@ -753,20 +795,13 @@ export const RouteMap = React.forwardRef(function RouteMap(
           className: 'heatmap-polyline-hit',
         }).addTo(groupLayer);
 
-        hit.bindTooltip(getRouteGroupLabel(route), {
-          sticky: true,
-          direction: 'top',
-          opacity: 0.92,
-          className: 'route-line-tooltip',
-        });
-
         const restoreRouteStyle = () => {
           const latestSelected = selectedRef.current;
           const latestContainsSelected = latestSelected !== null && route.activityIds.has(latestSelected);
           const latestDimmed = latestSelected !== null && !latestContainsSelected;
           const latestWeight = getRouteDisplayWeight(route.count, map.getZoom());
           halo.setStyle({
-            weight: latestWeight + (map.getZoom() >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+            weight: latestWeight + (map.getZoom() >= SINGLE_ROUTE_DETAIL_ZOOM ? 2.6 : 2.2),
             opacity: getRouteHaloOpacity(latestDimmed, map.getZoom()),
           });
           line.setStyle({
@@ -776,13 +811,25 @@ export const RouteMap = React.forwardRef(function RouteMap(
           });
         };
 
-        hit.on('mouseover', () => {
+        hit.on('mouseover', (e: LeafletMouseEvent) => {
+          closeRouteTooltip(map);
+          const tooltip = L.tooltip({
+            direction: 'top',
+            opacity: 0.92,
+            className: 'route-line-tooltip',
+            offset: L.point(0, -8),
+          })
+            .setLatLng(e.latlng)
+            .setContent(getRouteGroupLabel(route, t('heatmap.runsShort')))
+            .addTo(map);
+          hoverTooltipRef.current = tooltip;
+          hoveredRouteKeyRef.current = route.key;
           halo.setStyle({
             weight: weight + 5.6,
             opacity: 0.94,
           });
           line.setStyle({
-            color: route.count > 1 ? '#0b6b60' : '#0e7490',
+            color: '#1d4ed8',
             weight: weight + 1.6,
             opacity: 0.98,
           });
@@ -790,11 +837,22 @@ export const RouteMap = React.forwardRef(function RouteMap(
           line.bringToFront();
           hit.bringToFront();
         });
-        hit.on('mouseout', restoreRouteStyle);
+        hit.on('mousemove', (e: LeafletMouseEvent) => {
+          if (hoveredRouteKeyRef.current === route.key) {
+            hoverTooltipRef.current?.setLatLng(e.latlng);
+          }
+        });
+        hit.on('mouseout', () => {
+          restoreRouteStyle();
+          if (hoveredRouteKeyRef.current === route.key) {
+            closeRouteTooltip(map);
+          }
+        });
 
         hit.on('click', (e: LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
           if (clusterClickLock.current) return;
+          closeRouteTooltip(map);
           const representative = route.representative;
           const nearbyActivities = uniqueActivities([
             ...route.activities,
@@ -834,6 +892,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
       try { map.removeLayer(selectedRouteLayerRef.current); } catch {}
       selectedRouteLayerRef.current = null;
     }
+
+    if (map.getZoom() < CLUSTER_DETAIL_ZOOM) return;
 
     const currentSelected = selectedRef.current;
     if (currentSelected === null) return;
@@ -878,7 +938,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
           const isDimmed = currentSelected !== null && !containsSelected;
           const weight = getRouteDisplayWeight(bundle.route.count, zoom);
           bundle.halo.setStyle({
-            weight: weight + (zoom >= CLUSTER_DETAIL_ZOOM ? 4.2 : 3.2),
+            weight: weight + (zoom >= SINGLE_ROUTE_DETAIL_ZOOM ? 2.6 : 2.2),
             opacity: getRouteHaloOpacity(isDimmed, zoom),
           });
           bundle.line.setStyle({
@@ -922,7 +982,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
         if (validPts.length < 2) return;
         const b = L.latLngBounds(validPts.map(p => L.latLng(p[0], p[1])));
         try {
-          fitBoundsToView(map, b, { maxZoom: 16, animate: true });
+          fitBoundsToView(map, b, { maxZoom: 16, minZoom: CLUSTER_DETAIL_ZOOM, animate: true });
         } catch (e) {
           console.warn('fitBounds failed for activity', activityId, e);
         }
@@ -944,7 +1004,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
       <div ref={containerRef} className="absolute inset-0" />
       {routeChoice && (
         <div
-          className="absolute z-[1100] w-[260px] max-w-[calc(100vw-24px)] border border-zinc-200 bg-white/95 shadow-xl backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95"
+          className="absolute z-[1100] w-[min(21rem,calc(100vw-24px))] overflow-hidden rounded-2xl border border-white/80 bg-white/94 shadow-[0_20px_54px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/94"
           style={{
             left: `${routeChoice.x + 12}px`,
             top: `${routeChoice.y + 12}px`,
@@ -955,50 +1015,63 @@ export const RouteMap = React.forwardRef(function RouteMap(
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
             <div className="min-w-0">
-              <p className="truncate font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
-                重合路线
+              <p className="truncate font-mono text-xs font-black text-zinc-900 dark:text-zinc-50">
+                {t('heatmap.overlappingRoutes')}
               </p>
               <p className="font-mono text-[10px] text-zinc-500">
-                共 {routeChoice.activities.length} 条附近记录，选择一次活动
+                {t('heatmap.overlapHint', { count: routeChoice.activities.length })}
               </p>
             </div>
             <button
               type="button"
-              className="shrink-0 px-1.5 py-1 font-mono text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="shrink-0 rounded-lg px-2 py-1 font-mono text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
               onClick={() => setRouteChoice(null)}
-              aria-label="关闭"
+              aria-label={t('heatmap.close')}
             >
               ×
             </button>
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
             {choiceActivities.map((activity) => (
-              <button
-                type="button"
+              <div
                 key={activity.id}
-                className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                onClick={() => {
-                  selectedRef.current = activity.id;
-                  setRouteChoice(null);
-                  onSelect(activity.id);
-                  onShowPopup(activity);
-                }}
+                className="group flex items-center transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/30"
               >
-                <span
-                  className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: activity.color || ROUTE_SINGLE_COLOR }}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
-                    {activity.name}
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2.5 text-left"
+                  onClick={() => {
+                    selectedRef.current = activity.id;
+                    setRouteChoice(null);
+                    onSelect(activity.id);
+                    onShowPopup(activity);
+                  }}
+                >
+                  <span
+                    className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: activity.color || ROUTE_BASE_COLOR }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
+                      {activity.name}
+                    </span>
+                    <span className="mt-0.5 block font-mono text-[10px] text-zinc-500">
+                      {formatChoiceDate(activity.start_date, i18n.language)} · {formatChoiceDistance(activity.distance)}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block font-mono text-[10px] text-zinc-500">
-                    {formatChoiceDate(activity.start_date)} · {formatChoiceDistance(activity.distance)}
-                  </span>
-                </span>
-              </button>
+                </button>
+                <Link
+                  href={`/activities/${activity.id}`}
+                  className="mr-2 inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 font-mono text-[10px] font-bold text-blue-600 transition-colors hover:bg-white dark:text-blue-300 dark:hover:bg-zinc-900"
+                  aria-label={`${activity.name} ${t('heatmap.viewDetails')}`}
+                  title={t('heatmap.viewDetails')}
+                >
+                  {t('heatmap.viewDetails')}
+                  <ArrowUpRight size={12} />
+                </Link>
+              </div>
             ))}
           </div>
         </div>

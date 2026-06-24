@@ -250,7 +250,7 @@ export default function ActivityDetailPage() {
     if (isGuest) {
       const guestActivity = getGuestActivity(activityId);
       if (!guestActivity) {
-        setError('示例活动不存在');
+        setError(t('guest.missingActivity'));
         setLoading(false);
         setRefreshing(false);
         return;
@@ -344,7 +344,7 @@ export default function ActivityDetailPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isGuest, user?.accessToken, activityId, handleAuthError]);
+  }, [isGuest, user?.accessToken, activityId, handleAuthError, t]);
 
   useEffect(() => {
     if (authLoading) return;
