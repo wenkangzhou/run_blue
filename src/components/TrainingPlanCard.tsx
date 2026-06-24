@@ -1,15 +1,22 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import type { TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
+import type { SessionExecution, WeekExecution } from '@/lib/trainingPlanExecution';
 import {
   Activity,
+  CheckCircle2,
+  CircleDashed,
+  Clock3,
+  ExternalLink,
   Flag,
   Footprints,
   Gauge,
   Moon,
   Mountain,
+  XCircle,
   Zap,
 } from 'lucide-react';
 
@@ -46,6 +53,7 @@ const TYPE_ACCENT: Record<TrainingSession['type'], string> = {
 
 interface TrainingPlanCardProps {
   week: WeeklyPlan;
+  execution?: WeekExecution;
   isCurrent?: boolean;
   defaultExpanded?: boolean;
 }
@@ -111,7 +119,7 @@ function GuideItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingPlanCardProps) {
+export function TrainingPlanCard({ week, execution, isCurrent, defaultExpanded }: TrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
   const [expanded, setExpanded] = React.useState(Boolean(defaultExpanded || isCurrent));
@@ -128,6 +136,10 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
     if (!best) return session;
     return session.distance > best.distance ? session : best;
   }, null);
+  const executionByDay = React.useMemo(
+    () => new Map(execution?.sessions.map((session) => [session.day, session]) || []),
+    [execution]
+  );
 
   const phaseLabel: Record<WeeklyPlan['phase'], string> = {
     base: t('trainingPlan.phaseBase', '基础期'),
@@ -203,6 +215,11 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
           <div className="shrink-0 text-right">
             <p className="font-mono text-lg font-bold text-zinc-950 dark:text-zinc-50">{week.totalDistance}</p>
             <p className="font-mono text-[10px] text-zinc-500">km</p>
+            {execution && execution.dueCount > 0 && (
+              <p className="mt-1 font-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-300">
+                {execution.completedCount}/{execution.dueCount} {t('trainingPlan.doneShort', '完成')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -257,6 +274,7 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
               const guides = getSessionGuides(session.description);
               const description = guides.main || getFirstLine(session.description);
               const downgrade = getDowngradeRule(session.type, isZh);
+              const sessionExecution = executionByDay.get(day);
 
               return (
                 <div
@@ -279,6 +297,7 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
                             {session.paceZone ? ` · ${session.paceZone}` : ''}
                           </p>
                         )}
+                        {sessionExecution && <SessionStatus execution={sessionExecution} />}
                       </div>
                       {description && (
                         <p className="mt-1 whitespace-pre-line font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
@@ -293,6 +312,15 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
                           <GuideItem label={isZh ? '体感' : 'Feel'} value={guides.feel || guides.tip} />
                           <GuideItem label={isZh ? '降级' : 'Adjust'} value={downgrade} />
                         </div>
+                      )}
+                      {sessionExecution?.activity && (
+                        <Link
+                          href={`/activities/${sessionExecution.activity.id}`}
+                          className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
+                        >
+                          {t('trainingPlan.viewMatchedActivity', '查看匹配活动')}
+                          <ExternalLink size={11} />
+                        </Link>
                       )}
                     </div>
                   </div>
@@ -309,5 +337,58 @@ export function TrainingPlanCard({ week, isCurrent, defaultExpanded }: TrainingP
         </div>
       )}
     </section>
+  );
+}
+
+function SessionStatus({ execution }: { execution: SessionExecution }) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language === 'zh';
+  const dateLabel = new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+    month: 'numeric',
+    day: 'numeric',
+  }).format(execution.date);
+  const shifted = execution.dateDelta
+    ? isZh
+      ? ` · 调整${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}天`
+      : ` · ${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}d`
+    : '';
+
+  if (execution.status === 'rest') {
+    return (
+      <span className="inline-flex items-center gap-1 font-mono text-[9px] text-zinc-400">
+        <Clock3 size={10} />
+        {dateLabel}
+      </span>
+    );
+  }
+
+  const config = {
+    completed: {
+      icon: <CheckCircle2 size={10} />,
+      label: t('trainingPlan.sessionCompleted'),
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+    },
+    partial: {
+      icon: <CircleDashed size={10} />,
+      label: t('trainingPlan.sessionPartial'),
+      className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
+    },
+    missed: {
+      icon: <XCircle size={10} />,
+      label: t('trainingPlan.sessionMissed'),
+      className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+    },
+    upcoming: {
+      icon: <Clock3 size={10} />,
+      label: t('trainingPlan.sessionUpcoming'),
+      className: 'border-zinc-200 bg-white/70 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400',
+    },
+  }[execution.status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] font-bold ${config.className}`}>
+      {config.icon}
+      {dateLabel} · {config.label}{shifted}
+    </span>
   );
 }

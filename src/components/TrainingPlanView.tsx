@@ -3,6 +3,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TrainingPlan, TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
+import type { StravaActivity } from '@/types';
+import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
 import {
   calculatePaceZones,
   getDistanceLabel,
@@ -13,6 +15,8 @@ import { TrainingPlanCard } from './TrainingPlanCard';
 import { PixelButton } from '@/components/ui';
 import {
   CalendarDays,
+  CheckCircle2,
+  CircleDashed,
   Flag,
   Gauge,
   LineChart,
@@ -22,10 +26,12 @@ import {
   Target,
   Trash2,
   TrendingUp,
+  XCircle,
 } from 'lucide-react';
 
 interface TrainingPlanViewProps {
   plan: TrainingPlan;
+  activities?: StravaActivity[];
   onRegenerate?: () => void;
   onDelete?: () => void;
 }
@@ -209,7 +215,7 @@ function ClassSchedulePreview({
   );
 }
 
-export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanViewProps) {
+export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete }: TrainingPlanViewProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
   const distanceLabel = isZh
@@ -222,7 +228,14 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
   ), plan.weeks[0]);
   const averageWeeklyDistance = Math.round(totalDistance / Math.max(1, plan.weeks.length));
   const zones = plan.currentAbility.pb5k ? calculatePaceZones(plan.currentAbility.pb5k) : null;
-  const { currentWeek, daysToRace } = getPlanTiming(plan);
+  const execution = React.useMemo(
+    () => calculateTrainingPlanExecution(plan, activities),
+    [plan, activities]
+  );
+  const nextSession = execution.sessions.find((session) => session.status === 'upcoming');
+  const timing = getPlanTiming(plan);
+  const currentWeek = execution.currentWeek ?? timing.currentWeek;
+  const daysToRace = timing.daysToRace;
   const currentWeekPlan = currentWeek
     ? plan.weeks.find((week) => week.week === currentWeek)
     : plan.weeks[0];
@@ -346,6 +359,69 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="border-2 border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={17} className="text-emerald-600 dark:text-emerald-300" />
+              <h3 className="font-pixel text-sm font-bold">
+                {t('trainingPlan.executionProgress', '计划执行')}
+              </h3>
+            </div>
+            <p className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+              {t('trainingPlan.executionProgressHint', '自动匹配计划日期前后一天内的 Strava 跑步记录')}
+            </p>
+          </div>
+          <p className="font-mono text-2xl font-black text-zinc-950 dark:text-zinc-50">
+            {execution.dueCount > 0
+              ? `${execution.completionRate}%`
+              : t('trainingPlan.notStarted')}
+          </p>
+        </div>
+
+        <div className="mt-4 h-2 overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+          <div
+            className="h-full bg-emerald-500 transition-[width]"
+            style={{ width: `${execution.completionRate}%` }}
+          />
+        </div>
+        {execution.dueCount > 0 ? (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <ExecutionMetric
+              icon={<CheckCircle2 size={13} className="text-emerald-600" />}
+              label={t('trainingPlan.completedSessions', '已完成')}
+              value={`${execution.completedCount}/${execution.dueCount}`}
+            />
+            <ExecutionMetric
+              icon={<CircleDashed size={13} className="text-amber-600" />}
+              label={t('trainingPlan.partialSessions', '部分完成')}
+              value={String(execution.partialCount)}
+            />
+            <ExecutionMetric
+              icon={<XCircle size={13} className="text-red-500" />}
+              label={t('trainingPlan.missedSessions', '未完成')}
+              value={String(execution.missedCount)}
+            />
+            <ExecutionMetric
+              icon={<TrendingUp size={13} className="text-blue-600" />}
+              label={t('trainingPlan.actualVsPlanned', '实际 / 计划')}
+              value={`${Math.round(execution.actualDueDistance)}/${Math.round(execution.plannedDueDistance)}km`}
+            />
+          </div>
+        ) : (
+          <div className="mt-4 border border-zinc-100 bg-zinc-50 px-3 py-3 font-mono text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
+            {nextSession
+              ? t('trainingPlan.firstSessionOn', {
+                  date: new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  }).format(nextSession.date),
+                })
+              : t('trainingPlan.noSessionsDue')}
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_0.8fr]">
@@ -493,11 +569,32 @@ export function TrainingPlanView({ plan, onRegenerate, onDelete }: TrainingPlanV
           <TrainingPlanCard
             key={week.week}
             week={week}
+            execution={execution.weeks.find((item) => item.week === week.week)}
             isCurrent={currentWeek === week.week}
             defaultExpanded={week.week === 1 && !currentWeek}
           />
         ))}
       </section>
+    </div>
+  );
+}
+
+function ExecutionMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="border border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+      <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-zinc-400">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="mt-1.5 truncate font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
     </div>
   );
 }

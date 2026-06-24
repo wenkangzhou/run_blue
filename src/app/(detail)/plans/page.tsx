@@ -15,10 +15,12 @@ import { getActivityDate } from '@/lib/dates';
 import {
   deleteGuestTrainingPlan,
   generateGuestTrainingPlan,
+  getGuestActivities,
   getGuestTrainingPlans,
   isGuestUser,
   saveGuestTrainingPlan,
 } from '@/lib/guestMode';
+import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
 import {
   getDistanceLabel,
   getDistanceLabelEn,
@@ -93,6 +95,14 @@ export default function TrainingPlansListPage() {
   const [hasPB, setHasPB] = useState(false);
   const [weeklyVolume, setWeeklyVolume] = useState(30);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const sourceActivities = React.useMemo(
+    () => (isGuest ? getGuestActivities() : activities),
+    [activities, isGuest]
+  );
+  const planExecutions = React.useMemo(
+    () => new Map(plans.map((plan) => [plan.id, calculateTrainingPlanExecution(plan, sourceActivities)])),
+    [plans, sourceActivities]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -125,10 +135,10 @@ export default function TrainingPlansListPage() {
     const profile = getUserProfile();
     setHasPB(isGuest || !!profile?.pbs?.['5k'] && profile.pbs['5k'] > 0);
 
-    if (activities.length > 0) {
+    if (sourceActivities.length > 0) {
       const now = new Date();
       const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
-      const recentRuns = activities.filter(
+      const recentRuns = sourceActivities.filter(
         (a) => a.type === 'Run' && getActivityDate(a) >= fourWeeksAgo
       );
       const totalDist = recentRuns.reduce((sum, a) => sum + a.distance, 0);
@@ -138,7 +148,7 @@ export default function TrainingPlansListPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAuthenticated, isGuest, router, activities, i18n.language]);
+  }, [authLoading, isAuthenticated, isGuest, router, sourceActivities, i18n.language]);
 
   if (authLoading || !isAuthenticated) {
     return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
@@ -336,6 +346,7 @@ export default function TrainingPlansListPage() {
               const targetPace = plan.goal.targetTimeSeconds / DISTANCE_KM[plan.goal.distance];
               const daysToRace = getPlanDaysToRace(plan);
               const phasePreview = getPlanPhasePreview(plan);
+              const execution = planExecutions.get(plan.id);
 
               return (
                 <article
@@ -412,6 +423,38 @@ export default function TrainingPlansListPage() {
                         />
                       ))}
                     </div>
+                    {execution && (
+                      <div className="mt-3 border border-zinc-100 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] text-zinc-500">
+                              {t('trainingPlan.executionProgress')}
+                            </p>
+                            <p className="mt-0.5 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+                              {execution.dueCount > 0
+                                ? t('trainingPlan.executionSummary', {
+                                    completed: execution.completedCount,
+                                    due: execution.dueCount,
+                                    actual: Math.round(execution.actualDueDistance),
+                                    planned: Math.round(execution.plannedDueDistance),
+                                  })
+                                : t('trainingPlan.noSessionsDue')}
+                            </p>
+                          </div>
+                          <p className="shrink-0 font-mono text-lg font-black text-zinc-950 dark:text-zinc-50">
+                            {execution.dueCount > 0
+                              ? `${execution.completionRate}%`
+                              : t('trainingPlan.notStarted')}
+                          </p>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+                          <div
+                            className="h-full bg-emerald-500"
+                            style={{ width: `${execution.completionRate}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-3 flex flex-wrap gap-3 font-mono text-[10px] text-zinc-500">
                       <span className="inline-flex items-center gap-1">
                         <Calendar size={11} />

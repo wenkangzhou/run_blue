@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
+import { useActivitiesStore } from '@/store/activities';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { TrainingPlanView } from '@/components/TrainingPlanView';
 import { getStoredTrainingPlan, deleteTrainingPlan } from '@/lib/trainingPlan';
-import { deleteGuestTrainingPlan, getGuestTrainingPlan, isGuestUser } from '@/lib/guestMode';
+import { deleteGuestTrainingPlan, getGuestActivities, getGuestTrainingPlan, isGuestUser } from '@/lib/guestMode';
 import type { TrainingPlan } from '@/lib/trainingPlan';
 import { ChevronLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -18,6 +19,11 @@ export default function TrainingPlanDetailPage() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const isGuest = isGuestUser(user);
   const { t, i18n } = useTranslation();
+  const storedActivities = useActivitiesStore((state) => state.activities);
+  const activities = React.useMemo(
+    () => (isGuest ? getGuestActivities() : storedActivities),
+    [isGuest, storedActivities]
+  );
 
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -139,7 +145,7 @@ export default function TrainingPlanDetailPage() {
 
       {/* Content */}
       <div className="container mx-auto px-3 py-5 max-w-3xl">
-        <TrainingPlanView plan={plan} />
+        <TrainingPlanView plan={plan} activities={activities} />
       </div>
     </div>
   );
