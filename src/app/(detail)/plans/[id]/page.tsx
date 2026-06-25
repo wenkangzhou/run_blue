@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useActivitiesStore } from '@/store/activities';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { TrainingPlanView } from '@/components/TrainingPlanView';
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider';
 import { getStoredTrainingPlan, deleteTrainingPlan } from '@/lib/trainingPlan';
 import { deleteGuestTrainingPlan, getGuestActivities, getGuestTrainingPlan, isGuestUser } from '@/lib/guestMode';
 import type { TrainingPlan } from '@/lib/trainingPlan';
@@ -19,6 +20,7 @@ export default function TrainingPlanDetailPage() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const isGuest = isGuestUser(user);
   const { t, i18n } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const storedActivities = useActivitiesStore((state) => state.activities);
   const activities = React.useMemo(
     () => (isGuest ? getGuestActivities() : storedActivities),
@@ -110,14 +112,20 @@ export default function TrainingPlanDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      if (isGuest) {
-        deleteGuestTrainingPlan(plan.id);
-      } else {
-        await deleteTrainingPlan(plan.id);
-      }
-      router.push('/plans');
+    const confirmed = await confirmDialog({
+      title: t('trainingPlan.deletePlanTitle'),
+      message: t('trainingPlan.deleteConfirm'),
+      confirmLabel: t('common.delete'),
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    if (isGuest) {
+      deleteGuestTrainingPlan(plan.id);
+    } else {
+      await deleteTrainingPlan(plan.id);
     }
+    router.push('/plans');
   };
 
   return (

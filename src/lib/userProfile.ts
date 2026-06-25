@@ -100,7 +100,10 @@ export function clearUserProfile(): void {
  * Convert time string (mm:ss or hh:mm:ss) to seconds
  */
 export function parseTimeToSeconds(input: string): number | null {
-  const trimmed = input.trim();
+  const trimmed = input
+    .trim()
+    .replace(/[：﹕]/g, ':')
+    .replace(/\s+/g, '');
   if (!trimmed) return null;
 
   const rawParts = trimmed.split(':');
@@ -132,9 +135,7 @@ export function formatSecondsToTime(totalSeconds: number | null | undefined): st
   const secs = totalSeconds % 60;
 
   if (hrs > 0) {
-    return secs === 0
-      ? `${hrs}:${mins.toString().padStart(2, '0')}`
-      : `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }

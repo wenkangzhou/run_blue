@@ -37,6 +37,7 @@ const {
   getStoredTrainingPlan,
   getStoredTrainingPlans,
   estimatePlanWeeks,
+  getRecommendedTargetTime,
   saveTrainingPlan,
   TrainingPlanInputError,
 } = require(path.join(tempDir, 'trainingPlan.js'));
@@ -86,6 +87,22 @@ test('estimates default plan weeks by race distance', () => {
   assert.equal(estimatePlanWeeks('10k'), 10);
   assert.equal(estimatePlanWeeks('21k'), 12);
   assert.equal(estimatePlanWeeks('42k'), 16);
+});
+
+test('recommends target time from exact or nearest available PB', () => {
+  const exact = getRecommendedTargetTime({ '10k': 2700 }, '10k');
+  assert.deepEqual(exact, {
+    seconds: 2700,
+    sourceDistance: '10k',
+    sourceSeconds: 2700,
+    estimated: false,
+  });
+
+  const estimated = getRecommendedTargetTime({ '5k': 1275 }, '10k');
+  assert.equal(estimated.sourceDistance, '5k');
+  assert.equal(estimated.sourceSeconds, 1275);
+  assert.equal(estimated.estimated, true);
+  assert.equal(estimated.seconds, 2658);
 });
 
 test('stores training plans through localStorage when IndexedDB is unavailable', async () => {

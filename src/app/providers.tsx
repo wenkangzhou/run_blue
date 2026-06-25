@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '@/i18n';
 import { ScrollRestoration } from '@/components/ScrollRestoration';
+import { ConfirmDialogProvider } from '@/components/ConfirmDialogProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -21,10 +22,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <I18nextProvider i18n={i18n}>
-        <Suspense fallback={null}>
-          <ScrollRestoration />
-        </Suspense>
-        {mounted ? children : <div style={{ visibility: 'hidden' }}>{children}</div>}
+        <ConfirmDialogProvider>
+          <Suspense fallback={null}>
+            <ScrollRestoration />
+          </Suspense>
+          {mounted ? children : <div style={{ visibility: 'hidden' }}>{children}</div>}
+        </ConfirmDialogProvider>
       </I18nextProvider>
     </ThemeProvider>
   );

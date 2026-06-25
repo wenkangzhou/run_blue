@@ -16,6 +16,7 @@ import {
   Gauge,
   Moon,
   Mountain,
+  Settings2,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -56,6 +57,7 @@ interface TrainingPlanCardProps {
   execution?: WeekExecution;
   isCurrent?: boolean;
   defaultExpanded?: boolean;
+  onAdjustSession?: (execution: SessionExecution) => void;
 }
 
 function getFirstLine(text: string) {
@@ -119,7 +121,13 @@ function GuideItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function TrainingPlanCard({ week, execution, isCurrent, defaultExpanded }: TrainingPlanCardProps) {
+export function TrainingPlanCard({
+  week,
+  execution,
+  isCurrent,
+  defaultExpanded,
+  onAdjustSession,
+}: TrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
   const [expanded, setExpanded] = React.useState(Boolean(defaultExpanded || isCurrent));
@@ -314,13 +322,30 @@ export function TrainingPlanCard({ week, execution, isCurrent, defaultExpanded }
                         </div>
                       )}
                       {sessionExecution?.activity && (
-                        <Link
-                          href={`/activities/${sessionExecution.activity.id}`}
-                          className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <Link
+                            href={`/activities/${sessionExecution.activity.id}`}
+                            className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
+                          >
+                            {t('trainingPlan.viewMatchedActivity', '查看匹配活动')}
+                            <ExternalLink size={11} />
+                          </Link>
+                          {sessionExecution.matchSource === 'manual' && (
+                            <span className="font-mono text-[9px] text-zinc-400">
+                              {t('trainingPlan.manualMatch')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {session.type !== 'rest' && sessionExecution && onAdjustSession && (
+                        <button
+                          type="button"
+                          onClick={() => onAdjustSession(sessionExecution)}
+                          className="mt-2 inline-flex items-center gap-1 border border-zinc-200 bg-white px-2 py-1 font-mono text-[10px] font-bold text-zinc-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300"
                         >
-                          {t('trainingPlan.viewMatchedActivity', '查看匹配活动')}
-                          <ExternalLink size={11} />
-                        </Link>
+                          <Settings2 size={11} />
+                          {t('trainingPlan.adjustSession')}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -352,6 +377,11 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
       ? ` · 调整${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}天`
       : ` · ${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}d`
     : '';
+  const deferred = execution.dateOffsetDays
+    ? isZh
+      ? ` · 顺延${execution.dateOffsetDays}天`
+      : ` · deferred ${execution.dateOffsetDays}d`
+    : '';
 
   if (execution.status === 'rest') {
     return (
@@ -378,6 +408,11 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
       label: t('trainingPlan.sessionMissed'),
       className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
     },
+    skipped: {
+      icon: <CircleDashed size={10} />,
+      label: t('trainingPlan.sessionSkipped'),
+      className: 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300',
+    },
     upcoming: {
       icon: <Clock3 size={10} />,
       label: t('trainingPlan.sessionUpcoming'),
@@ -388,7 +423,7 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
   return (
     <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] font-bold ${config.className}`}>
       {config.icon}
-      {dateLabel} · {config.label}{shifted}
+      {dateLabel} · {config.label}{deferred}{shifted}
     </span>
   );
 }

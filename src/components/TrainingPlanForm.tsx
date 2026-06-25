@@ -4,8 +4,10 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from '@/components/ui';
 import type { RaceDistance } from '@/lib/trainingPlan';
-import { estimatePlanWeeks } from '@/lib/trainingPlan';
-import { AlertCircle, CalendarDays, Clock3, Flag, Target, TimerReset } from 'lucide-react';
+import { estimatePlanWeeks, getRecommendedTargetTime } from '@/lib/trainingPlan';
+import type { UserProfilePBs } from '@/lib/userProfile';
+import { formatSecondsToTime, parseTimeToSeconds } from '@/lib/userProfile';
+import { AlertCircle, CalendarDays, Clock3, Flag, RotateCcw, Sparkles, Target, TimerReset } from 'lucide-react';
 
 interface TrainingPlanFormProps {
   defaultDistance?: RaceDistance;
@@ -13,6 +15,7 @@ interface TrainingPlanFormProps {
   defaultWeeks?: number;
   defaultRaceDate?: string;
   hasPB: boolean;
+  profilePBs?: Partial<UserProfilePBs> | null;
   onSubmit: (data: {
     distance: RaceDistance;
     targetTime: string;
@@ -35,6 +38,7 @@ export function TrainingPlanForm({
   defaultWeeks,
   defaultRaceDate = '',
   hasPB,
+  profilePBs,
   onSubmit,
   isLoading,
 }: TrainingPlanFormProps) {
@@ -44,16 +48,47 @@ export function TrainingPlanForm({
   const [targetTime, setTargetTime] = React.useState(defaultTargetTime);
   const [weeks, setWeeks] = React.useState(defaultWeeks ?? estimatePlanWeeks(defaultDistance));
   const [raceDate, setRaceDate] = React.useState(defaultRaceDate);
+  const [targetTimeMode, setTargetTimeMode] = React.useState<'auto' | 'manual'>(
+    defaultTargetTime ? 'manual' : 'auto'
+  );
+  const [targetTimeError, setTargetTimeError] = React.useState('');
 
-  React.useEffect(() => {
-    setWeeks(estimatePlanWeeks(distance));
-  }, [distance]);
+  const recommendation = React.useMemo(
+    () => getRecommendedTargetTime(profilePBs, distance),
+    [distance, profilePBs]
+  );
 
   const selectedDistance = DISTANCES.find((item) => item.value === distance) ?? DISTANCES[1];
   const placeholder = distance === '5k' || distance === '10k' ? '42:30' : '1:45:00';
 
+  React.useEffect(() => {
+    if (targetTimeMode === 'auto' && recommendation) {
+      setTargetTime(formatSecondsToTime(recommendation.seconds));
+      setTargetTimeError('');
+    }
+  }, [recommendation, targetTimeMode]);
+
+  const handleDistanceChange = (value: RaceDistance) => {
+    setDistance(value);
+    setWeeks(estimatePlanWeeks(value));
+    setTargetTimeMode('auto');
+    setTargetTimeError('');
+  };
+
+  const applyRecommendation = () => {
+    if (!recommendation) return;
+    setTargetTime(formatSecondsToTime(recommendation.seconds));
+    setTargetTimeMode('auto');
+    setTargetTimeError('');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!parseTimeToSeconds(targetTime)) {
+      setTargetTimeError(t('trainingPlan.invalidTime'));
+      return;
+    }
+    setTargetTimeError('');
     onSubmit({
       distance,
       targetTime,
@@ -94,7 +129,7 @@ export function TrainingPlanForm({
             <button
               key={item.value}
               type="button"
-              onClick={() => setDistance(item.value)}
+              onClick={() => handleDistanceChange(item.value)}
               className={[
                 'min-h-20 border-2 px-3 py-3 text-left transition-colors',
                 distance === item.value
@@ -120,10 +155,19 @@ export function TrainingPlanForm({
       </section>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block border-2 border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+        <label
+          className={[
+            'block border-2 bg-white p-3 dark:bg-zinc-950',
+            targetTimeError
+              ? 'border-red-400 dark:border-red-700'
+              : 'border-zinc-200 dark:border-zinc-800',
+          ].join(' ')}
+        >
           <div className="mb-2 flex items-center gap-2">
             <Clock3 size={15} className="text-orange-600 dark:text-orange-300" />
-            <span className="font-mono text-xs font-bold uppercase">{t('trainingPlan.targetTime', '目标时间')}</span>
+            <span className="font-mono text-xs font-bold uppercase">
+              {t('trainingPlan.targetTimeRequired')}
+            </span>
           </div>
           <input
             type="text"
@@ -131,11 +175,44 @@ export function TrainingPlanForm({
             required
             placeholder={placeholder}
             value={targetTime}
-            onChange={(e) => setTargetTime(e.target.value)}
+            onChange={(e) => {
+              setTargetTime(e.target.value);
+              setTargetTimeMode('manual');
+              setTargetTimeError('');
+            }}
+            aria-invalid={Boolean(targetTimeError)}
             className="w-full border-0 bg-transparent font-mono text-2xl font-bold text-zinc-950 outline-none placeholder:text-zinc-300 dark:text-zinc-50 dark:placeholder:text-zinc-700"
           />
-          <p className="mt-2 font-mono text-[10px] text-zinc-500">
-            {t('trainingPlan.targetTimeHint', '支持 mm:ss 或 hh:mm:ss')}
+          {recommendation && (
+            <div className="mt-2 flex items-start justify-between gap-2 border-t border-zinc-100 pt-2 dark:border-zinc-800">
+              <p className="flex min-w-0 items-start gap-1.5 font-mono text-[10px] leading-relaxed text-blue-600 dark:text-blue-300">
+                <Sparkles size={12} className="mt-0.5 shrink-0" />
+                <span>
+                  {recommendation.estimated
+                    ? t('trainingPlan.targetTimeEstimated', {
+                        source: displayDistanceLabel(recommendation.sourceDistance),
+                        time: formatSecondsToTime(recommendation.sourceSeconds),
+                      })
+                    : t('trainingPlan.targetTimeFromPB')}
+                </span>
+              </p>
+              {targetTimeMode === 'manual' && (
+                <button
+                  type="button"
+                  onClick={applyRecommendation}
+                  className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
+                >
+                  <RotateCcw size={11} />
+                  {t('trainingPlan.useRecommendedTime')}
+                </button>
+              )}
+            </div>
+          )}
+          <p className={[
+            'mt-2 font-mono text-[10px]',
+            targetTimeError ? 'text-red-600 dark:text-red-300' : 'text-zinc-500',
+          ].join(' ')}>
+            {targetTimeError || t('trainingPlan.targetTimeHint')}
           </p>
         </label>
 
@@ -152,7 +229,7 @@ export function TrainingPlanForm({
             style={{ WebkitAppearance: 'none' }}
           />
           <p className="mt-2 font-mono text-[10px] text-zinc-500">
-            {t('trainingPlan.raceDateHint', '设置后会自动标记当前周')}
+            {t('trainingPlan.raceDateHint')}
           </p>
         </label>
       </section>

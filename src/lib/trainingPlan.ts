@@ -34,6 +34,14 @@ export interface TrainingSession {
   paceZone?: string;
 }
 
+export interface TrainingSessionExecutionOverride {
+  matchMode?: 'manual' | 'none';
+  activityId?: number;
+  skipped?: boolean;
+  dateOffsetDays?: number;
+  updatedAt: string;
+}
+
 export interface TrainingPlan {
   id: string;
   createdAt: string;
@@ -52,6 +60,7 @@ export interface TrainingPlan {
     abilityGroup?: AbilityGroup;
   };
   weeks: WeeklyPlan[];
+  executionOverrides?: Record<string, TrainingSessionExecutionOverride>;
 }
 
 export class TrainingPlanInputError extends Error {
@@ -329,6 +338,56 @@ interface GoalAssessment {
 
 function getRaceDistanceKm(distance: RaceDistance): number {
   return distance === '5k' ? 5 : distance === '10k' ? 10 : distance === '21k' ? 21.0975 : 42.195;
+}
+
+export interface RecommendedTargetTime {
+  seconds: number;
+  sourceDistance: RaceDistance;
+  sourceSeconds: number;
+  estimated: boolean;
+}
+
+export function getRecommendedTargetTime(
+  pbs: Partial<Record<RaceDistance, number | null>> | null | undefined,
+  targetDistance: RaceDistance
+): RecommendedTargetTime | null {
+  if (!pbs) return null;
+
+  const exact = pbs[targetDistance];
+  if (typeof exact === 'number' && Number.isFinite(exact) && exact > 0) {
+    return {
+      seconds: Math.round(exact),
+      sourceDistance: targetDistance,
+      sourceSeconds: Math.round(exact),
+      estimated: false,
+    };
+  }
+
+  const targetKm = getRaceDistanceKm(targetDistance);
+  const candidates = (Object.keys(pbs) as RaceDistance[])
+    .map((distance) => ({
+      distance,
+      seconds: pbs[distance],
+      km: getRaceDistanceKm(distance),
+    }))
+    .filter((candidate): candidate is { distance: RaceDistance; seconds: number; km: number } => (
+      typeof candidate.seconds === 'number'
+      && Number.isFinite(candidate.seconds)
+      && candidate.seconds > 0
+    ))
+    .sort((left, right) => (
+      Math.abs(Math.log(targetKm / left.km)) - Math.abs(Math.log(targetKm / right.km))
+    ));
+
+  const source = candidates[0];
+  if (!source) return null;
+
+  return {
+    seconds: Math.round(source.seconds * Math.pow(targetKm / source.km, 1.06)),
+    sourceDistance: source.distance,
+    sourceSeconds: Math.round(source.seconds),
+    estimated: true,
+  };
 }
 
 function getRaceDistanceName(distance: RaceDistance, en: boolean): string {

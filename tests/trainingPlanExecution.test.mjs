@@ -38,6 +38,7 @@ test.after(() => {
 
 const {
   calculateTrainingPlanExecution,
+  getNextWeekAdjustment,
   getTrainingPlanStartDate,
 } = require(path.join(tempDir, 'trainingPlanExecution.cjs'));
 
@@ -142,4 +143,60 @@ test('marks short runs partial and past unmatched sessions missed', () => {
   assert.equal(execution.sessions.find((session) => session.key === '2-6').status, 'upcoming');
   assert.equal(execution.partialCount, 1);
   assert.equal(execution.missedCount, 1);
+});
+
+test('honors manual matches, explicit unmatched state, skips, and deferred dates', () => {
+  const plan = makePlan({
+    executionOverrides: {
+      '1-1': {
+        matchMode: 'manual',
+        activityId: 2,
+        updatedAt: '2026-06-10T00:00:00.000Z',
+      },
+      '1-6': {
+        skipped: true,
+        updatedAt: '2026-06-10T00:00:00.000Z',
+      },
+      '2-2': {
+        matchMode: 'none',
+        dateOffsetDays: 2,
+        updatedAt: '2026-06-10T00:00:00.000Z',
+      },
+    },
+  });
+  const execution = calculateTrainingPlanExecution(
+    plan,
+    [
+      makeActivity(1, '2026-06-02', 5000),
+      makeActivity(2, '2026-06-05', 5000),
+      makeActivity(3, '2026-06-10', 4000),
+    ],
+    new Date('2026-06-12T12:00:00')
+  );
+
+  const manual = execution.sessions.find((session) => session.key === '1-1');
+  const skipped = execution.sessions.find((session) => session.key === '1-6');
+  const deferred = execution.sessions.find((session) => session.key === '2-2');
+
+  assert.equal(manual.activity.id, 2);
+  assert.equal(manual.matchSource, 'manual');
+  assert.equal(skipped.status, 'skipped');
+  assert.equal(deferred.activity, undefined);
+  assert.equal(deferred.status, 'upcoming');
+  assert.equal(deferred.dateOffsetDays, 2);
+  assert.equal(execution.skippedCount, 1);
+});
+
+test('suggests reducing or recovering next week based on execution', () => {
+  const plan = makePlan();
+  const execution = calculateTrainingPlanExecution(
+    plan,
+    [makeActivity(1, '2026-06-02', 2000)],
+    new Date('2026-06-10T12:00:00')
+  );
+  const adjustment = getNextWeekAdjustment(plan, execution);
+
+  assert.equal(adjustment.type, 'recover');
+  assert.equal(adjustment.multiplier, 0.8);
+  assert.equal(adjustment.referenceWeek, 2);
 });

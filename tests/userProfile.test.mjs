@@ -143,6 +143,8 @@ test('parseTimeToSeconds accepts valid race time formats and rejects overflow', 
   assert.equal(parseTimeToSeconds('19:58'), 1198);
   assert.equal(parseTimeToSeconds('1:29:30'), 5370);
   assert.equal(parseTimeToSeconds(' 0:59 '), 59);
+  assert.equal(parseTimeToSeconds('40: 00'), 2400);
+  assert.equal(parseTimeToSeconds('1：45：00'), 6300);
 
   assert.equal(parseTimeToSeconds('1:60'), null);
   assert.equal(parseTimeToSeconds('1:60:00'), null);
@@ -155,7 +157,7 @@ test('formatSecondsToTime keeps compact display formatting', () => {
   assert.equal(formatSecondsToTime(null), '');
   assert.equal(formatSecondsToTime(0), '');
   assert.equal(formatSecondsToTime(1198), '19:58');
-  assert.equal(formatSecondsToTime(5400), '1:30');
+  assert.equal(formatSecondsToTime(5400), '1:30:00');
   assert.equal(formatSecondsToTime(5432), '1:30:32');
 });
 

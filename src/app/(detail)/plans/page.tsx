@@ -10,7 +10,8 @@ import { TrainingPlanForm } from '@/components/TrainingPlanForm';
 import { GeneratingOverlay } from '@/components/GeneratingOverlay';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { PixelButton } from '@/components/ui';
-import { getUserProfile, parseTimeToSeconds } from '@/lib/userProfile';
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider';
+import { getUserProfile, parseTimeToSeconds, type UserProfilePBs } from '@/lib/userProfile';
 import { getActivityDate } from '@/lib/dates';
 import {
   deleteGuestTrainingPlan,
@@ -25,6 +26,7 @@ import {
   getDistanceLabel,
   getDistanceLabelEn,
   getStoredTrainingPlans,
+  getRecommendedTargetTime,
   saveTrainingPlan,
   deleteTrainingPlan,
   type RaceDistance,
@@ -87,12 +89,14 @@ export default function TrainingPlansListPage() {
   const isGuest = isGuestUser(user);
   const { activities } = useActivitiesStore();
   const { t, i18n } = useTranslation();
+  const confirmDialog = useConfirmDialog();
 
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasPB, setHasPB] = useState(false);
+  const [profilePBs, setProfilePBs] = useState<Partial<UserProfilePBs> | null>(null);
   const [weeklyVolume, setWeeklyVolume] = useState(30);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const sourceActivities = React.useMemo(
@@ -133,7 +137,13 @@ export default function TrainingPlansListPage() {
     }
 
     const profile = getUserProfile();
-    setHasPB(isGuest || !!profile?.pbs?.['5k'] && profile.pbs['5k'] > 0);
+    const effectivePBs = isGuest
+      ? { '5k': 1500, '10k': null, '21k': null, '42k': null }
+      : profile?.pbs ?? null;
+    setProfilePBs(effectivePBs);
+    setHasPB(Boolean(effectivePBs && Object.values(effectivePBs).some((value) => (
+      typeof value === 'number' && value > 0
+    ))));
 
     if (sourceActivities.length > 0) {
       const now = new Date();
@@ -173,7 +183,10 @@ export default function TrainingPlansListPage() {
     }
 
     const profile = getUserProfile();
-    const pb5k = profile?.pbs?.['5k'] || 1500;
+    const pb5k = getRecommendedTargetTime(
+      isGuest ? { '5k': 1500 } : profile?.pbs,
+      '5k'
+    )?.seconds || 1500;
 
     setLoading(true);
     setError('');
@@ -241,14 +254,20 @@ export default function TrainingPlansListPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm(t('trainingPlan.deleteConfirm', '确定删除这个训练计划吗？'))) {
-      if (isGuest) {
-        deleteGuestTrainingPlan(id);
-        setPlans(getGuestTrainingPlans(i18n.language));
-      } else {
-        await deleteTrainingPlan(id);
-        setPlans(await getStoredTrainingPlans());
-      }
+    const confirmed = await confirmDialog({
+      title: t('trainingPlan.deletePlanTitle'),
+      message: t('trainingPlan.deleteConfirm'),
+      confirmLabel: t('common.delete'),
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    if (isGuest) {
+      deleteGuestTrainingPlan(id);
+      setPlans(getGuestTrainingPlans(i18n.language));
+    } else {
+      await deleteTrainingPlan(id);
+      setPlans(await getStoredTrainingPlans());
     }
   };
 
@@ -330,7 +349,12 @@ export default function TrainingPlansListPage() {
                 </button>
               )}
             </div>
-            <TrainingPlanForm hasPB={hasPB} onSubmit={handleGenerate} isLoading={loading} />
+            <TrainingPlanForm
+              hasPB={hasPB}
+              profilePBs={profilePBs}
+              onSubmit={handleGenerate}
+              isLoading={loading}
+            />
           </section>
         )}
 
