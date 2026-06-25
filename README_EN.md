@@ -2,6 +2,8 @@
 
 > **Reimagining your Strava running data, your way.**
 >
+> English | [中文](./README.md)
+
 > Advanced analytics, AI activity insights, and algorithmic periodization training plans — all free, no Strava subscription required.
 
 ---
