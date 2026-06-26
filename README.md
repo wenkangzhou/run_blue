@@ -3,6 +3,8 @@
 > **基于 Strava 的跑步数据，按你的习惯重新呈现。**
 >  
 > [English](./README_EN.md) | 中文
+>  
+> **在线体验：** https://runblue.yibuu.com/
 
 > Strava 订阅才能看的高级分析、AI 活动解读、算法周期化课表——这里全部免费。
 
