@@ -1,18 +1,34 @@
 'use client';
 
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
-import type { RouteMapHandle, SegmentItem } from './RouteMap';
+import type { RouteMapHandle, RouteMapViewState, SegmentItem } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
+import { useLocalActivities } from '@/hooks/useLocalActivities';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
-import { Activity, ArrowUpRight, ChevronLeft, MapPin, X, Filter, Loader2, Download, Route, ArrowLeft, Layers, List } from 'lucide-react';
+import {
+  Activity,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronLeft,
+  Download,
+  Filter,
+  Layers,
+  List,
+  Loader2,
+  LocateFixed,
+  Route,
+  Search,
+  X,
+  ArrowLeft,
+} from 'lucide-react';
 
 interface FilterState {
   years: number[];
@@ -51,6 +67,10 @@ export function HeatmapClient() {
   const { t } = useTranslation();
   const router = useRouter();
   const { activities, hasMore } = useActivitiesStore();
+  const {
+    activities: localActivities,
+    isLoading: localActivitiesLoading,
+  } = useLocalActivities();
   const { language } = useSettingsStore();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [popupActivity, setPopupActivity] = useState<PopupActivity | null>(null);
@@ -60,16 +80,54 @@ export function HeatmapClient() {
   const [segments, setSegments] = useState<SegmentItem[]>([]);
   const [showSegments, setShowSegments] = useState(false);
   const [loadingSegments, setLoadingSegments] = useState(false);
+  const [listQuery, setListQuery] = useState('');
+  const [listLimit, setListLimit] = useState(80);
+  const [mapViewState, setMapViewState] = useState<RouteMapViewState>({
+    mode: 'overview',
+    zoom: 0,
+    clusterCount: 0,
+    renderedRoutes: 0,
+    availableRoutes: 0,
+    hiddenRoutes: 0,
+  });
+  const [storeHydrated, setStoreHydrated] = useState(
+    () => useActivitiesStore.persist.hasHydrated()
+  );
   const mapRef = useRef<RouteMapHandle | null>(null);
   const { user } = useAuth();
   const isGuest = isGuestUser(user);
   const sourceActivities = useMemo(
-    () => (isGuest ? getGuestActivities() : activities),
-    [isGuest, activities]
+    () => {
+      if (isGuest) return getGuestActivities();
+      return activities.length > 0 ? activities : localActivities;
+    },
+    [isGuest, activities, localActivities]
   );
-  const sourceHasMore = isGuest ? false : hasMore;
   const accessToken = isGuest ? null : user?.accessToken;
+  const sourceHasMore = Boolean(!isGuest && accessToken && hasMore);
   const { isSyncing: loadingMore, syncHistory } = useActivityHistorySync(accessToken);
+  const mapDataLoading = !isGuest
+    && activities.length === 0
+    && localActivities.length === 0
+    && (!storeHydrated || localActivitiesLoading);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = useActivitiesStore.persist.onFinishHydration(() => {
+      if (!cancelled) setStoreHydrated(true);
+    });
+    Promise.resolve(useActivitiesStore.persist.rehydrate())
+      .catch((error: unknown) => {
+        console.error('Failed to hydrate activity cache:', error);
+      })
+      .finally(() => {
+        if (!cancelled) setStoreHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const allYears = useMemo(() => {
     const years = new Set<number>();
@@ -94,9 +152,27 @@ export function HeatmapClient() {
       }));
   }, [sourceActivities, filters]);
 
+  const listActivities = useMemo(() => {
+    const normalizedQuery = listQuery.trim().toLocaleLowerCase();
+    return [...mapActivities]
+      .sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a))
+      .filter((activity) => {
+        if (!normalizedQuery) return true;
+        const date = getActivityDate(activity);
+        return activity.name.toLocaleLowerCase().includes(normalizedQuery)
+          || String(date.getFullYear()).includes(normalizedQuery)
+          || formatDistance(activity.distance).toLocaleLowerCase().includes(normalizedQuery);
+      });
+  }, [listQuery, mapActivities]);
+
+  const visibleListActivities = useMemo(
+    () => listActivities.slice(0, listLimit),
+    [listActivities, listLimit]
+  );
+
   const grouped = useMemo(() => {
     const groups: Record<number, typeof mapActivities> = {};
-    mapActivities.forEach(a => {
+    visibleListActivities.forEach(a => {
       const y = getActivityDate(a).getFullYear();
       if (!groups[y]) groups[y] = [];
       groups[y].push(a);
@@ -108,7 +184,18 @@ export function HeatmapClient() {
         items: items.sort((a, b) => getActivityTimestamp(b) - getActivityTimestamp(a)),
         totalDistance: items.reduce((s, i) => s + i.distance, 0),
       }));
-  }, [mapActivities]);
+  }, [visibleListActivities]);
+
+  useEffect(() => {
+    setListLimit(80);
+  }, [filters, listQuery]);
+
+  useEffect(() => {
+    if (selectedId !== null && !mapActivities.some((activity) => activity.id === selectedId)) {
+      setSelectedId(null);
+      setPopupActivity(null);
+    }
+  }, [mapActivities, selectedId]);
 
   const totalRuns = mapActivities.length;
   const totalDistance = useMemo(
@@ -175,7 +262,7 @@ export function HeatmapClient() {
   }, [accessToken, loadingMore, syncHistory]);
 
   const loadSegments = useCallback(async () => {
-    if (loadingSegments) return;
+    if (loadingSegments || !accessToken) return;
     setLoadingSegments(true);
     try {
       // Get current map bounds from the map ref if available, otherwise use default Shanghai bounds
@@ -195,7 +282,7 @@ export function HeatmapClient() {
     } finally {
       setLoadingSegments(false);
     }
-  }, [loadingSegments]);
+  }, [accessToken, loadingSegments]);
 
   return (
     <div className="relative flex h-[100dvh] w-full overflow-hidden bg-[#edf3f5] text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
@@ -209,14 +296,24 @@ export function HeatmapClient() {
           onShowPopup={handleShowPopup}
           sidebarOpen={sidebarOpen}
           segments={showSegments ? segments : []}
+          onViewStateChange={setMapViewState}
         />
+
+        {mapDataLoading && (
+          <div className="pointer-events-none absolute inset-0 z-[850] flex items-center justify-center">
+            <div className="inline-flex items-center gap-2 rounded-md border border-white/90 bg-white/94 px-3 py-2 font-mono text-[10px] font-bold text-zinc-600 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-zinc-800/90 dark:bg-zinc-950/94 dark:text-zinc-300">
+              <Loader2 size={13} className="animate-spin text-blue-600" />
+              {t('heatmap.loadingRoutes')}
+            </div>
+          </div>
+        )}
 
         {/* Top toolbar */}
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-[1000] flex items-start justify-between gap-2">
-          <div className="pointer-events-auto flex max-w-[calc(100%-64px)] gap-1 overflow-x-auto rounded-2xl border border-white/80 bg-white/88 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/88">
+          <div className="pointer-events-auto flex max-w-[calc(100%-56px)] gap-1 overflow-x-auto rounded-lg border border-white/90 bg-white/92 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/92">
             <button
               onClick={handleBack}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-mono text-xs font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
             >
               <ArrowLeft size={14} />
               {t('common.back')}
@@ -227,7 +324,7 @@ export function HeatmapClient() {
                 setSidebarOpen(false);
                 setPopupActivity(null);
               }}
-              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold transition-colors ${
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-mono text-xs font-bold transition-colors ${
                 filterOpen || hasFiltered
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
@@ -236,27 +333,38 @@ export function HeatmapClient() {
               <Filter size={14} />
               {t('heatmap.filters')}
               {hasFiltered && (
-                <span className="ml-0.5 rounded-full bg-white/20 px-1.5 text-[9px]">
+                <span className="ml-0.5 rounded bg-white/20 px-1.5 text-[9px]">
                   {filters.years.length || t('heatmap.allYears')}
                 </span>
               )}
             </button>
+            {accessToken && (
+              <button
+                onClick={() => {
+                  if (!showSegments && segments.length === 0) {
+                    loadSegments();
+                  }
+                  setShowSegments(!showSegments);
+                }}
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-mono text-xs font-bold transition-colors ${
+                  showSegments
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
+                }`}
+                title={showSegments ? t('heatmap.hideSegments') : t('heatmap.showSegments')}
+              >
+                {loadingSegments ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
+                {t('heatmap.segments')}
+              </button>
+            )}
             <button
-              onClick={() => {
-                if (!showSegments && segments.length === 0) {
-                  loadSegments();
-                }
-                setShowSegments(!showSegments);
-              }}
-              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-mono text-xs font-bold transition-colors ${
-                showSegments
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
-              }`}
-              title={showSegments ? t('heatmap.hideSegments') : t('heatmap.showSegments')}
+              type="button"
+              onClick={() => mapRef.current?.fitOverview()}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              aria-label={t('heatmap.overview')}
+              title={t('heatmap.overview')}
             >
-              {loadingSegments ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
-              {t('heatmap.segments')}
+              <LocateFixed size={15} />
             </button>
           </div>
 
@@ -267,7 +375,7 @@ export function HeatmapClient() {
                 setFilterOpen(false);
                 setPopupActivity(null);
               }}
-              className="pointer-events-auto inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-white/80 bg-white/90 px-3 font-mono text-xs font-bold text-zinc-800 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-colors hover:bg-white dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              className="pointer-events-auto inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/90 bg-white/92 px-3 font-mono text-xs font-bold text-zinc-800 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-colors hover:bg-white dark:border-zinc-800/90 dark:bg-zinc-950/92 dark:text-zinc-100 dark:hover:bg-zinc-900"
               aria-label={t('heatmap.list')}
             >
               <List size={15} />
@@ -279,7 +387,7 @@ export function HeatmapClient() {
 
         {/* Floating popup card on map */}
         {popupActivity && !sidebarOpen && (
-          <div className="absolute left-3 top-16 z-[1000] w-64 rounded-2xl border border-white/80 bg-white/92 px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/92">
+          <div className="absolute bottom-16 left-3 right-3 z-[1000] rounded-lg border border-white/90 bg-white/96 px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/96 md:bottom-auto md:right-auto md:top-16 md:w-72">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-mono text-xs font-bold truncate">{popupActivity.name}</p>
@@ -289,7 +397,7 @@ export function HeatmapClient() {
               </div>
               <button
                 onClick={() => { setPopupActivity(null); setSelectedId(null); }}
-                className="flex-shrink-0 p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded"
+                className="flex-shrink-0 rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                 aria-label={t('common.close')}
               >
                 <X size={13} />
@@ -297,9 +405,9 @@ export function HeatmapClient() {
             </div>
             <Link
               href={`/activities/${popupActivity.id}`}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 font-mono text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+              className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 font-mono text-[11px] font-bold text-white shadow-[0_8px_18px_rgba(37,99,235,0.24)] transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
             >
-              <MapPin size={10} />
+              <ArrowUpRight size={13} />
               {t('heatmap.viewDetails')}
             </Link>
           </div>
@@ -307,17 +415,26 @@ export function HeatmapClient() {
 
         {/* Filter Panel */}
         {filterOpen && (
-          <div className="absolute left-3 top-16 z-[1000] w-[min(20rem,calc(100vw-24px))] rounded-2xl border border-white/80 bg-white/94 p-3 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/94">
+          <div className="absolute left-3 top-16 z-[1000] w-[min(20rem,calc(100vw-24px))] rounded-lg border border-white/90 bg-white/96 p-3 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/96">
             <div className="mb-1">
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">{t('heatmap.years')}</span>
-                <button onClick={() => setFilters(prev => ({ ...prev, years: [] }))} className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40">{t('heatmap.allYears')}</button>
+                <button
+                  onClick={() => setFilters(prev => ({ ...prev, years: [] }))}
+                  className={`rounded px-2 py-1 font-mono text-[10px] font-bold ${
+                    filters.years.length === 0
+                      ? 'bg-blue-600 text-white'
+                      : 'text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40'
+                  }`}
+                >
+                  {t('heatmap.allYears')}
+                </button>
               </div>
               <div className="flex flex-wrap gap-1">
                 {allYears.map(year => (
                   <button key={year} onClick={() => toggleYear(year)}
-                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] font-bold transition-colors ${
-                      filters.years.length === 0 || filters.years.includes(year)
+                    className={`rounded border px-2.5 py-1 font-mono text-[10px] font-bold transition-colors ${
+                      filters.years.includes(year)
                         ? 'border-blue-500 bg-blue-600 text-white'
                         : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900'
                     }`}>{year}</button>
@@ -326,33 +443,40 @@ export function HeatmapClient() {
             </div>
             <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
               <span className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">{t('heatmap.sport')}</span>
-              <span className="inline-flex rounded-full border border-zinc-900 bg-zinc-900 px-2.5 py-1 font-mono text-[10px] font-bold text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-950">{t(TYPE_LABELS['Run'])}</span>
+              <span className="inline-flex rounded border border-zinc-900 bg-zinc-900 px-2.5 py-1 font-mono text-[10px] font-bold text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-950">{t(TYPE_LABELS['Run'])}</span>
             </div>
-            <p className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 font-mono text-[10px] leading-4 text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-400">
-              {t('heatmap.denseModeHint')}
-            </p>
           </div>
         )}
 
-        <div className="pointer-events-none absolute bottom-3 left-3 z-[900] hidden max-w-[calc(100%-24px)] rounded-2xl border border-white/75 bg-white/82 px-3 py-2 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/82 sm:block">
-          <div className="flex items-center gap-3 font-mono text-[10px] text-zinc-600 dark:text-zinc-300">
-            <span className="inline-flex items-center gap-1 font-bold text-zinc-900 dark:text-zinc-100">
-              <Activity size={12} />
-              {t('heatmap.visibleTracks', { count: totalRuns })}
-            </span>
-            <span>{t('heatmap.visibleDistance', { distance: formatDistance(totalDistance) })}</span>
-            {hasFiltered && (
-              <span className="text-blue-600 dark:text-blue-300">
-                {t('heatmap.filteredMatches', { matched: totalRuns, total: sourceActivities.length })}
+        {!popupActivity && !mapDataLoading && (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-[900] max-w-[calc(100%-76px)] rounded-lg border border-white/90 bg-white/92 px-3 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.10)] backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/92">
+            <div className="flex items-center gap-2 font-mono text-[10px] text-zinc-600 dark:text-zinc-300">
+              <span className="inline-flex items-center gap-1 font-bold text-zinc-950 dark:text-zinc-50">
+                <Activity size={12} />
+                {t(`heatmap.mode.${mapViewState.mode}`)}
               </span>
-            )}
+              <span className="h-3 w-px bg-zinc-300 dark:bg-zinc-700" />
+              <span>
+                {mapViewState.mode === 'overview'
+                  ? t('heatmap.areaCount', { count: mapViewState.clusterCount })
+                  : t('heatmap.routeRenderCount', {
+                      rendered: mapViewState.renderedRoutes,
+                      total: mapViewState.availableRoutes,
+                    })}
+              </span>
+              {mapViewState.hiddenRoutes > 0 && (
+                <span className="hidden text-zinc-400 sm:inline">
+                  {t('heatmap.hiddenForClarity', { count: mapViewState.hiddenRoutes })}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Sidebar */}
       {sidebarOpen && (
-        <div className="absolute right-3 top-3 z-[1001] flex h-[calc(100%-24px)] w-[min(22rem,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-white/80 bg-white/94 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/94 md:right-0 md:top-0 md:h-full md:w-80 md:rounded-none md:border-y-0 md:border-r-0 md:shadow-none">
+        <aside className="absolute right-3 top-3 z-[1001] flex h-[calc(100%-24px)] w-[min(22rem,calc(100vw-24px))] flex-col overflow-hidden rounded-lg border border-white/90 bg-white/96 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/96 md:right-0 md:top-0 md:h-full md:w-80 md:rounded-none md:border-y-0 md:border-r-0 md:shadow-none">
           {/* Header */}
           <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <div className="flex items-start justify-between gap-3">
@@ -369,11 +493,11 @@ export function HeatmapClient() {
 
           {/* Stats */}
           <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
+            <div className="rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
               <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-500">{t('heatmap.tracks')}</p>
               <p className="mt-1 font-mono text-base font-black">{totalRuns}</p>
             </div>
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
+            <div className="rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
               <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-500">{t('activity.distance')}</p>
               <p className="mt-1 truncate font-mono text-base font-black">{formatDistance(totalDistance)}</p>
             </div>
@@ -381,7 +505,7 @@ export function HeatmapClient() {
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 text-zinc-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-200 text-zinc-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
                 title={t('heatmap.loadMore')}
               >
                 {loadingMore ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
@@ -389,12 +513,43 @@ export function HeatmapClient() {
             )}
           </div>
 
+          <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+              />
+              <input
+                type="search"
+                value={listQuery}
+                onChange={(event) => setListQuery(event.target.value)}
+                placeholder={t('heatmap.searchPlaceholder')}
+                aria-label={t('heatmap.searchPlaceholder')}
+                className="h-10 w-full rounded-md border border-zinc-200 bg-zinc-50 pl-9 pr-8 font-mono text-[11px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-700 dark:focus:bg-zinc-950"
+              />
+              {listQuery && (
+                <button
+                  type="button"
+                  onClick={() => setListQuery('')}
+                  className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-zinc-400 hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  aria-label={t('common.clear')}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {grouped.length === 0 ? (
               <div className="px-4 py-10 text-center">
-                <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-200">{t('heatmap.noData')}</p>
-                <p className="mt-2 font-mono text-xs leading-5 text-zinc-500">{t('heatmap.noDataHint')}</p>
+                <p className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-200">
+                  {listQuery ? t('heatmap.noSearchResults') : t('heatmap.noData')}
+                </p>
+                <p className="mt-2 font-mono text-xs leading-5 text-zinc-500">
+                  {listQuery ? t('heatmap.noSearchResultsHint') : t('heatmap.noDataHint')}
+                </p>
               </div>
             ) : (
               <>
@@ -464,12 +619,13 @@ export function HeatmapClient() {
                           </button>
                           <Link
                             href={`/activities/${activity.id}`}
-                            className={`mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-600 transition-all hover:bg-white dark:text-blue-300 dark:hover:bg-zinc-950 ${
+                            className={`mr-2 inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-2 font-mono text-[10px] font-bold text-blue-700 transition-all hover:border-blue-200 hover:bg-white dark:border-blue-950/60 dark:bg-blue-950/35 dark:text-blue-300 dark:hover:bg-zinc-950 ${
                               selectedId === activity.id ? 'opacity-100' : 'opacity-60 md:opacity-0 md:group-hover:opacity-100'
                             }`}
                             aria-label={`${activity.name} ${t('heatmap.viewDetails')}`}
                             title={t('heatmap.viewDetails')}
                           >
+                            <span>{t('heatmap.viewDetailsShort')}</span>
                             <ArrowUpRight size={14} />
                           </Link>
                         </div>
@@ -477,10 +633,22 @@ export function HeatmapClient() {
                     </div>
                   </div>
                 ))}
+                {listActivities.length > visibleListActivities.length && (
+                  <button
+                    type="button"
+                    onClick={() => setListLimit((current) => current + 80)}
+                    className="flex w-full items-center justify-center gap-1.5 border-t border-zinc-200 px-4 py-3 font-mono text-[10px] font-bold text-blue-600 transition-colors hover:bg-blue-50 dark:border-zinc-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                  >
+                    <ChevronDown size={13} />
+                    {t('heatmap.showMoreList', {
+                      count: Math.min(80, listActivities.length - visibleListActivities.length),
+                    })}
+                  </button>
+                )}
               </>
             )}
           </div>
-        </div>
+        </aside>
       )}
     </div>
   );

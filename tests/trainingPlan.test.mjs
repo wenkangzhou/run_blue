@@ -108,12 +108,22 @@ test('recommends target time from exact or nearest available PB', () => {
 test('stores training plans through localStorage when IndexedDB is unavailable', async () => {
   const localStorage = installBrowserStorage();
   const plan = await generateTrainingPlan('10k', 3000, 10, 1500, 30, undefined, 'zh', 175);
+  plan.executionOverrides = {
+    '1-2': {
+      matchMode: 'manual',
+      activityId: 123,
+      dateOffsetDays: 1,
+      updatedAt: '2026-06-25T08:00:00.000Z',
+    },
+  };
 
   await saveTrainingPlan(plan);
 
   assert.equal(localStorage.data.has('runblue_training_plans'), true);
   assert.equal((await getStoredTrainingPlans()).length, 1);
-  assert.equal((await getStoredTrainingPlan(plan.id)).id, plan.id);
+  const restoredPlan = await getStoredTrainingPlan(plan.id);
+  assert.equal(restoredPlan.id, plan.id);
+  assert.deepEqual(restoredPlan.executionOverrides, plan.executionOverrides);
 
   await deleteTrainingPlan(plan.id);
   assert.deepEqual(await getStoredTrainingPlans(), []);

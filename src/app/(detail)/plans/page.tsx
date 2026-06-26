@@ -371,6 +371,7 @@ export default function TrainingPlansListPage() {
               const daysToRace = getPlanDaysToRace(plan);
               const phasePreview = getPlanPhasePreview(plan);
               const execution = planExecutions.get(plan.id);
+              const nextSession = execution?.sessions.find((session) => session.status === 'upcoming');
 
               return (
                 <article
@@ -478,6 +479,30 @@ export default function TrainingPlansListPage() {
                           />
                         </div>
                       </div>
+                    )}
+                    {nextSession && (
+                      <Link
+                        href={`/plans/${plan.id}`}
+                        className="mt-3 flex items-center justify-between gap-3 border border-blue-200 bg-blue-50 px-3 py-2.5 transition-colors hover:border-blue-400 dark:border-blue-900/60 dark:bg-blue-950/20"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-mono text-[9px] font-bold uppercase text-blue-600 dark:text-blue-300">
+                            {t('trainingPlan.nextWorkoutEntry')}
+                          </p>
+                          <p className="mt-1 truncate font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                            {nextSession.session.title} · {nextSession.session.distance}km
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-mono text-[10px] text-zinc-500">
+                            {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            }).format(nextSession.date)}
+                          </p>
+                          <ChevronRight size={14} className="ml-auto mt-1 text-blue-600" />
+                        </div>
+                      </Link>
                     )}
                     <div className="mt-3 flex flex-wrap gap-3 font-mono text-[10px] text-zinc-500">
                       <span className="inline-flex items-center gap-1">

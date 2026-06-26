@@ -142,6 +142,30 @@ body {
   touch-action: manipulation;
 }
 
+.heatmap-cluster-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 9999px;
+  background: #1d4ed8;
+  box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.16), 0 7px 18px rgba(15, 23, 42, 0.2);
+  color: #fff;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800;
+  line-height: 1;
+  outline: none;
+  user-select: none;
+}
+
+.heatmap-cluster-bubble-minor {
+  border-width: 3px;
+  background: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.12), 0 4px 10px rgba(15, 23, 42, 0.14);
+}
+
 /* Restore Leaflet internal pane stacking so markers sit above polylines/tooltips */
 .leaflet-marker-pane {
   z-index: 600 !important;
@@ -167,17 +191,21 @@ body {
 }
 
 .heatmap-map {
-  background: #edf3f5;
+  background: #eef2f4;
 }
 
 .heatmap-map .leaflet-tile {
-  filter: saturate(0.44) contrast(0.92) brightness(1.1);
+  filter: saturate(0.38) contrast(0.94) brightness(1.02);
+}
+
+.dark .heatmap-map .leaflet-tile {
+  filter: saturate(0.3) contrast(0.92) brightness(0.72);
 }
 
 .heatmap-map .heatmap-polyline {
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.05));
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.08));
 }
 
 .heatmap-map .heatmap-polyline-hit {
@@ -222,6 +250,27 @@ body {
   stroke-linecap: round;
 }
 
+.heatmap-map .leaflet-control-zoom {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14) !important;
+}
+
+.heatmap-map .leaflet-control-zoom a {
+  width: 38px !important;
+  height: 38px !important;
+  border-color: rgba(226, 232, 240, 0.9) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: #334155 !important;
+  line-height: 38px !important;
+}
+
+.heatmap-map .leaflet-control-zoom a:hover {
+  background: #fff !important;
+  color: #1d4ed8 !important;
+}
+
 .route-endpoint-marker,
 .activity-route-playback-marker,
 .route-endpoint-marker:focus,
@@ -255,6 +304,7 @@ body {
   font-size: 10px !important;
   font-weight: 700 !important;
   padding: 3px 6px !important;
+  pointer-events: none !important;
 }
 
 /* Animation utilities */

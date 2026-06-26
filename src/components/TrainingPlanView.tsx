@@ -1,10 +1,20 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import type { TrainingPlan, TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
+import type {
+  TrainingPlan,
+  TrainingSession,
+  TrainingSessionExecutionOverride,
+  WeeklyPlan,
+} from '@/lib/trainingPlan';
 import type { StravaActivity } from '@/types';
-import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
+import {
+  calculateTrainingPlanExecution,
+  getNextWeekAdjustment,
+  type SessionExecution,
+} from '@/lib/trainingPlanExecution';
 import {
   calculatePaceZones,
   getDistanceLabel,
@@ -12,15 +22,18 @@ import {
   getTrainingAbilityGroup,
 } from '@/lib/trainingPlan';
 import { TrainingPlanCard } from './TrainingPlanCard';
+import { TrainingSessionEditor } from './TrainingSessionEditor';
 import { PixelButton } from '@/components/ui';
 import {
   CalendarDays,
+  CalendarClock,
   CheckCircle2,
   CircleDashed,
   Flag,
   Gauge,
   LineChart,
   ListChecks,
+  Settings2,
   RefreshCw,
   ShieldCheck,
   Target,
@@ -34,6 +47,7 @@ interface TrainingPlanViewProps {
   activities?: StravaActivity[];
   onRegenerate?: () => void;
   onDelete?: () => void;
+  onPlanChange?: (plan: TrainingPlan) => void | Promise<void>;
 }
 
 const PHASE_BAR: Record<WeeklyPlan['phase'], string> = {
@@ -163,6 +177,12 @@ function getPlanGuardrails(isZh: boolean) {
     : ['High fatigue: swap quality for 40min E', 'HR drift: slow down, do not force pace', 'Pain: rest, do not make up missed work'];
 }
 
+function isSameLocalDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
 function ClassSchedulePreview({
   week,
   isZh,
@@ -215,7 +235,13 @@ function ClassSchedulePreview({
   );
 }
 
-export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete }: TrainingPlanViewProps) {
+export function TrainingPlanView({
+  plan,
+  activities = [],
+  onRegenerate,
+  onDelete,
+  onPlanChange,
+}: TrainingPlanViewProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
   const distanceLabel = isZh
@@ -232,13 +258,21 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
     () => calculateTrainingPlanExecution(plan, activities),
     [plan, activities]
   );
+  const [editingSession, setEditingSession] = React.useState<SessionExecution | null>(null);
+  const today = new Date();
+  const todaySession = execution.sessions.find((session) => (
+    session.session.type !== 'rest' && isSameLocalDay(session.date, today)
+  ));
   const nextSession = execution.sessions.find((session) => session.status === 'upcoming');
+  const focusSession = todaySession ?? nextSession;
   const timing = getPlanTiming(plan);
   const currentWeek = execution.currentWeek ?? timing.currentWeek;
   const daysToRace = timing.daysToRace;
   const currentWeekPlan = currentWeek
     ? plan.weeks.find((week) => week.week === currentWeek)
     : plan.weeks[0];
+  const currentWeekExecution = execution.weeks.find((week) => week.week === currentWeek);
+  const nextWeekAdjustment = getNextWeekAdjustment(plan, execution);
   const currentKeySessions = getWeekKeySessions(currentWeekPlan);
   const maxWeekDistance = Math.max(...plan.weeks.map((week) => week.totalDistance), 1);
   const abilityGroup = plan.currentAbility.abilityGroup
@@ -247,6 +281,30 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
     ? '周一休息 / 周三质量 / 周日长距离'
     : 'Mon rest / Wed quality / Sun long run';
   const guardrails = getPlanGuardrails(isZh);
+  const usedManualActivityIds = React.useMemo(() => new Set(
+    Object.values(plan.executionOverrides ?? {})
+      .filter((override) => override.matchMode === 'manual' && override.activityId)
+      .map((override) => override.activityId as number)
+  ), [plan.executionOverrides]);
+
+  const handleExecutionOverride = async (
+    session: SessionExecution,
+    override: TrainingSessionExecutionOverride | null
+  ) => {
+    if (!onPlanChange) return;
+    const executionOverrides = { ...(plan.executionOverrides ?? {}) };
+    if (override) {
+      executionOverrides[session.key] = override;
+    } else {
+      delete executionOverrides[session.key];
+    }
+    await onPlanChange({
+      ...plan,
+      executionOverrides: Object.keys(executionOverrides).length > 0
+        ? executionOverrides
+        : undefined,
+    });
+  };
 
   const phaseLabel: Record<WeeklyPlan['phase'], string> = {
     base: t('trainingPlan.phaseBase', '基础期'),
@@ -361,6 +419,54 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
         </div>
       </section>
 
+      {focusSession && (
+        <section className="border-2 border-blue-500 bg-blue-50/80 p-4 dark:border-blue-500 dark:bg-blue-950/20">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
+                <CalendarClock size={14} />
+                {todaySession
+                  ? t('trainingPlan.todayWorkout')
+                  : t('trainingPlan.nextWorkoutEntry')}
+              </div>
+              <h3 className="mt-2 font-pixel text-base font-bold text-zinc-950 dark:text-zinc-50">
+                {focusSession.session.title}
+              </h3>
+              <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+                {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  weekday: 'short',
+                }).format(focusSession.date)}
+                {' · '}
+                {focusSession.session.distance}km
+                {focusSession.session.paceZone ? ` · ${focusSession.session.paceZone}` : ''}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {focusSession.activity && (
+                <Link
+                  href={`/activities/${focusSession.activity.id}`}
+                  className="inline-flex items-center border-2 border-blue-600 bg-blue-600 px-3 py-2 font-mono text-[10px] font-bold text-white"
+                >
+                  {t('trainingPlan.viewMatchedActivity')}
+                </Link>
+              )}
+              {onPlanChange && (
+                <button
+                  type="button"
+                  onClick={() => setEditingSession(focusSession)}
+                  className="inline-flex items-center gap-1 border-2 border-zinc-300 bg-white px-3 py-2 font-mono text-[10px] font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+                >
+                  <Settings2 size={12} />
+                  {t('trainingPlan.adjustSession')}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="border-2 border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -401,8 +507,12 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
             />
             <ExecutionMetric
               icon={<XCircle size={13} className="text-red-500" />}
-              label={t('trainingPlan.missedSessions', '未完成')}
-              value={String(execution.missedCount)}
+              label={execution.skippedCount > 0
+                ? t('trainingPlan.missedSkippedSessions')
+                : t('trainingPlan.missedSessions', '未完成')}
+              value={execution.skippedCount > 0
+                ? `${execution.missedCount} / ${execution.skippedCount}`
+                : String(execution.missedCount)}
             />
             <ExecutionMetric
               icon={<TrendingUp size={13} className="text-blue-600" />}
@@ -507,6 +617,31 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
             <LineChart size={18} className="text-blue-600 dark:text-blue-300" />
           </div>
 
+          {currentWeekExecution && (
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <ExecutionMetric
+                icon={<TrendingUp size={13} className="text-blue-600" />}
+                label={t('trainingPlan.weekDistanceComparison')}
+                value={`${Math.round(currentWeekExecution.actualDueDistance)}/${Math.round(currentWeekExecution.plannedDueDistance)}km`}
+              />
+              <ExecutionMetric
+                icon={<CheckCircle2 size={13} className="text-emerald-600" />}
+                label={t('trainingPlan.weekSessionComparison')}
+                value={`${currentWeekExecution.completedCount + currentWeekExecution.partialCount}/${currentWeekExecution.dueCount}`}
+              />
+              <ExecutionMetric
+                icon={<Flag size={13} className="text-orange-600" />}
+                label={t('trainingPlan.weekKeyComparison')}
+                value={`${currentWeekExecution.completedKeyCount}/${currentWeekExecution.plannedKeyCount}`}
+              />
+              <ExecutionMetric
+                icon={<XCircle size={13} className="text-zinc-500" />}
+                label={t('trainingPlan.weekMissedSkipped')}
+                value={`${currentWeekExecution.missedCount}/${currentWeekExecution.skippedCount}`}
+              />
+            </div>
+          )}
+
           <ClassSchedulePreview week={currentWeekPlan} isZh={isZh} t={t} />
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -530,6 +665,32 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
               {currentWeekPlan.notes}
             </p>
           )}
+
+          <div className="mt-3 border border-blue-200 bg-white px-3 py-3 dark:border-blue-900/60 dark:bg-zinc-950">
+            <p className="font-mono text-[10px] font-bold uppercase text-blue-600 dark:text-blue-300">
+              {t('trainingPlan.nextWeekAdjustment')}
+            </p>
+            <div className="mt-2 flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">
+                  {t(`trainingPlan.adjustment.${nextWeekAdjustment.type}.title`)}
+                </p>
+                <p className="mt-1 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  {t(`trainingPlan.adjustment.${nextWeekAdjustment.type}.hint`)}
+                </p>
+              </div>
+              {nextWeekAdjustment.suggestedDistance != null && (
+                <div className="shrink-0 text-right">
+                  <p className="font-mono text-lg font-black text-zinc-950 dark:text-zinc-50">
+                    {nextWeekAdjustment.suggestedDistance}km
+                  </p>
+                  <p className="font-mono text-[9px] text-zinc-400">
+                    {t('trainingPlan.suggestedNextWeek')}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       )}
 
@@ -572,9 +733,21 @@ export function TrainingPlanView({ plan, activities = [], onRegenerate, onDelete
             execution={execution.weeks.find((item) => item.week === week.week)}
             isCurrent={currentWeek === week.week}
             defaultExpanded={week.week === 1 && !currentWeek}
+            onAdjustSession={onPlanChange ? setEditingSession : undefined}
           />
         ))}
       </section>
+
+      {editingSession && onPlanChange && (
+        <TrainingSessionEditor
+          execution={editingSession}
+          override={plan.executionOverrides?.[editingSession.key]}
+          activities={activities}
+          usedActivityIds={usedManualActivityIds}
+          onClose={() => setEditingSession(null)}
+          onChange={(override) => handleExecutionOverride(editingSession, override)}
+        />
+      )}
     </div>
   );
 }

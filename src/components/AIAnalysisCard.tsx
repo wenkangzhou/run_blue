@@ -452,27 +452,38 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     ].filter((item): item is string => Boolean(item?.trim()));
     return Array.from(new Set(candidates)).slice(0, 1).map((item) => compactSummary(item, 1, 56));
   })();
-  const briefSummary = (() => {
-    if (!analysis) return '';
-    if (!verdict) return compactNaturalSentence(analysis.summary, 2, 110);
+  const coachConclusion = (() => {
+    if (!analysis) return null;
+    if (!verdict) {
+      return {
+        headline: t('aiAnalysis.trainingConclusion', '训练结论'),
+        detail: compactNaturalSentence(analysis.summary, 2, 120),
+      };
+    }
 
-    const warnings = (analysis.warnings ?? []).map(cleanClause).filter(Boolean);
-    const intro = `本次识别为${verdict.type}，${verdict.effectLabel}`;
-    const effortTone = isRace
-      ? '优先按比赛恢复处理'
-      : classification?.intensity === 'hard'
-        ? '属于质量课，恢复优先级高于继续加量'
+    const headline = `${verdict.type} · ${verdict.effectLabel}`;
+    const base = t('aiAnalysis.conclusionBase', {
+      zone: zone.label,
+      recovery: analysis.recoveryHours,
+      defaultValue: '配速区间 {{zone}}，建议恢复约 {{recovery}}h',
+    });
+    const hasWarnings = (analysis.warnings ?? []).map(cleanClause).filter(Boolean).length > 0;
+    const focus = hasWarnings
+      ? t('aiAnalysis.conclusionRisk', '这次优先处理风险信号，训练收益放在第二位。')
+      : isRace
+        ? t('aiAnalysis.conclusionRace', '这次主要看比赛输出与赛后恢复，不建议继续叠加强度。')
         : isLowIntensityRun
-          ? '重点看低负荷完成度，而不是配速排名'
-          : '整体按一次常规训练处理';
+          ? t('aiAnalysis.conclusionEasy', '这次主要看低负荷完成度，为后续训练留余量。')
+          : classification?.intensity === 'hard'
+            ? t('aiAnalysis.conclusionQuality', '这次主要看质量刺激是否完成，下一步恢复优先。')
+            : structureSummary
+              ? t('aiAnalysis.conclusionStructured', '分段结构能支撑本次判定，重点看执行质量。')
+              : t('aiAnalysis.conclusionGeneral', '整体可作为一次有效训练，后续按疲劳反馈安排。');
 
-    if (warnings.length > 0) {
-      return closeSentence(`${intro}；先处理风险项，再看训练收益`);
-    }
-    if (structureSummary) {
-      return closeSentence(`${intro}；${effortTone}`);
-    }
-    return closeSentence(`${intro}；${effortTone}`);
+    return {
+      headline,
+      detail: `${base}；${focus}`,
+    };
   })();
 
   return (
@@ -577,16 +588,26 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                 </div>
               </div>
 
-              <p className="break-words font-mono text-sm leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-                {briefSummary}
-              </p>
+              {coachConclusion && (
+                <div className="rounded-md border border-white/70 bg-white/70 p-3 dark:border-zinc-800 dark:bg-zinc-950/30">
+                  <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
+                    {t('aiAnalysis.trainingConclusion', '训练结论')}
+                  </p>
+                  <p className="break-words font-mono text-sm font-black text-zinc-950 [overflow-wrap:anywhere] dark:text-zinc-50">
+                    {coachConclusion.headline}
+                  </p>
+                  <p className="mt-1 break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                    {coachConclusion.detail}
+                  </p>
+                </div>
+              )}
 
               {(briefSignals.length > 0 || briefAdvice.length > 0) && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {briefSignals.length > 0 && (
                     <div className="rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
                       <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-                        {t('aiAnalysis.keyTakeaways', '本次重点')}
+                        {t('aiAnalysis.keyEvidence', '关键依据')}
                       </p>
                       <div className="space-y-1">
                         {briefSignals.map((item, index) => (

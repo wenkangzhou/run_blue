@@ -8,8 +8,14 @@ import { useActivitiesStore } from '@/store/activities';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { TrainingPlanView } from '@/components/TrainingPlanView';
 import { useConfirmDialog } from '@/components/ConfirmDialogProvider';
-import { getStoredTrainingPlan, deleteTrainingPlan } from '@/lib/trainingPlan';
-import { deleteGuestTrainingPlan, getGuestActivities, getGuestTrainingPlan, isGuestUser } from '@/lib/guestMode';
+import { getStoredTrainingPlan, deleteTrainingPlan, saveTrainingPlan } from '@/lib/trainingPlan';
+import {
+  deleteGuestTrainingPlan,
+  getGuestActivities,
+  getGuestTrainingPlan,
+  isGuestUser,
+  saveGuestTrainingPlan,
+} from '@/lib/guestMode';
 import type { TrainingPlan } from '@/lib/trainingPlan';
 import { ChevronLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -128,6 +134,15 @@ export default function TrainingPlanDetailPage() {
     router.push('/plans');
   };
 
+  const handlePlanChange = async (updatedPlan: TrainingPlan) => {
+    setPlan(updatedPlan);
+    if (isGuest) {
+      saveGuestTrainingPlan(updatedPlan);
+    } else {
+      await saveTrainingPlan(updatedPlan);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Minimal Header */}
@@ -153,7 +168,11 @@ export default function TrainingPlanDetailPage() {
 
       {/* Content */}
       <div className="container mx-auto px-3 py-5 max-w-3xl">
-        <TrainingPlanView plan={plan} activities={activities} />
+        <TrainingPlanView
+          plan={plan}
+          activities={activities}
+          onPlanChange={handlePlanChange}
+        />
       </div>
     </div>
   );

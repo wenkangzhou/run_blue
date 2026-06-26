@@ -192,11 +192,27 @@ test('suggests reducing or recovering next week based on execution', () => {
   const execution = calculateTrainingPlanExecution(
     plan,
     [makeActivity(1, '2026-06-02', 2000)],
-    new Date('2026-06-10T12:00:00')
+    new Date('2026-06-11T12:00:00')
   );
   const adjustment = getNextWeekAdjustment(plan, execution);
 
   assert.equal(adjustment.type, 'recover');
   assert.equal(adjustment.multiplier, 0.8);
   assert.equal(adjustment.referenceWeek, 2);
+});
+
+test('does not count an unmatched workout scheduled for today as due', () => {
+  const plan = makePlan();
+  const execution = calculateTrainingPlanExecution(
+    plan,
+    [],
+    new Date('2026-06-10T08:00:00')
+  );
+  const todaySession = execution.sessions.find((session) => session.key === '2-2');
+  const currentWeek = execution.weeks.find((week) => week.week === 2);
+  const adjustment = getNextWeekAdjustment(plan, execution);
+
+  assert.equal(todaySession.status, 'upcoming');
+  assert.equal(currentWeek.dueCount, 0);
+  assert.equal(adjustment.type, 'not_started');
 });

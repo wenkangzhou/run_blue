@@ -39,6 +39,21 @@ function getActivityPace(activity: StravaActivity) {
   return `${formatPaceSeconds(activity.moving_time / (activity.distance / 1000))}/km`;
 }
 
+function createOverride(
+  draft: Omit<TrainingSessionExecutionOverride, 'updatedAt'>
+): TrainingSessionExecutionOverride | null {
+  const normalized: Omit<TrainingSessionExecutionOverride, 'updatedAt'> = {};
+  if (draft.matchMode) normalized.matchMode = draft.matchMode;
+  if (draft.activityId) normalized.activityId = draft.activityId;
+  if (draft.skipped) normalized.skipped = true;
+  if (draft.dateOffsetDays) normalized.dateOffsetDays = draft.dateOffsetDays;
+  if (Object.keys(normalized).length === 0) return null;
+  return {
+    ...normalized,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function TrainingSessionEditor({
   execution,
   override,
@@ -95,15 +110,13 @@ export function TrainingSessionEditor({
     }
   };
 
-  const withTimestamp = (
-    patch: Omit<TrainingSessionExecutionOverride, 'updatedAt'>
-  ): TrainingSessionExecutionOverride => ({
-    ...patch,
-    updatedAt: new Date().toISOString(),
-  });
-
   const dateOffsetDays = override?.dateOffsetDays ?? execution.dateOffsetDays;
   const preserveSchedule = dateOffsetDays ? { dateOffsetDays } : {};
+  const preserveMatch = {
+    matchMode: override?.matchMode,
+    activityId: override?.activityId,
+    skipped: override?.skipped,
+  };
 
   return (
     <div className="fixed inset-0 z-[10500] flex items-end justify-center p-3 sm:items-center sm:p-5">
@@ -148,7 +161,7 @@ export function TrainingSessionEditor({
             <button
               type="button"
               disabled={saving}
-              onClick={() => save(null)}
+              onClick={() => save(createOverride(preserveSchedule))}
               className="border border-zinc-200 px-3 py-2 text-left transition-colors hover:border-blue-300 dark:border-zinc-700"
             >
               <span className="flex items-center gap-1.5 font-mono text-[10px] font-bold text-zinc-900 dark:text-zinc-100">
@@ -162,7 +175,7 @@ export function TrainingSessionEditor({
             <button
               type="button"
               disabled={saving}
-              onClick={() => save(withTimestamp({
+              onClick={() => save(createOverride({
                 ...preserveSchedule,
                 matchMode: 'none',
               }))}
@@ -179,7 +192,7 @@ export function TrainingSessionEditor({
             <button
               type="button"
               disabled={saving}
-              onClick={() => save(withTimestamp({
+              onClick={() => save(createOverride({
                 ...preserveSchedule,
                 skipped: true,
                 matchMode: 'none',
@@ -197,8 +210,8 @@ export function TrainingSessionEditor({
             <button
               type="button"
               disabled={saving}
-              onClick={() => save(withTimestamp({
-                ...override,
+              onClick={() => save(createOverride({
+                ...preserveMatch,
                 dateOffsetDays: dateOffsetDays + 1,
                 skipped: false,
               }))}
@@ -220,10 +233,7 @@ export function TrainingSessionEditor({
             <button
               type="button"
               disabled={saving}
-              onClick={() => save(withTimestamp({
-                ...override,
-                dateOffsetDays: 0,
-              }))}
+              onClick={() => save(createOverride(preserveMatch))}
               className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] font-bold text-violet-600 hover:underline dark:text-violet-300"
             >
               <RotateCcw size={11} />
@@ -256,7 +266,7 @@ export function TrainingSessionEditor({
                     key={activity.id}
                     type="button"
                     disabled={saving}
-                    onClick={() => save(withTimestamp({
+                    onClick={() => save(createOverride({
                       ...preserveSchedule,
                       matchMode: 'manual',
                       activityId: activity.id,

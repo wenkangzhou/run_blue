@@ -153,6 +153,14 @@ function getCompletionRatio(session: TrainingSession, activity?: StravaActivity)
   return activity.moving_time >= 20 * 60 ? 1 : activity.moving_time / (20 * 60);
 }
 
+function isSessionDue(session: SessionExecution, today: Date): boolean {
+  if (session.session.type === 'rest') return false;
+  if (session.date.getTime() < today.getTime()) return true;
+  return session.status === 'completed'
+    || session.status === 'partial'
+    || session.status === 'skipped';
+}
+
 export function calculateTrainingPlanExecution(
   plan: TrainingPlan,
   activities: StravaActivity[],
@@ -274,9 +282,7 @@ export function calculateTrainingPlanExecution(
 
   const weeks: WeekExecution[] = plan.weeks.map((week) => {
     const weekSessions = sessions.filter((session) => session.week === week.week);
-    const dueSessions = weekSessions.filter((session) =>
-      session.session.type !== 'rest' && session.date.getTime() <= today.getTime()
-    );
+    const dueSessions = weekSessions.filter((session) => isSessionDue(session, today));
     const dueKeySessions = dueSessions.filter((session) => isKeySession(session.session));
     return {
       week: week.week,
@@ -301,9 +307,7 @@ export function calculateTrainingPlanExecution(
     };
   });
 
-  const dueSessions = sessions.filter((session) =>
-    session.session.type !== 'rest' && session.date.getTime() <= today.getTime()
-  );
+  const dueSessions = sessions.filter((session) => isSessionDue(session, today));
   const completedCount = dueSessions.filter((session) => session.status === 'completed').length;
   const partialCount = dueSessions.filter((session) => session.status === 'partial').length;
   const missedCount = dueSessions.filter((session) => session.status === 'missed').length;
