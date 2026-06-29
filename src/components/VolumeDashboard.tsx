@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { StravaActivity } from '@/types';
@@ -38,6 +38,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { formatDuration } from '@/lib/strava';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 import type { LucideIcon } from 'lucide-react';
 
 interface VolumeDashboardProps {
@@ -45,6 +46,11 @@ interface VolumeDashboardProps {
 }
 
 const PERIOD_TYPES: PeriodType[] = ['week', 'month', 'year', 'all'];
+const METRIC_TYPES: MetricType[] = ['distance', 'duration', 'count', 'pace', 'elevation', 'calories'];
+const STATS_PERIOD_STATE_KEY = 'run_blue_page:stats:period';
+const STATS_YEAR_STATE_KEY = 'run_blue_page:stats:year';
+const STATS_METRIC_STATE_KEY = 'run_blue_page:stats:metric';
+const STATS_SELECTED_PERIOD_STATE_KEY = 'run_blue_page:stats:selected-period';
 const METRIC_OPTIONS: Array<{ value: MetricType; icon: LucideIcon }> = [
   { value: 'distance', icon: Route },
   { value: 'duration', icon: Clock },
@@ -512,15 +518,32 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     ? currentYear
     : availableYears[availableYears.length - 1] || currentYear;
 
-  const [periodType, setPeriodType] = useState<PeriodType>('month');
-  const [selectedYear, setSelectedYear] = useState(defaultYear);
-  const [metric, setMetric] = useState<MetricType>('distance');
-  const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null);
+  const [periodType, setPeriodType, periodTypeHydrated] = useSessionPageState<PeriodType>(
+    STATS_PERIOD_STATE_KEY,
+    'month',
+    (value): value is PeriodType => typeof value === 'string' && PERIOD_TYPES.includes(value as PeriodType)
+  );
+  const [selectedYear, setSelectedYear, selectedYearHydrated] = useSessionPageState<number>(
+    STATS_YEAR_STATE_KEY,
+    defaultYear,
+    (value): value is number => typeof value === 'number' && Number.isInteger(value)
+  );
+  const [metric, setMetric, metricHydrated] = useSessionPageState<MetricType>(
+    STATS_METRIC_STATE_KEY,
+    'distance',
+    (value): value is MetricType => typeof value === 'string' && METRIC_TYPES.includes(value as MetricType)
+  );
+  const [selectedPeriodKey, setSelectedPeriodKey, selectedPeriodHydrated] = useSessionPageState<string | null>(
+    STATS_SELECTED_PERIOD_STATE_KEY,
+    null,
+    (value): value is string | null => value === null || typeof value === 'string'
+  );
 
   useEffect(() => {
+    if (!selectedYearHydrated) return;
     if (availableYears.length === 0) return;
     setSelectedYear((prev) => availableYears.includes(prev) ? prev : defaultYear);
-  }, [availableYears, defaultYear]);
+  }, [availableYears, defaultYear, selectedYearHydrated, setSelectedYear]);
 
   const chartData = useMemo(
     () => aggregateActivities(activities, periodType, selectedYear, metric, locale),
@@ -624,13 +647,24 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
       : 'text-amber-600 dark:text-amber-400';
 
   useEffect(() => {
+    if (!periodTypeHydrated || !selectedYearHydrated || !metricHydrated || !selectedPeriodHydrated) {
+      return;
+    }
     setSelectedPeriodKey((prev) => {
       if (prev && chartData.some((item) => item.key === prev && item.activities.length > 0)) {
         return prev;
       }
       return selectedPeriod?.key ?? null;
     });
-  }, [chartData, selectedPeriod?.key]);
+  }, [
+    chartData,
+    metricHydrated,
+    periodTypeHydrated,
+    selectedPeriod?.key,
+    selectedPeriodHydrated,
+    selectedYearHydrated,
+    setSelectedPeriodKey,
+  ]);
 
   const handlePrevYear = () => {
     const idx = availableYears.indexOf(selectedYear);

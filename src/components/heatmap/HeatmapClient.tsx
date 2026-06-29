@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
-import type { RouteMapHandle, RouteMapViewState, SegmentItem } from './RouteMap';
+import type { RouteMapHandle, RouteMapViewState, RouteMapViewportState, SegmentItem } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { useLocalActivities } from '@/hooks/useLocalActivities';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
+import { readSessionState, writeSessionState } from '@/lib/navigationState';
 import {
   Activity,
   ArrowUpRight,
@@ -35,6 +36,18 @@ interface FilterState {
   types: string[];
 }
 
+interface HeatmapPageState {
+  filters?: FilterState;
+  listQuery?: string;
+  listLimit?: number;
+  sidebarOpen?: boolean;
+  filterOpen?: boolean;
+  selectedId?: number | null;
+  showSegments?: boolean;
+  mapView?: RouteMapViewportState | null;
+  savedAt?: number;
+}
+
 interface HeatmapActivity {
   id: number;
   name: string;
@@ -50,6 +63,8 @@ type PopupActivity = Pick<HeatmapActivity, 'id' | 'name' | 'distance' | 'start_d
   start_date_local?: string;
 };
 
+const HEATMAP_PAGE_STATE_KEY = 'run_blue_page_state:heatmap';
+
 const TYPE_LABELS: Record<string, string> = {
   Run: 'activity.run', Ride: 'activity.bike', Walk: 'activity.walk',
   Hike: 'activity.hike', Swim: 'activity.swim',
@@ -61,6 +76,43 @@ function getYearColor(year: number): string {
 function formatDistance(meters: number): string {
   if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
   return `${Math.round(meters)} m`;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isHeatmapViewportState(value: unknown): value is RouteMapViewportState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as RouteMapViewportState;
+  return Array.isArray(state.center)
+    && state.center.length === 2
+    && isFiniteNumber(state.center[0])
+    && isFiniteNumber(state.center[1])
+    && isFiniteNumber(state.zoom);
+}
+
+function isFilterState(value: unknown): value is FilterState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as FilterState;
+  return Array.isArray(state.years)
+    && state.years.every(isFiniteNumber)
+    && Array.isArray(state.types)
+    && state.types.every((type) => typeof type === 'string');
+}
+
+function isHeatmapPageState(value: unknown): value is HeatmapPageState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as HeatmapPageState;
+  return (state.filters === undefined || isFilterState(state.filters))
+    && (state.listQuery === undefined || typeof state.listQuery === 'string')
+    && (state.listLimit === undefined || isFiniteNumber(state.listLimit))
+    && (state.sidebarOpen === undefined || typeof state.sidebarOpen === 'boolean')
+    && (state.filterOpen === undefined || typeof state.filterOpen === 'boolean')
+    && (state.selectedId === undefined || state.selectedId === null || isFiniteNumber(state.selectedId))
+    && (state.showSegments === undefined || typeof state.showSegments === 'boolean')
+    && (state.mapView === undefined || state.mapView === null || isHeatmapViewportState(state.mapView))
+    && (state.savedAt === undefined || isFiniteNumber(state.savedAt));
 }
 
 export function HeatmapClient() {
@@ -90,9 +142,13 @@ export function HeatmapClient() {
     availableRoutes: 0,
     hiddenRoutes: 0,
   });
+  const [initialMapView, setInitialMapView] = useState<RouteMapViewportState | null>(null);
+  const [currentMapView, setCurrentMapView] = useState<RouteMapViewportState | null>(null);
+  const [pageStateHydrated, setPageStateHydrated] = useState(false);
   const [storeHydrated, setStoreHydrated] = useState(
     () => useActivitiesStore.persist.hasHydrated()
   );
+  const hasObservedListFiltersRef = useRef(false);
   const mapRef = useRef<RouteMapHandle | null>(null);
   const { user } = useAuth();
   const isGuest = isGuestUser(user);
@@ -128,6 +184,59 @@ export function HeatmapClient() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const savedState = readSessionState<HeatmapPageState>(
+      HEATMAP_PAGE_STATE_KEY,
+      isHeatmapPageState
+    );
+    if (savedState) {
+      if (savedState.filters) {
+        setFilters({
+          years: savedState.filters.years,
+          types: savedState.filters.types.length > 0 ? savedState.filters.types : ['Run'],
+        });
+      }
+      if (typeof savedState.listQuery === 'string') setListQuery(savedState.listQuery);
+      if (typeof savedState.listLimit === 'number') setListLimit(Math.max(80, savedState.listLimit));
+      if (typeof savedState.sidebarOpen === 'boolean') setSidebarOpen(savedState.sidebarOpen);
+      if (typeof savedState.filterOpen === 'boolean') setFilterOpen(savedState.filterOpen);
+      if (savedState.selectedId === null || typeof savedState.selectedId === 'number') {
+        setSelectedId(savedState.selectedId);
+      }
+      if (typeof savedState.showSegments === 'boolean') setShowSegments(savedState.showSegments);
+      if (savedState.mapView) {
+        setInitialMapView(savedState.mapView);
+        setCurrentMapView(savedState.mapView);
+      }
+    }
+    setPageStateHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!pageStateHydrated) return;
+    writeSessionState<HeatmapPageState>(HEATMAP_PAGE_STATE_KEY, {
+      filters,
+      listQuery,
+      listLimit,
+      sidebarOpen,
+      filterOpen,
+      selectedId,
+      showSegments,
+      mapView: currentMapView,
+      savedAt: Date.now(),
+    });
+  }, [
+    currentMapView,
+    filterOpen,
+    filters,
+    listLimit,
+    listQuery,
+    pageStateHydrated,
+    selectedId,
+    showSegments,
+    sidebarOpen,
+  ]);
 
   const allYears = useMemo(() => {
     const years = new Set<number>();
@@ -187,8 +296,13 @@ export function HeatmapClient() {
   }, [visibleListActivities]);
 
   useEffect(() => {
+    if (!pageStateHydrated) return;
+    if (!hasObservedListFiltersRef.current) {
+      hasObservedListFiltersRef.current = true;
+      return;
+    }
     setListLimit(80);
-  }, [filters, listQuery]);
+  }, [filters, listQuery, pageStateHydrated]);
 
   useEffect(() => {
     if (selectedId !== null && !mapActivities.some((activity) => activity.id === selectedId)) {
@@ -196,6 +310,12 @@ export function HeatmapClient() {
       setPopupActivity(null);
     }
   }, [mapActivities, selectedId]);
+
+  useEffect(() => {
+    if (selectedId === null || popupActivity) return;
+    const selectedActivity = mapActivities.find((activity) => activity.id === selectedId);
+    if (selectedActivity) setPopupActivity(selectedActivity);
+  }, [mapActivities, popupActivity, selectedId]);
 
   const totalRuns = mapActivities.length;
   const totalDistance = useMemo(
@@ -210,6 +330,20 @@ export function HeatmapClient() {
 
   const handleShowPopup = useCallback((activity: PopupActivity | null) => {
     setPopupActivity(activity);
+  }, []);
+
+  const handleViewportChange = useCallback((state: RouteMapViewportState) => {
+    setCurrentMapView((current) => {
+      if (
+        current
+        && current.zoom === state.zoom
+        && current.center[0] === state.center[0]
+        && current.center[1] === state.center[1]
+      ) {
+        return current;
+      }
+      return state;
+    });
   }, []);
 
   const handleListClick = useCallback((activity: HeatmapActivity) => {
@@ -284,6 +418,11 @@ export function HeatmapClient() {
     }
   }, [accessToken, loadingSegments]);
 
+  useEffect(() => {
+    if (!pageStateHydrated || !showSegments || segments.length > 0 || !accessToken) return;
+    loadSegments();
+  }, [accessToken, loadSegments, pageStateHydrated, segments.length, showSegments]);
+
   return (
     <div className="relative flex h-[100dvh] w-full overflow-hidden bg-[#edf3f5] text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       {/* Map Area */}
@@ -296,7 +435,9 @@ export function HeatmapClient() {
           onShowPopup={handleShowPopup}
           sidebarOpen={sidebarOpen}
           segments={showSegments ? segments : []}
+          initialView={initialMapView}
           onViewStateChange={setMapViewState}
+          onViewportChange={handleViewportChange}
         />
 
         {mapDataLoading && (

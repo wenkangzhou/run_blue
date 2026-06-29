@@ -17,6 +17,7 @@ import {
   matchesActivityWorkoutCategory,
   type ActivityWorkoutCategory,
 } from '@/lib/activityWorkoutType';
+import { readSessionState, writeSessionState } from '@/lib/navigationState';
 import { Loader2, RefreshCw, ChevronDown, ChevronUp, SlidersHorizontal, X, Search, CalendarDays } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
@@ -25,6 +26,22 @@ import { PeriodShareModal } from '@/components/PeriodShareModal';
 
 const CHECK_NEW_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const ACTIVITY_OVERVIEW_EXPANDED_KEY = 'runblue_activity_overview_expanded';
+const ACTIVITY_PAGE_STATE_KEY = 'run_blue_page_state:activities';
+
+interface ActivitiesPageState {
+  showFilters?: boolean;
+  overviewExpanded?: boolean;
+  savedAt?: number;
+}
+
+function isActivitiesPageState(value: unknown): value is ActivitiesPageState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as ActivitiesPageState;
+  return (state.showFilters === undefined || typeof state.showFilters === 'boolean')
+    && (state.overviewExpanded === undefined || typeof state.overviewExpanded === 'boolean')
+    && (state.savedAt === undefined || typeof state.savedAt === 'number');
+}
+
 function getActivityLoadErrorKind(error: unknown): 'auth' | 'rateLimit' | 'generic' {
   const message = error instanceof Error ? error.message : '';
   if (message.includes('401') || message.includes('Unauthorized')) return 'auth';
@@ -115,12 +132,56 @@ export default function ActivitiesPage() {
   const deferredSearchQuery = React.useDeferredValue(searchQuery.trim().toLocaleLowerCase());
 
   useEffect(() => {
+    const savedPageState = readSessionState<ActivitiesPageState>(
+      ACTIVITY_PAGE_STATE_KEY,
+      isActivitiesPageState
+    );
+    setShowFilters(savedPageState?.showFilters ?? false);
     try {
-      setIsOverviewExpanded(localStorage.getItem(ACTIVITY_OVERVIEW_EXPANDED_KEY) === '1');
+      setIsOverviewExpanded(
+        savedPageState?.overviewExpanded
+          ?? (localStorage.getItem(ACTIVITY_OVERVIEW_EXPANDED_KEY) === '1')
+      );
     } catch {
-      setIsOverviewExpanded(false);
+      setIsOverviewExpanded(savedPageState?.overviewExpanded ?? false);
     }
   }, []);
+
+  useEffect(() => {
+    writeSessionState<ActivitiesPageState>(ACTIVITY_PAGE_STATE_KEY, {
+      showFilters,
+      overviewExpanded: isOverviewExpanded,
+      savedAt: Date.now(),
+    });
+  }, [showFilters, isOverviewExpanded]);
+
+  useEffect(() => {
+    const nextSearchQuery = searchParams.get('q') || '';
+    const nextSelectedYear = searchParams.get('year') || '';
+    const nextStartDate = searchParams.get('startDate') || '';
+    const nextEndDate = searchParams.get('endDate') || '';
+    const nextMinDistance = searchParams.get('minDistance') || '';
+    const nextMaxDistance = searchParams.get('maxDistance') || '';
+    const nextGearFilter = searchParams.get('gear') || '';
+    const nextNormalRunFilter = searchParams.get('normal') === '1'
+      || searchParams.get('withKid') === '1'
+      || searchParams.get('recovery') === '1';
+    const nextRaceFilter = searchParams.get('race') === '1';
+    const nextLongRunFilter = searchParams.get('longRun') === '1';
+    const nextWorkoutFilter = searchParams.get('workout') === '1';
+
+    setSearchQuery((current) => (current === nextSearchQuery ? current : nextSearchQuery));
+    setSelectedYear((current) => (current === nextSelectedYear ? current : nextSelectedYear));
+    setStartDate((current) => (current === nextStartDate ? current : nextStartDate));
+    setEndDate((current) => (current === nextEndDate ? current : nextEndDate));
+    setMinDistance((current) => (current === nextMinDistance ? current : nextMinDistance));
+    setMaxDistance((current) => (current === nextMaxDistance ? current : nextMaxDistance));
+    setGearFilter((current) => (current === nextGearFilter ? current : nextGearFilter));
+    setNormalRunFilter((current) => (current === nextNormalRunFilter ? current : nextNormalRunFilter));
+    setRaceFilter((current) => (current === nextRaceFilter ? current : nextRaceFilter));
+    setLongRunFilter((current) => (current === nextLongRunFilter ? current : nextLongRunFilter));
+    setWorkoutFilter((current) => (current === nextWorkoutFilter ? current : nextWorkoutFilter));
+  }, [searchParams]);
 
   const toggleOverview = useCallback(() => {
     setIsOverviewExpanded((expanded) => {
@@ -622,7 +683,7 @@ export default function ActivitiesPage() {
   };
   const handleReauth = () => {
     logout();
-    router.push('/api/auth/signin/strava');
+    window.location.assign('/api/auth/signin/strava');
   };
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });

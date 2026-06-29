@@ -22,6 +22,7 @@ import {
   saveGuestTrainingPlan,
 } from '@/lib/guestMode';
 import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 import {
   getDistanceLabel,
   getDistanceLabelEn,
@@ -50,6 +51,8 @@ const DISTANCE_KM: Record<RaceDistance, number> = {
   '21k': 21.0975,
   '42k': 42.195,
 };
+
+const PLAN_FORM_STATE_KEY = 'run_blue_page:plans:form-open';
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -92,7 +95,11 @@ export default function TrainingPlansListPage() {
   const confirmDialog = useConfirmDialog();
 
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useSessionPageState<boolean>(
+    PLAN_FORM_STATE_KEY,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasPB, setHasPB] = useState(false);

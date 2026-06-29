@@ -6,6 +6,7 @@ import { getAvailableYears } from '@/lib/stats';
 import { decodePolyline } from '@/lib/strava';
 import { ChevronLeft, ChevronRight, MapPinned, Route } from 'lucide-react';
 import { getActivityDate } from '@/lib/dates';
+import { readSessionState, writeSessionState } from '@/lib/navigationState';
 import type { LayerGroup, Map as LeafletMap } from 'leaflet';
 
 type LeafletModule = typeof import('leaflet');
@@ -24,12 +25,37 @@ interface MeMapProps {
   activities: StravaActivity[];
 }
 
+interface MeMapPageState {
+  selectedYear: number | 'all';
+  center: [number, number] | null;
+  zoom: number | null;
+}
+
+const ME_MAP_STATE_KEY = 'run_blue_page:me:map';
+
+function isMeMapPageState(value: unknown): value is MeMapPageState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as MeMapPageState;
+  const validYear = state.selectedYear === 'all' || Number.isInteger(state.selectedYear);
+  const validCenter = state.center === null || (
+    Array.isArray(state.center)
+    && state.center.length === 2
+    && state.center.every((point) => typeof point === 'number' && Number.isFinite(point))
+  );
+  const validZoom = state.zoom === null || (typeof state.zoom === 'number' && Number.isFinite(state.zoom));
+  return validYear && validCenter && validZoom;
+}
+
 export function MeMap({ activities }: MeMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<LeafletMap | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [isReady, setIsReady] = useState(false);
+  const selectedYearRef = useRef<number | 'all'>('all');
+  const initialViewportRef = useRef<Pick<MeMapPageState, 'center' | 'zoom'> | null>(null);
+  const pageStateHydratedRef = useRef(false);
+  const skipNextFitRef = useRef(false);
 
   const years = useMemo(() => getAvailableYears(activities), [activities]);
   const mappedActivities = useMemo(
@@ -49,6 +75,32 @@ export function MeMap({ activities }: MeMapProps) {
     }
   }, [selectedYear, years]);
 
+  useEffect(() => {
+    const saved = readSessionState<MeMapPageState>(ME_MAP_STATE_KEY, isMeMapPageState);
+    if (saved) {
+      selectedYearRef.current = saved.selectedYear;
+      setSelectedYear(saved.selectedYear);
+      if (saved.center && saved.zoom !== null) {
+        initialViewportRef.current = { center: saved.center, zoom: saved.zoom };
+        skipNextFitRef.current = true;
+        leafletMapRef.current?.setView(saved.center, saved.zoom, { animate: false });
+      }
+    }
+    pageStateHydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    selectedYearRef.current = selectedYear;
+    if (!pageStateHydratedRef.current) return;
+    const map = leafletMapRef.current;
+    const center = map?.getCenter();
+    writeSessionState<MeMapPageState>(ME_MAP_STATE_KEY, {
+      selectedYear,
+      center: center ? [center.lat, center.lng] : initialViewportRef.current?.center ?? null,
+      zoom: map?.getZoom() ?? initialViewportRef.current?.zoom ?? null,
+    });
+  }, [selectedYear]);
+
   // Init map
   useEffect(() => {
     if (!mapRef.current || leafletMapRef.current) return;
@@ -60,7 +112,8 @@ export function MeMap({ activities }: MeMapProps) {
         attributionControl: false,
         preferCanvas: true,
       });
-      map.setView([31.23, 121.47], 10);
+      const initialViewport = initialViewportRef.current;
+      map.setView(initialViewport?.center ?? [31.23, 121.47], initialViewport?.zoom ?? 10);
       leaflet.control.zoom({ position: 'bottomright' }).addTo(map);
 
       leaflet.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -69,6 +122,15 @@ export function MeMap({ activities }: MeMapProps) {
 
       leafletMapRef.current = map;
       layerRef.current = leaflet.layerGroup().addTo(map);
+      map.on('moveend zoomend', () => {
+        if (!pageStateHydratedRef.current) return;
+        const center = map.getCenter();
+        writeSessionState<MeMapPageState>(ME_MAP_STATE_KEY, {
+          selectedYear: selectedYearRef.current,
+          center: [center.lat, center.lng],
+          zoom: map.getZoom(),
+        });
+      });
       setIsReady(true);
     });
 
@@ -114,12 +176,13 @@ export function MeMap({ activities }: MeMapProps) {
         }
       });
 
-      if (hasValid && bounds.isValid && bounds.isValid()) {
+      if (hasValid && bounds.isValid && bounds.isValid() && !skipNextFitRef.current) {
         leafletMapRef.current.fitBounds(bounds, {
           padding: [28, 28],
           maxZoom: selectedYear === 'all' ? 12 : 16,
         });
       }
+      skipNextFitRef.current = false;
     });
   }, [filteredActs, isReady, selectedYear]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { StravaActivity } from '@/types';
 import { formatDistance, formatDuration } from '@/lib/strava';
@@ -8,19 +8,30 @@ import { ChevronDown, ChevronRight, Clock, TrendingUp, Mountain, ListOrdered, Ro
 import { formatLocalDateKey, getActivityDate, getActivityYear } from '@/lib/dates';
 import { useActivitiesStore } from '@/store/activities';
 import { formatPaceSeconds } from '@/lib/paceFormat';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 
 interface ActivityTimelineProps {
   activities: StravaActivity[];
 }
 
 const INITIAL_VISIBLE_ACTIVITIES = 12;
+const ME_TIMELINE_STATE_KEY = 'run_blue_page:me:timeline';
+
+interface TimelinePageState {
+  expandedYears: number[];
+  showAllYears: number[];
+}
+
+function isTimelinePageState(value: unknown): value is TimelinePageState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as TimelinePageState;
+  return Array.isArray(state.expandedYears)
+    && state.expandedYears.every(Number.isInteger)
+    && Array.isArray(state.showAllYears)
+    && state.showAllYears.every(Number.isInteger);
+}
 
 export function ActivityTimeline({ activities }: ActivityTimelineProps) {
-  const hasInitializedExpansion = useRef(false);
-  const [expandedYears, setExpandedYears] = useState<Set<number>>(
-    () => new Set(activities[0] ? [getActivityYear(activities[0])] : [])
-  );
-
   const grouped = useMemo(() => {
     const map = new Map<number, StravaActivity[]>();
     activities.forEach((a) => {
@@ -31,18 +42,32 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
     return Array.from(map.entries()).sort((a, b) => b[0] - a[0]);
   }, [activities]);
 
-  useEffect(() => {
-    if (hasInitializedExpansion.current || grouped.length === 0) return;
-    setExpandedYears(new Set([grouped[0][0]]));
-    hasInitializedExpansion.current = true;
-  }, [grouped]);
+  const [pageState, setPageState] = useSessionPageState<TimelinePageState>(
+    ME_TIMELINE_STATE_KEY,
+    () => ({
+      expandedYears: grouped[0] ? [grouped[0][0]] : [],
+      showAllYears: [],
+    }),
+    isTimelinePageState
+  );
+  const expandedYears = useMemo(() => new Set(pageState.expandedYears), [pageState.expandedYears]);
+  const showAllYears = useMemo(() => new Set(pageState.showAllYears), [pageState.showAllYears]);
 
   const toggleYear = (year: number) => {
-    setExpandedYears((prev) => {
-      const next = new Set(prev);
+    setPageState((prev) => {
+      const next = new Set(prev.expandedYears);
       if (next.has(year)) next.delete(year);
       else next.add(year);
-      return next;
+      return { ...prev, expandedYears: Array.from(next) };
+    });
+  };
+
+  const toggleShowAll = (year: number) => {
+    setPageState((prev) => {
+      const next = new Set(prev.showAllYears);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return { ...prev, showAllYears: Array.from(next) };
     });
   };
 
@@ -77,7 +102,9 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
               year={year}
               acts={acts}
               isExpanded={expandedYears.has(year)}
+              showAll={showAllYears.has(year)}
               onToggle={() => toggleYear(year)}
+              onToggleShowAll={() => toggleShowAll(year)}
             />
           ))}
         </div>
@@ -90,17 +117,20 @@ function YearGroup({
   year,
   acts,
   isExpanded,
+  showAll,
   onToggle,
+  onToggleShowAll,
 }: {
   year: number;
   acts: StravaActivity[];
   isExpanded: boolean;
+  showAll: boolean;
   onToggle: () => void;
+  onToggleShowAll: () => void;
 }) {
   const totalDist = acts.reduce((s, a) => s + a.distance, 0);
   const totalTime = acts.reduce((s, a) => s + a.moving_time, 0);
   const totalElev = acts.reduce((s, a) => s + (a.total_elevation_gain || 0), 0);
-  const [showAll, setShowAll] = useState(false);
   const visibleActs = showAll ? acts : acts.slice(0, INITIAL_VISIBLE_ACTIVITIES);
   const hasHiddenActs = acts.length > visibleActs.length;
 
@@ -142,7 +172,7 @@ function YearGroup({
           {acts.length > 30 && (
             <button
               type="button"
-              onClick={() => setShowAll((value) => !value)}
+              onClick={onToggleShowAll}
               className="mt-3 w-full rounded-md border border-zinc-800 px-3 py-2 text-center text-[10px] font-bold text-zinc-500 transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
             >
               {hasHiddenActs ? `展开剩余 ${acts.length - visibleActs.length} 条 ${year} 年记录` : `收起到最近 ${INITIAL_VISIBLE_ACTIVITIES} 条`}

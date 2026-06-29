@@ -54,6 +54,16 @@ export function ScrollRestoration() {
       saveScrollPosition(routeKeyRef.current);
     };
 
+    const cancelPendingRestore = () => {
+      restoreTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      restoreTimersRef.current = [];
+    };
+
+    const handlePointerDown = () => {
+      cancelPendingRestore();
+      saveCurrent();
+    };
+
     const scheduleSave = () => {
       if (saveTimerRef.current !== null) return;
       saveTimerRef.current = window.setTimeout(() => {
@@ -67,8 +77,11 @@ export function ScrollRestoration() {
     };
 
     window.addEventListener('scroll', scheduleSave, { passive: true });
-    document.addEventListener('pointerdown', saveCurrent, { capture: true });
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true });
     document.addEventListener('click', saveCurrent, { capture: true });
+    window.addEventListener('wheel', cancelPendingRestore, { passive: true });
+    window.addEventListener('touchstart', cancelPendingRestore, { passive: true });
+    window.addEventListener('keydown', cancelPendingRestore);
     window.addEventListener('pagehide', saveCurrent);
     window.addEventListener('beforeunload', saveCurrent);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -76,8 +89,11 @@ export function ScrollRestoration() {
     return () => {
       window.history.scrollRestoration = previous;
       window.removeEventListener('scroll', scheduleSave);
-      document.removeEventListener('pointerdown', saveCurrent, { capture: true });
+      document.removeEventListener('pointerdown', handlePointerDown, { capture: true });
       document.removeEventListener('click', saveCurrent, { capture: true });
+      window.removeEventListener('wheel', cancelPendingRestore);
+      window.removeEventListener('touchstart', cancelPendingRestore);
+      window.removeEventListener('keydown', cancelPendingRestore);
       window.removeEventListener('pagehide', saveCurrent);
       window.removeEventListener('beforeunload', saveCurrent);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -89,7 +105,6 @@ export function ScrollRestoration() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    saveScrollPosition(routeKeyRef.current);
     routeKeyRef.current = routeKey;
     restoreTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     restoreTimersRef.current = [];

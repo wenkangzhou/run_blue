@@ -110,11 +110,7 @@ export default function TrainingPlanDetailPage() {
   }
 
   if (!plan) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
-        <div className="animate-pulse font-mono text-zinc-400">◼◼◼ {t('common.loading')} ◼◼◼</div>
-      </div>
-    );
+    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
   }
 
   const handleDelete = async () => {

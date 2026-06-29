@@ -17,6 +17,7 @@ import { formatDate, formatDistance, formatDuration, formatPace } from '@/lib/st
 import { areActivitiesSameRoute, createActivityFromRouteReference, getBestPaceActivity } from '@/lib/routeClustering';
 import { getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, getGuestSavedRoutes, isGuestUser } from '@/lib/guestMode';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 import {
   ChevronLeft,
   MapPin,
@@ -137,24 +138,34 @@ export default function RouteDetailPage() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
-  const [selectedSiblingKeys, setSelectedSiblingKeys] = useState<string[]>([]);
-  const [selectedActivityIds, setSelectedActivityIds] = useState<number[]>([]);
+  const [selectedSiblingKeys, setSelectedSiblingKeys] = useSessionPageState<string[]>(
+    `run_blue_page:route:${routeKey}:selected-siblings`,
+    [],
+    (value): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+  const [selectedActivityIds, setSelectedActivityIds] = useSessionPageState<number[]>(
+    `run_blue_page:route:${routeKey}:selected-activities`,
+    [],
+    (value): value is number[] => Array.isArray(value) && value.every(Number.isInteger)
+  );
   const [actionNotice, setActionNotice] = useState<RouteActionNotice | null>(null);
   const [confirmAction, setConfirmAction] = useState<RouteConfirmAction | null>(null);
 
   React.useEffect(() => {
+    if (!route) return;
     setSelectedSiblingKeys((keys) => {
       const nextKeys = keys.filter((key) => siblingRoutes.some((sibling) => sibling.key === key));
       return nextKeys.length === keys.length ? keys : nextKeys;
     });
-  }, [siblingRoutes]);
+  }, [route, setSelectedSiblingKeys, siblingRoutes]);
 
   React.useEffect(() => {
+    if (!route) return;
     setSelectedActivityIds((ids) => {
       const nextIds = ids.filter((id) => routeActivities.some((activity) => activity.id === id));
       return nextIds.length === ids.length ? ids : nextIds;
     });
-  }, [routeActivities]);
+  }, [route, routeActivities, setSelectedActivityIds]);
 
   React.useEffect(() => {
     if (authLoading) return;

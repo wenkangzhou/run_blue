@@ -86,6 +86,63 @@ export function ProfilePageLoadingShell() {
   );
 }
 
+export function AppLoadingShell() {
+  return (
+    <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50" aria-busy="true">
+      <div className="border-b-4 border-zinc-800 bg-white dark:border-zinc-200 dark:bg-zinc-900">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className="h-8 w-8" />
+            <SkeletonBlock className="h-7 w-28" />
+          </div>
+          <div className="hidden items-center gap-4 md:flex">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-4 w-20" />
+            ))}
+          </div>
+          <SkeletonBlock className="h-9 w-24" />
+        </div>
+      </div>
+
+      <main className="container mx-auto px-3 py-5 md:py-7">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="space-y-3">
+                <SkeletonBlock className="h-3 w-24" />
+                <SkeletonBlock className="h-8 w-52" />
+                <SkeletonBlock className="h-4 w-72 max-w-full" />
+              </div>
+              <SkeletonBlock className="h-10 w-10" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SkeletonBlock className="h-20" />
+              <SkeletonBlock className="h-20" />
+              <SkeletonBlock className="h-20" />
+            </div>
+          </section>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <section key={index} className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <SkeletonBlock className="h-40 rounded-none" />
+                <div className="space-y-3 p-4">
+                  <SkeletonBlock className="h-5 w-36" />
+                  <SkeletonBlock className="h-3 w-24" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <SkeletonBlock className="h-10" />
+                    <SkeletonBlock className="h-10" />
+                  </div>
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800 ${className}`} />;
 }

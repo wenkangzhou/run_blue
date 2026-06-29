@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { PixelButton } from '@/components/ui';
@@ -14,12 +15,23 @@ import { isGuestUser } from '@/lib/guestMode';
 import { Menu, X, Dumbbell, BarChart3, Map, MapPinned, Footprints, Activity, User, WifiOff, LogIn } from 'lucide-react';
 
 export function Header() {
+  const router = useRouter();
   const { t } = useTranslation();
   const { isAuthenticated, user, logout, needsReauth, login } = useAuth();
   const isOnline = useOnlineStatus();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
   const isGuest = isGuestUser(user);
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    const timer = window.setTimeout(() => {
+      ['/activities', '/plans', '/stats', '/heatmap', '/routes', '/gear', '/me'].forEach((href) => {
+        router.prefetch(href);
+      });
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, router]);
 
   return (
     <header 

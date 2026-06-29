@@ -39,8 +39,14 @@ import {
 } from 'lucide-react';
 import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
+import { PageLoadingShell } from '@/components/PageLoadingShell';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 
 const GEAR_DETAILS_TTL = 1000 * 60 * 60 * 24;
+const GEAR_SEARCH_STATE_KEY = 'run_blue_page:gear:search';
+const GEAR_SORT_STATE_KEY = 'run_blue_page:gear:sort';
+const GEAR_RETIRED_STATE_KEY = 'run_blue_page:gear:retired';
+const GEAR_SORT_MODES: GearSortMode[] = ['distance', 'runs', 'pace', 'name'];
 
 export default function GearPage() {
   const { t } = useTranslation();
@@ -62,9 +68,22 @@ export default function GearPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [gearCacheActivities, setGearCacheActivities] = React.useState<LightGearActivity[]>([]);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [sortMode, setSortMode] = React.useState<GearSortMode>('distance');
-  const [showRetired, setShowRetired] = React.useState(false);
+  const [cacheHydrated, setCacheHydrated] = React.useState(false);
+  const [searchQuery, setSearchQuery] = useSessionPageState<string>(
+    GEAR_SEARCH_STATE_KEY,
+    '',
+    (value): value is string => typeof value === 'string'
+  );
+  const [sortMode, setSortMode] = useSessionPageState<GearSortMode>(
+    GEAR_SORT_STATE_KEY,
+    'distance',
+    (value): value is GearSortMode => typeof value === 'string' && GEAR_SORT_MODES.includes(value as GearSortMode)
+  );
+  const [showRetired, setShowRetired] = useSessionPageState<boolean>(
+    GEAR_RETIRED_STATE_KEY,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
   const backgroundSyncStartedRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -75,12 +94,14 @@ export default function GearPage() {
         setGearCacheActivities(cachedActivities);
         setGearDetails(new Map(cachedDetails.gearDetails.map((gear) => [gear.id, gear])));
         setGearDetailsFetchedAt(cachedDetails.fetchedAt);
+        setCacheHydrated(true);
       })
       .catch(() => {
         if (cancelled) return;
         setGearCacheActivities([]);
         setGearDetails(new Map());
         setGearDetailsFetchedAt(0);
+        setCacheHydrated(true);
       });
     return () => { cancelled = true; };
   }, []);
@@ -248,6 +269,10 @@ export default function GearPage() {
   const coverageRate = totalRunningActivities > 0
     ? Math.round((linkedRunningActivities / totalRunningActivities) * 100)
     : 0;
+
+  if (!cacheHydrated && !isGuest && storeActivities.length === 0) {
+    return <PageLoadingShell title={t('gear.title', '跑鞋统计')} maxWidth="4xl" variant="gear" />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">

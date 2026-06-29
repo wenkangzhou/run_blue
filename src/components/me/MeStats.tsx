@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { StravaActivity } from '@/types';
 import { ActivityCalendarHeatmap } from '@/components/ActivityCalendarHeatmap';
 import { VolumeBarChart } from '@/components/charts/VolumeBarChart';
@@ -8,19 +8,26 @@ import { aggregateActivities, getAvailableYears } from '@/lib/stats';
 import { ChevronLeft, ChevronRight, CalendarRange, BarChart3, Clock3, Footprints, Gauge, Route } from 'lucide-react';
 import { formatDistance, formatDuration, formatPace } from '@/lib/strava';
 import { getActivityDate } from '@/lib/dates';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 
 interface MeStatsProps {
   activities: StravaActivity[];
 }
 
+const ME_STATS_YEAR_STATE_KEY = 'run_blue_page:me:stats-year';
+
 export function MeStats({ activities }: MeStatsProps) {
   const years = useMemo(() => getAvailableYears(activities), [activities]);
-  const [selectedYear, setSelectedYear] = useState(() => years[years.length - 1] || new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useSessionPageState<number>(
+    ME_STATS_YEAR_STATE_KEY,
+    () => years[years.length - 1] || new Date().getFullYear(),
+    (value): value is number => typeof value === 'number' && Number.isInteger(value)
+  );
 
   useEffect(() => {
     if (years.length === 0) return;
     setSelectedYear((year) => years.includes(year) ? year : years[years.length - 1]);
-  }, [years]);
+  }, [setSelectedYear, years]);
 
   const yearChartData = useMemo(
     () => aggregateActivities(activities, 'year', selectedYear, 'distance', 'zh'),

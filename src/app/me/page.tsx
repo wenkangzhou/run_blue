@@ -13,7 +13,7 @@ import { MeMap } from '@/components/me/MeMap';
 import { MeStats } from '@/components/me/MeStats';
 import { ActivityTimeline } from '@/components/me/ActivityTimeline';
 import { FadeInSection } from '@/components/me/FadeInSection';
-import { TerminalLoader } from '@/components/me/TerminalLoader';
+import { ProfilePageLoadingShell } from '@/components/PageLoadingShell';
 
 
 export default function MePage() {
@@ -53,7 +53,7 @@ export default function MePage() {
   }, [activities]);
 
   if (isLoading) {
-    return <TerminalLoader />;
+    return <ProfilePageLoadingShell />;
   }
 
   if (error) {

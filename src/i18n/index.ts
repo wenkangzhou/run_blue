@@ -70,6 +70,10 @@ const resources = {
         aiIntervalHint: 'Focus on whether fast reps fade and whether recovery heart rate drops enough. Keep the next session easy.',
         aiHint: 'Focus on pace stability, heart-rate drift, and weekly load context. Keep the next session low intensity.',
       },
+      navigation: {
+        slow: 'Network is slow, loading',
+        offline: 'Offline, trying cached data',
+      },
       nav: {
         home: 'Home',
         activities: 'Activities',
@@ -897,6 +901,10 @@ const resources = {
         aiSummary: '这是一条示例训练：当前配速 {{pace}}，可用于体验摘要、依据和建议的呈现方式。登录后会基于你的真实历史生成分析。',
         aiIntervalHint: '优先看每组快段配速是否下滑、恢复段心率是否能降下来；下一次训练建议安排轻松跑。',
         aiHint: '优先看配速稳定性、心率漂移和本周跑量占比；下一次训练建议保持低强度补量。',
+      },
+      navigation: {
+        slow: '网络有点慢，正在加载',
+        offline: '网络已断开，正在尝试读取缓存',
       },
       nav: {
         home: '首页',

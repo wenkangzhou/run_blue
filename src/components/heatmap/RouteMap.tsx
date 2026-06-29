@@ -69,7 +69,9 @@ interface RouteMapProps {
   sidebarOpen: boolean;
   isDark?: boolean;
   segments?: SegmentItem[];
+  initialView?: RouteMapViewportState | null;
   onViewStateChange?: (state: RouteMapViewState) => void;
+  onViewportChange?: (state: RouteMapViewportState) => void;
 }
 
 export type RouteMapMode = HeatmapMapMode;
@@ -81,6 +83,11 @@ export interface RouteMapViewState {
   renderedRoutes: number;
   availableRoutes: number;
   hiddenRoutes: number;
+}
+
+export interface RouteMapViewportState {
+  center: [number, number];
+  zoom: number;
 }
 
 const ROUTE_DETAIL_OPACITY = 0.42;
@@ -410,7 +417,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
     sidebarOpen,
     isDark = false,
     segments,
+    initialView,
     onViewStateChange,
+    onViewportChange,
   }: RouteMapProps,
   forwardedRef: React.Ref<RouteMapHandle>
 ) {
@@ -441,6 +450,10 @@ export const RouteMap = React.forwardRef(function RouteMap(
   const activitiesRef = useRef(activities);
   const sidebarOpenRef = useRef(sidebarOpen);
   const onViewStateChangeRef = useRef(onViewStateChange);
+  const onViewportChangeRef = useRef(onViewportChange);
+  const initialViewRef = useRef(initialView);
+  const hasRestoredViewportRef = useRef(false);
+  const hasFittedRouteDataRef = useRef(false);
   const [routeChoice, setRouteChoice] = useState<RouteChoiceState | null>(null);
   const [choiceLimit, setChoiceLimit] = useState(12);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
@@ -462,6 +475,8 @@ export const RouteMap = React.forwardRef(function RouteMap(
   useEffect(() => { activitiesRef.current = activities; });
   useEffect(() => { sidebarOpenRef.current = sidebarOpen; });
   useEffect(() => { onViewStateChangeRef.current = onViewStateChange; });
+  useEffect(() => { onViewportChangeRef.current = onViewportChange; });
+  useEffect(() => { initialViewRef.current = initialView; });
 
   useEffect(() => {
     const updateViewport = () => {
@@ -477,6 +492,23 @@ export const RouteMap = React.forwardRef(function RouteMap(
   useEffect(() => {
     setChoiceLimit(12);
   }, [routeChoice]);
+
+  function isValidViewportState(value: RouteMapViewportState | null | undefined): value is RouteMapViewportState {
+    if (!value) return false;
+    return Array.isArray(value.center)
+      && value.center.length === 2
+      && Number.isFinite(value.center[0])
+      && Number.isFinite(value.center[1])
+      && Number.isFinite(value.zoom);
+  }
+
+  function publishViewportState(map: LeafletMap) {
+    const center = map.getCenter();
+    onViewportChangeRef.current?.({
+      center: [Number(center.lat.toFixed(6)), Number(center.lng.toFixed(6))],
+      zoom: Number(map.getZoom().toFixed(2)),
+    });
+  }
 
   // Initialize map
   useEffect(() => {
@@ -537,6 +569,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
           viewportRenderFrameRef.current = requestAnimationFrame(() => {
             viewportRenderFrameRef.current = null;
             renderViewportLayers(map, L, activitiesRef.current);
+            publishViewportState(map);
           });
         };
         map.on('zoomend moveend', scheduleViewportRender);
@@ -554,9 +587,20 @@ export const RouteMap = React.forwardRef(function RouteMap(
         });
 
         // Prefer the athlete's route data for the heatmap viewport; browser geolocation can point elsewhere.
-        map.setView([31.2304, 121.4737], 10, { animate: false });
+        const restoredView = initialViewRef.current;
+        if (isValidViewportState(restoredView)) {
+          hasRestoredViewportRef.current = true;
+          map.setView(restoredView.center, restoredView.zoom, { animate: false });
+        } else {
+          map.setView([31.2304, 121.4737], 10, { animate: false });
+        }
         requestAnimationFrame(() => {
-          if (!destroyed) renderAll(map, L, sidebarOpenRef.current);
+          if (!destroyed) {
+            renderAll(map, L, sidebarOpenRef.current, {
+              fitView: !hasRestoredViewportRef.current && !hasFittedRouteDataRef.current,
+            });
+            publishViewportState(map);
+          }
         });
       } catch (err) {
         console.error('RouteMap init error:', err);
@@ -591,6 +635,20 @@ export const RouteMap = React.forwardRef(function RouteMap(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || hasRestoredViewportRef.current || !isValidViewportState(initialView)) return;
+    hasRestoredViewportRef.current = true;
+    map.setView(initialView.center, initialView.zoom, { animate: false });
+    (async () => {
+      const L = (await import('leaflet')).default;
+      renderAll(map, L, sidebarOpenRef.current, { fitView: false });
+      publishViewportState(map);
+    })();
+    // This effect intentionally applies a saved viewport only once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialView]);
+
   // Update tile layer
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -608,7 +666,9 @@ export const RouteMap = React.forwardRef(function RouteMap(
     if (!map) return;
     (async () => {
       const L = (await import('leaflet')).default;
-      renderAll(map, L, sidebarOpenRef.current);
+      renderAll(map, L, sidebarOpenRef.current, {
+        fitView: !hasRestoredViewportRef.current && !hasFittedRouteDataRef.current,
+      });
     })();
     // renderAll reads latest activities/sidebar state through refs, so activities is the actual trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -714,21 +774,29 @@ export const RouteMap = React.forwardRef(function RouteMap(
     }
   }
 
-  function renderAll(map: LeafletMap, L: LeafletModule, sbOpen: boolean) {
+  function renderAll(
+    map: LeafletMap,
+    L: LeafletModule,
+    sbOpen: boolean,
+    options: { fitView?: boolean } = {}
+  ) {
     try {
       sidebarOpenRef.current = sbOpen;
       const currentActs = activitiesRef.current;
 
       // 1. Set view first so layers are projected against correct viewport
-      const bounds = computeSmartBounds(currentActs, L);
+      const shouldFitView = options.fitView ?? true;
+      const bounds = shouldFitView ? computeSmartBounds(currentActs, L) : null;
       if (bounds) {
         try {
           fitBoundsToView(map, bounds, { maxZoom: 16, minZoom: 12, animate: false });
+          hasFittedRouteDataRef.current = true;
         } catch (e) {
           console.warn('fitBounds failed, falling back to setView', e);
           const center = bounds.getCenter?.();
           if (center && Number.isFinite(center.lat) && Number.isFinite(center.lng)) {
             map.setView(center, 14, { animate: false });
+            hasFittedRouteDataRef.current = true;
           }
         }
       }
@@ -736,6 +804,7 @@ export const RouteMap = React.forwardRef(function RouteMap(
       // 2. Then render layers against correct view
       renderViewportLayers(map, L, currentActs);
       renderSegments(map, L);
+      publishViewportState(map);
     } catch (e) {
       console.error('renderAll failed:', e);
     }

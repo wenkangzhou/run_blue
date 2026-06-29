@@ -43,6 +43,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useSessionPageState } from '@/hooks/useSessionPageState';
 
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
@@ -78,13 +79,25 @@ export default function ActivityDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [, setMapReady] = useState(false);
-  const [splitsExpanded, setSplitsExpanded] = useState(false);
-  const [lapsExpanded, setLapsExpanded] = useState(false);
+  const [splitsExpanded, setSplitsExpanded] = useSessionPageState<boolean>(
+    `run_blue_page:activity:${activityId}:splits-expanded`,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
+  const [lapsExpanded, setLapsExpanded] = useSessionPageState<boolean>(
+    `run_blue_page:activity:${activityId}:laps-expanded`,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
   const [needsReauth, setNeedsReauth] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useSessionPageState<boolean>(
+    `run_blue_page:activity:${activityId}:description-expanded`,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
 
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -177,7 +190,6 @@ export default function ActivityDetailPage() {
   }, [activity]);
 
   useEffect(() => {
-    setDescriptionExpanded(false);
     if (selectedSeedActivity) {
       setActivity(selectedSeedActivity);
       setStreams(null);
