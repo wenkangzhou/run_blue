@@ -271,6 +271,52 @@ test('classifyActivity recognizes progression runs with a cooldown split', () =>
   assert.equal(classification.structure.splitPattern, 'progression');
 });
 
+test('classifyActivity ignores a short final split when detecting progression', () => {
+  const activity = makeActivity(24, {
+    name: 'Morning run',
+    distance: 6530,
+    moving_time: 2366,
+    average_heartrate: 134,
+    max_heartrate: 150,
+    splits_metric: [
+      makeSplit(0, 370),
+      makeSplit(1, 372),
+      makeSplit(2, 360),
+      makeSplit(3, 363),
+      makeSplit(4, 371),
+      makeSplit(5, 359),
+      makeSplit(6, 323, { distance: 530, moving_time: 171, elapsed_time: 172 }),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200), 'medium', 176);
+
+  assert.notEqual(classification.workoutType, 'progression');
+  assert.equal(classification.structure.splitPattern, 'steady');
+});
+
+test('classifyActivity does not treat one isolated finishing surge as progression', () => {
+  const activity = makeActivity(25, {
+    name: 'Evening run',
+    distance: 7000,
+    moving_time: 2518,
+    splits_metric: [
+      makeSplit(0, 370),
+      makeSplit(1, 372),
+      makeSplit(2, 360),
+      makeSplit(3, 363),
+      makeSplit(4, 371),
+      makeSplit(5, 359),
+      makeSplit(6, 323),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200));
+
+  assert.notEqual(classification.workoutType, 'progression');
+  assert.equal(classification.structure.splitPattern, 'steady');
+});
+
 test('classifyActivity does not snap low-confidence pace models into threshold', () => {
   const activity = makeActivity(21, {
     name: 'Morning steady run',

@@ -372,7 +372,10 @@ function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary[
     const bestIndex = progressionPaces.indexOf(bestPace);
     const lateEnough = bestIndex >= Math.floor(progressionPaces.length * 0.55);
     const clearLateSurge = (firstAvg - bestPace) / firstAvg >= 0.08;
-    if (lateEnough && clearLateSurge) return 'progression';
+    const latePaces = progressionPaces.slice(Math.floor(progressionPaces.length * 0.55));
+    const sustainedFasterCount = latePaces.filter((pace) => pace <= firstAvg * 0.95).length;
+    const sustainedLateSurge = sustainedFasterCount >= Math.max(2, Math.ceil(latePaces.length * 0.6));
+    if (lateEnough && clearLateSurge && sustainedLateSurge) return 'progression';
   }
 
   const steadyCount = paces.filter((pace) => pace >= avgPace * 0.94 && pace <= avgPace * 1.06).length;
@@ -419,16 +422,25 @@ function summarizeActivityStructure(activity: StravaActivity): ActivityStructure
   ) ?? [];
   if (splitCandidates.length >= 3) {
     const paces = splitCandidates.map((split) => getLapPaceSecPerKm(split.distance, split.moving_time || split.elapsed_time)).filter(Boolean);
+    const medianSplitDistance = median(splitCandidates.map((split) => split.distance));
+    const patternCandidates = splitCandidates.filter((split, index) => (
+      index !== splitCandidates.length - 1
+      || !medianSplitDistance
+      || split.distance >= medianSplitDistance * 0.8
+    ));
+    const patternPaces = patternCandidates
+      .map((split) => getLapPaceSecPerKm(split.distance, split.moving_time || split.elapsed_time))
+      .filter(Boolean);
     return {
       source: 'splits',
       lapCount: 0,
-      medianLapDistance: median(splitCandidates.map((split) => split.distance)),
+      medianLapDistance: medianSplitDistance,
       shortRepCount: splitCandidates.filter((split) => split.distance <= 1200).length,
       fastRepCount: 0,
       recoveryRepCount: 0,
       hasWarmup: false,
       hasCooldown: false,
-      splitPattern: detectSplitPatternFromPaces(paces),
+      splitPattern: detectSplitPatternFromPaces(patternPaces),
       paceVariability: varianceRatio(paces),
     };
   }

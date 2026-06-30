@@ -1,9 +1,9 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v19';
-const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v18', 'v17'];
-const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v17', 'v16'];
+export const AI_ANALYSIS_CACHE_VERSION = 'v20';
+const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
+const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
 type HistoryActivity = Pick<
   StravaActivity,
@@ -213,6 +213,10 @@ export function getAIAnalysisCacheKey(input: AIAnalysisCacheKeyInput): string {
 }
 
 export function getLegacyAIAnalysisCacheKeys(input: AIAnalysisCacheKeyInput): string[] {
+  const hasClassificationSensitiveStructure = (input.activity.splits_metric?.length ?? 0) >= 3
+    || (input.activity.laps?.length ?? 0) >= 2;
+  if (hasClassificationSensitiveStructure) return [];
+
   const versions = input.activity.workout_type === 3
     ? AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS
     : AI_ANALYSIS_LEGACY_CACHE_VERSIONS;

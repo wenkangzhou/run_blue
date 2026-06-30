@@ -95,13 +95,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v19 keys for identical AI analysis inputs', () => {
+test('builds stable v20 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v19');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v20');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v19_1_/);
+  assert.match(first, /^ai_analysis_v20_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -109,19 +109,33 @@ test('builds legacy fallback keys for existing cached analysis', () => {
   const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput());
 
   assert.equal(legacy.length, 2);
-  assert.match(legacy[0], /^ai_analysis_v18_1_/);
-  assert.match(legacy[1], /^ai_analysis_v17_1_/);
+  assert.match(legacy[0], /^ai_analysis_v19_1_/);
+  assert.match(legacy[1], /^ai_analysis_v18_1_/);
   assert.notEqual(legacy[0], current);
 });
 
-test('skips v18 fallback when Strava workout semantics need reclassification', () => {
+test('skips the unsafe workout fallback while keeping the latest compatible cache', () => {
   const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput({
     activity: makeActivity(1, { workout_type: 3 }),
   }));
 
   assert.equal(legacy.length, 2);
-  assert.match(legacy[0], /^ai_analysis_v17_1_/);
-  assert.match(legacy[1], /^ai_analysis_v16_1_/);
+  assert.match(legacy[0], /^ai_analysis_v19_1_/);
+  assert.match(legacy[1], /^ai_analysis_v17_1_/);
+});
+
+test('does not reuse legacy analysis when split structure affects classification', () => {
+  const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput({
+    activity: makeActivity(1, {
+      splits_metric: [
+        { distance: 1000, moving_time: 360 },
+        { distance: 1000, moving_time: 350 },
+        { distance: 500, moving_time: 165 },
+      ],
+    }),
+  }));
+
+  assert.deepEqual(legacy, []);
 });
 
 test('changes key when a middle historical activity changes', () => {
