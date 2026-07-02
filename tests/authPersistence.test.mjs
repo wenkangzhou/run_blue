@@ -66,10 +66,14 @@ test('session errors clear stale auth only when the cookie session is gone', () 
   assert.equal(shouldClearAuthStateForSessionError('token_expired'), true);
   assert.equal(shouldClearAuthStateForSessionError('rate_limited'), false);
   assert.equal(shouldClearAuthStateForSessionError('strava_error'), false);
+  assert.equal(shouldClearAuthStateForSessionError('strava_error', 403), false);
+  assert.equal(shouldClearAuthStateForSessionError('strava_error', 500), false);
 });
 
 test('only expired tokens ask for explicit re-login', () => {
   assert.equal(shouldPromptReauthForSessionError('token_expired'), true);
   assert.equal(shouldPromptReauthForSessionError('no_token'), false);
   assert.equal(shouldPromptReauthForSessionError('rate_limited'), false);
+  assert.equal(shouldPromptReauthForSessionError('strava_error', 403), false);
+  assert.equal(shouldPromptReauthForSessionError('strava_error', 500), false);
 });

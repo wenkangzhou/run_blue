@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
+import { getClientSession } from '@/lib/clientSession';
 
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
@@ -246,14 +247,7 @@ export default function ActivityDetailPage() {
   const handleAuthError = useCallback(async () => {
     // Try to refresh session first
     try {
-      const response = await fetch('/api/auth/session', { method: 'GET' });
-      if (!response.ok) {
-        // Session is really expired
-        setNeedsReauth(true);
-        logout();
-        return false;
-      }
-      const session = await response.json();
+      const session = await getClientSession({ force: true });
       if (!session?.user) {
         setNeedsReauth(true);
         logout();

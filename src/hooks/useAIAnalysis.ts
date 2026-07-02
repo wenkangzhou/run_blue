@@ -11,6 +11,11 @@ import { clearCachedAIAnalysis, getCachedAIAnalysis, setCachedAIAnalysis } from 
 import { getAIAnalysisCacheKey, getLegacyAIAnalysisCacheKeys } from '@/lib/aiAnalysisCacheKey';
 import { normalizeAIAnalysisForDisplay } from '@/lib/aiResponseParser';
 import { useActivitiesStore } from '@/store/activities';
+import {
+  getAIDataConsent,
+  setAIDataConsent,
+  type AIDataConsent,
+} from '@/lib/aiConsent';
 
 interface AITrainingStats {
   totalRunsAnalyzed: number;
@@ -27,6 +32,7 @@ interface CachedAIAnalysis {
   trainingStats: AITrainingStats | null;
   classification: ActivityClassification | null;
   isQuotaExceeded?: boolean;
+  analysisSource?: 'claude-mcp' | 'kimi' | 'fallback';
 }
 
 interface AIAnalyzeResponse {
@@ -34,6 +40,7 @@ interface AIAnalyzeResponse {
   streamAnalysis: StreamAnalysis | null;
   trainingProfile: AITrainingStats | null;
   classification: ActivityClassification | null;
+  analysisSource: 'claude-mcp' | 'kimi' | 'fallback';
 }
 
 type AIHistoryActivity = Pick<
@@ -102,6 +109,9 @@ export function useAIAnalysis(
 ) {
   const { t, i18n } = useTranslation();
   const { activities } = useActivitiesStore();
+  const [consentStatus, setConsentStatus] = useState<AIDataConsent>('unknown');
+  const [consentReady, setConsentReady] = useState(false);
+  const analysisMode: 'kimi' | 'fallback' = consentStatus === 'accepted' ? 'kimi' : 'fallback';
   const analysisHistoryActivities = useMemo(
     () =>
       activities
@@ -118,10 +128,11 @@ export function useAIAnalysis(
         historyActivities: analysisHistoryActivities,
         locale: i18n.language,
         profile: getUserProfile(),
+        analysisMode,
       };
       return getAIAnalysisCacheKey(cacheInput);
     },
-    [activity, streams, analysisHistoryActivities, i18n.language]
+    [activity, streams, analysisHistoryActivities, i18n.language, analysisMode]
   );
   const legacyCacheKeys = useMemo(
     () => {
@@ -132,9 +143,9 @@ export function useAIAnalysis(
         locale: i18n.language,
         profile: getUserProfile(),
       };
-      return getLegacyAIAnalysisCacheKeys(cacheInput);
+      return consentStatus === 'accepted' ? getLegacyAIAnalysisCacheKeys(cacheInput) : [];
     },
-    [activity, streams, analysisHistoryActivities, i18n.language]
+    [activity, streams, analysisHistoryActivities, i18n.language, consentStatus]
   );
 
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
@@ -143,6 +154,12 @@ export function useAIAnalysis(
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [analysisSource, setAnalysisSource] = useState<CachedAIAnalysis['analysisSource']>();
+
+  useEffect(() => {
+    setConsentStatus(getAIDataConsent());
+    setConsentReady(true);
+  }, []);
 
   const normalizeCachedPayload = useCallback((payload: CachedAIAnalysis): CachedAIAnalysis => {
     if (!payload.analysis || !payload.classification) return payload;
@@ -164,9 +181,15 @@ export function useAIAnalysis(
     setStreamAnalysis(normalizedPayload.streamAnalysis);
     setTrainingStats(normalizedPayload.trainingStats);
     setClassification(normalizedPayload.classification);
+    setAnalysisSource(normalizedPayload.analysisSource);
   }, [normalizeCachedPayload]);
 
   const refreshAnalysis = useCallback(async () => {
+    if (!consentReady || consentStatus === 'unknown') {
+      setLoading(false);
+      return;
+    }
+
     if (!enabled) {
       setLoading(false);
       setError('AUTH_REQUIRED');
@@ -194,6 +217,7 @@ export function useAIAnalysis(
             locale: i18n.language,
             physique,
             lthr: profile?.lthr,
+            allowThirdPartyAI: consentStatus === 'accepted',
           }),
         }).then(async (response) => {
           if (!response.ok) {
@@ -212,6 +236,7 @@ export function useAIAnalysis(
         streamAnalysis: data.streamAnalysis,
         trainingStats: data.trainingProfile,
         classification: data.classification,
+        analysisSource: data.analysisSource,
       });
 
       await setCachedAIAnalysis(cacheKey, {
@@ -219,6 +244,7 @@ export function useAIAnalysis(
         streamAnalysis: data.streamAnalysis,
         trainingStats: data.trainingProfile,
         classification: data.classification,
+        analysisSource: data.analysisSource,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
@@ -227,12 +253,14 @@ export function useAIAnalysis(
       aiAnalysisRequestsInFlight.delete(cacheKey);
       setLoading(false);
     }
-  }, [enabled, activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
+  }, [enabled, consentReady, consentStatus, activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCachedAnalysis() {
+      if (!consentReady || consentStatus === 'unknown') return;
+
       const keys = [cacheKey, ...legacyCacheKeys];
       for (const key of keys) {
         const parsed = await getCachedAIAnalysis<CachedAIAnalysis>(key);
@@ -273,7 +301,21 @@ export function useAIAnalysis(
     return () => {
       cancelled = true;
     };
-  }, [enabled, cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
+  }, [enabled, consentReady, consentStatus, cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
+
+  const acceptAIConsent = useCallback(() => {
+    setAIDataConsent('accepted');
+    setConsentStatus('accepted');
+    setAnalysis(null);
+    setError('');
+  }, []);
+
+  const declineAIConsent = useCallback(() => {
+    setAIDataConsent('declined');
+    setConsentStatus('declined');
+    setAnalysis(null);
+    setError('');
+  }, []);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');
   const isAuthError =
@@ -292,6 +334,12 @@ export function useAIAnalysis(
     error,
     isQuotaError,
     isAuthError,
+    analysisSource,
+    consentStatus,
+    consentReady,
+    consentRequired: consentReady && consentStatus === 'unknown',
+    acceptAIConsent,
+    declineAIConsent,
     refreshAnalysis,
   };
 }

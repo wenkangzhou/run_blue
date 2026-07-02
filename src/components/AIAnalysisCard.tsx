@@ -6,7 +6,7 @@ import { ActivityStream, StravaActivity } from '@/types';
 import {
   Sparkles, RefreshCw, Clock, Zap, TrendingUp, Target,
   Activity, AlertTriangle, ChevronRight, Trophy, Radar,
-  ArrowRight,
+  ArrowRight, ShieldCheck,
 } from 'lucide-react';
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
@@ -126,6 +126,11 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     error,
     isQuotaError,
     isAuthError,
+    consentStatus,
+    consentReady,
+    consentRequired,
+    acceptAIConsent,
+    declineAIConsent,
     refreshAnalysis,
   } = useAIAnalysis(activity, streams, enabled);
   const [expanded, setExpanded] = useState(false);
@@ -512,7 +517,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
           </div>
           <button
             onClick={refreshAnalysis}
-            disabled={loading}
+            disabled={loading || !consentReady || consentRequired}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-zinc-400 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             title="重新分析"
           >
@@ -523,7 +528,39 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
       {/* Content */}
       <div className="p-4">
-        {loading ? (
+        {consentRequired ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
+                <ShieldCheck className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-mono text-sm font-black text-zinc-950 dark:text-zinc-50">
+                  {t('aiAnalysis.consentTitle', '启用 Kimi 训练分析')}
+                </h3>
+                <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  {t('aiAnalysis.consentDescription', '仅发送距离、配速、心率、分段、训练负荷和跑者档案摘要；不会发送姓名、活动名称、路线坐标、地图或设备信息。')}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={acceptAIConsent}
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md bg-blue-600 px-4 font-mono text-xs font-bold text-white hover:bg-blue-700"
+              >
+                {t('aiAnalysis.consentAccept', '同意并生成分析')}
+              </button>
+              <button
+                type="button"
+                onClick={declineAIConsent}
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-zinc-300 bg-white px-4 font-mono text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {t('aiAnalysis.consentDecline', '仅使用本地算法')}
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="space-y-3">
             <div className="h-20 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
             <div className="grid grid-cols-2 gap-2">
@@ -549,8 +586,19 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
               <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
                 <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
                 <span className="flex-1 font-mono text-[10px] text-amber-700 dark:text-amber-300">
-                  {t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
+                  {consentStatus === 'declined'
+                    ? t('aiAnalysis.localOnlyNotice', '当前仅使用本地算法，不会向第三方 AI 发送训练摘要。')
+                    : t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
                 </span>
+                {consentStatus === 'declined' && (
+                  <button
+                    type="button"
+                    onClick={acceptAIConsent}
+                    className="shrink-0 font-mono text-[10px] font-bold text-blue-600 hover:underline"
+                  >
+                    {t('aiAnalysis.enableKimi', '启用 Kimi')}
+                  </button>
+                )}
               </div>
             )}
 

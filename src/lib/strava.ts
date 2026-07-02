@@ -1,6 +1,7 @@
 import { StravaActivity, StravaToken, StravaAthlete, ActivityStream } from '@/types';
 import { parseStravaLocalDate } from './dates';
 import { formatPaceSeconds } from './paceFormat';
+import { getClientSession } from './clientSession';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -88,15 +89,9 @@ export async function getAthlete(accessToken: string): Promise<StravaAthlete> {
 
 // Helper to get valid access token (auto-refresh if needed)
 async function getValidAccessToken(): Promise<string | null> {
-  // Check session first
   try {
-    const sessionRes = await fetch('/api/auth/session');
-    if (sessionRes.ok) {
-      const session = await sessionRes.json();
-      if (session.accessToken) {
-        return session.accessToken;
-      }
-    }
+    const session = await getClientSession();
+    return session.accessToken || null;
   } catch (e) {
     console.error('Failed to get session:', e);
   }

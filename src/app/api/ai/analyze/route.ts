@@ -5,6 +5,8 @@ import { analyzeActivityStreams, formatStreamAnalysisForPrompt } from '@/lib/str
 import { StravaActivity } from '@/types';
 import { parseCookieHeader } from '@/lib/authCookies';
 import { parseAIAnalyzeRequest, type AnalysisHistoryActivity } from '@/lib/aiAnalyzeRequest';
+import { analyzeActivityViaClaudeStravaMcp } from '@/lib/claudeStravaAnalysis';
+import { generateFallbackAnalysis } from '@/lib/aiFallbackAnalysis';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -34,7 +36,16 @@ export async function POST(request: NextRequest) {
     if ('error' in parsed) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-    const { activity, streams, userProfilePBs, recentActivities, locale, physique, lthr } = parsed.payload;
+    const {
+      activity,
+      streams,
+      userProfilePBs,
+      recentActivities,
+      locale,
+      physique,
+      lthr,
+      allowThirdPartyAI,
+    } = parsed.payload;
 
     // Fetch full activity details only when the client sent a lightweight list item.
     let currentActivity = activity;
@@ -76,7 +87,7 @@ export async function POST(request: NextRequest) {
     );
     
     // Stream analysis: segment HR + pace by km
-    const avgPaceSecPerKm = activity.moving_time / activity.distance * 1000;
+    const avgPaceSecPerKm = currentActivity.moving_time / currentActivity.distance * 1000;
     const streamAnalysisRaw = lthr
       ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, classification.isRace)
       : null;
@@ -84,11 +95,33 @@ export async function POST(request: NextRequest) {
       ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr!, locale)
       : undefined;
 
-    // Call AI analysis with training profile
-    const analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
+    let analysisSource: 'claude-mcp' | 'kimi' | 'fallback' = 'kimi';
+    let analysis;
+    if (!allowThirdPartyAI) {
+      analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+      analysisSource = 'fallback';
+    } else if (process.env.STRAVA_AI_PROVIDER === 'claude-mcp') {
+      try {
+        analysis = await analyzeActivityViaClaudeStravaMcp({
+          activityId: currentActivity.id,
+          locale,
+          userProfilePBs,
+          lthr,
+        });
+        analysisSource = 'claude-mcp';
+      } catch (error) {
+        console.error('[AI] Claude Strava MCP analysis failed:', error);
+        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+        analysisSource = 'fallback';
+      }
+    } else {
+      analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
+      analysisSource = analysis.isFallback ? 'fallback' : 'kimi';
+    }
 
     return NextResponse.json({ 
       analysis,
+      analysisSource,
       streamAnalysis: streamAnalysisRaw,
       trainingProfile: {
         totalRunsAnalyzed: trainingProfile.totalRunsAnalyzed,

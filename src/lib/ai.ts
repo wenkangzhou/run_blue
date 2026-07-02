@@ -5,6 +5,7 @@ import { generateFallbackAnalysis } from './aiFallbackAnalysis';
 import { buildProfessionalPrompt } from './aiPrompt';
 import { parseAIResponse } from './aiResponseParser';
 import type { AIAnalysis, UserPhysique } from './aiTypes';
+import { buildAITrainingSnapshot, getPromptInputsFromSnapshot } from './aiTrainingSnapshot';
 
 export type { AIAnalysis, UserProfile, UserPhysique } from './aiTypes';
 export { buildProfessionalPrompt } from './aiPrompt';
@@ -33,7 +34,26 @@ export async function analyzeActivity(
     trainingProfile.estimatedPBs.reliability,
     lthr
   );
-  const prompt = buildProfessionalPrompt(activity, streams, trainingProfile, classification, locale, physique, lthr, streamAnalysis);
+  const snapshot = buildAITrainingSnapshot({
+    activity,
+    streams,
+    trainingProfile,
+    classification,
+    physique,
+    lthr,
+    streamSummary: streamAnalysis,
+  });
+  const promptInputs = getPromptInputsFromSnapshot(snapshot);
+  const prompt = buildProfessionalPrompt(
+    promptInputs.activity,
+    promptInputs.streams,
+    promptInputs.trainingProfile,
+    snapshot.classification,
+    locale,
+    snapshot.physique,
+    snapshot.lthr,
+    snapshot.streamSummary,
+  );
 
   // Retry on JSON parse failure (common on cold-start / network hiccup)
   const maxAttempts = 3;
@@ -61,7 +81,8 @@ export async function analyzeActivity(
             },
           ],
           temperature: 0.6,
-          max_tokens: 16384,
+          max_completion_tokens: 4096,
+          response_format: { type: 'json_object' },
           thinking: {
             type: 'disabled'
           }
@@ -71,6 +92,10 @@ export async function analyzeActivity(
       clearTimeout(timeoutId);
       if (!response.ok) {
         const error = await response.text();
+        if (response.status >= 400 && response.status < 500) {
+          console.error(`[AI] Kimi request rejected (${response.status}):`, error);
+          return generateFallbackAnalysis(activity, trainingProfile, classification, locale);
+        }
         throw new Error(`AI API error: ${error}`);
       }
 

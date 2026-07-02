@@ -25,11 +25,14 @@ writeFileSync(compiledPath, compiled);
 
 const {
   AUTH_COOKIE_NAMES,
+  AUTH_PROFILE_COOKIE_NAME,
   LEGACY_AUTH_COOKIE_NAMES,
   THIRTY_DAYS_SECONDS,
   getAuthCookieOptions,
   getExpiredAuthCookieOptions,
+  parseAuthProfileCookie,
   parseCookieHeader,
+  serializeAuthProfileCookie,
 } = require(compiledPath);
 
 test('auth cookie options are scoped to the whole app and HttpOnly', () => {
@@ -51,9 +54,29 @@ test('expired auth cookies reuse app-wide scope', () => {
 });
 
 test('auth cookie name lists include current and legacy session cookies', () => {
-  assert.deepEqual(AUTH_COOKIE_NAMES, ['access_token', 'refresh_token', 'user_id']);
+  assert.deepEqual(AUTH_COOKIE_NAMES, [
+    'access_token',
+    'refresh_token',
+    'user_id',
+    'athlete_profile',
+  ]);
+  assert.equal(AUTH_PROFILE_COOKIE_NAME, 'athlete_profile');
   assert.ok(LEGACY_AUTH_COOKIE_NAMES.includes('next-auth.session-token'));
   assert.equal(THIRTY_DAYS_SECONDS, 30 * 24 * 60 * 60);
+});
+
+test('athlete profile cookie round-trips without exposing raw JSON', () => {
+  const profile = {
+    id: 123,
+    firstname: 'Run',
+    lastname: 'Blue',
+    profile: 'https://example.com/avatar.png',
+  };
+  const serialized = serializeAuthProfileCookie(profile);
+
+  assert.equal(serialized.includes('Run'), false);
+  assert.deepEqual(parseAuthProfileCookie(serialized), profile);
+  assert.equal(parseAuthProfileCookie('not-valid-base64'), null);
 });
 
 test('parseCookieHeader decodes cookie values and tolerates malformed encoding', () => {

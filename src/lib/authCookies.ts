@@ -1,6 +1,12 @@
 export const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
 
-export const AUTH_COOKIE_NAMES = ['access_token', 'refresh_token', 'user_id'] as const;
+export const AUTH_PROFILE_COOKIE_NAME = 'athlete_profile';
+export const AUTH_COOKIE_NAMES = [
+  'access_token',
+  'refresh_token',
+  'user_id',
+  AUTH_PROFILE_COOKIE_NAME,
+] as const;
 export const LEGACY_AUTH_COOKIE_NAMES = [
   'next-auth.session-token',
   'next-auth.callback-url',
@@ -22,6 +28,37 @@ export function getExpiredAuthCookieOptions() {
     ...getAuthCookieOptions(0),
     expires: new Date(0),
   };
+}
+
+export interface AuthProfileCookie {
+  id: number;
+  firstname: string;
+  lastname: string;
+  profile: string | null;
+}
+
+export function serializeAuthProfileCookie(profile: AuthProfileCookie): string {
+  return Buffer.from(JSON.stringify(profile), 'utf8').toString('base64url');
+}
+
+export function parseAuthProfileCookie(value: string | undefined): AuthProfileCookie | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<AuthProfileCookie>;
+    if (!Number.isFinite(parsed.id) || typeof parsed.firstname !== 'string' || typeof parsed.lastname !== 'string') {
+      return null;
+    }
+
+    return {
+      id: parsed.id as number,
+      firstname: parsed.firstname,
+      lastname: parsed.lastname,
+      profile: typeof parsed.profile === 'string' ? parsed.profile : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function safeDecodeCookieValue(value: string): string {

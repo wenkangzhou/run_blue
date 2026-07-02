@@ -27,6 +27,7 @@ interface AnalyzeRequestBody {
   locale?: unknown;
   physique?: unknown;
   lthr?: unknown;
+  allowThirdPartyAI?: unknown;
 }
 
 export interface AIAnalyzeRequestPayload {
@@ -37,6 +38,7 @@ export interface AIAnalyzeRequestPayload {
   locale?: string;
   physique?: { height?: number | null; weight?: number | null };
   lthr?: number | null;
+  allowThirdPartyAI: boolean;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -124,6 +126,7 @@ export function parseAIAnalyzeRequest(body: unknown): { payload: AIAnalyzeReques
       locale: normalizeLocale(data.locale),
       physique: normalizePhysique(data.physique),
       lthr,
+      allowThirdPartyAI: data.allowThirdPartyAI === true,
     },
   };
 }

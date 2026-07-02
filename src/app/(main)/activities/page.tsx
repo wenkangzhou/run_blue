@@ -18,7 +18,7 @@ import {
   type ActivityWorkoutCategory,
 } from '@/lib/activityWorkoutType';
 import { readSessionState, writeSessionState } from '@/lib/navigationState';
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, SlidersHorizontal, X, Search, CalendarDays } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, SlidersHorizontal, X, Search, CalendarDays, LogIn } from 'lucide-react';
 import { PixelButton } from '@/components/ui';
 import { RunningStats } from '@/components/RunningStats';
 import { GroupedActivities } from '@/components/GroupedActivities';
@@ -64,7 +64,7 @@ function formatCompactListDuration(seconds: number): string {
 export default function ActivitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, login } = useAuth();
   const isGuest = isGuestUser(user);
   const { t } = useTranslation();
   const {
@@ -678,12 +678,16 @@ export default function ActivitiesPage() {
     startBackgroundHistorySync,
   ]);
 
-  const handleRefresh = () => {
-    loadActivities('refresh');
-  };
   const handleReauth = () => {
-    logout();
-    window.location.assign('/api/auth/signin/strava');
+    login();
+  };
+  const refreshRequiresReauth = !isGuest && !user?.accessToken;
+  const handleRefresh = () => {
+    if (refreshRequiresReauth) {
+      handleReauth();
+      return;
+    }
+    loadActivities('refresh');
   };
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -787,12 +791,26 @@ export default function ActivitiesPage() {
             </button>
             <button
               onClick={handleRefresh}
-              disabled={isGuest || refreshing || isLoading || !user?.accessToken}
+              disabled={isGuest || refreshing || isLoading}
               className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 font-mono text-xs font-bold text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
-              title={isGuest ? t('guest.cannotSync') : t('activity.updateLatest')}
+              title={isGuest
+                ? t('guest.cannotSync')
+                : refreshRequiresReauth
+                  ? t('auth.relogin', '重新登录')
+                  : t('activity.updateLatest')}
             >
-              <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{isGuest ? t('guest.demo') : refreshing ? t('activity.updating') : t('activity.update')}</span>
+              {refreshRequiresReauth
+                ? <LogIn size={16} />
+                : <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />}
+              <span className="hidden sm:inline">
+                {isGuest
+                  ? t('guest.demo')
+                  : refreshRequiresReauth
+                    ? t('auth.relogin', '重新登录')
+                    : refreshing
+                      ? t('activity.updating')
+                      : t('activity.update')}
+              </span>
             </button>
           </div>
         </div>

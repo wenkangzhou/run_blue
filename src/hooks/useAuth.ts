@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
@@ -10,6 +10,7 @@ import {
   shouldPromptReauthForSessionError,
 } from '@/lib/authPersistence';
 import { isGuestUser } from '@/lib/guestMode';
+import { getClientSession, invalidateClientSessionCache } from '@/lib/clientSession';
 
 export function useAuth() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export function useAuth() {
   const { i18n } = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const checkedSessionKeyRef = useRef<string | null>(null);
 
   // Initialize language
   useEffect(() => {
@@ -42,32 +44,33 @@ export function useAuth() {
       return;
     }
 
+    const sessionKey = user?.id ? `persisted:${user.id}` : 'anonymous';
+    if (checkedSessionKeyRef.current === sessionKey) {
+      setIsReady(true);
+      return;
+    }
+    checkedSessionKeyRef.current = sessionKey;
+
     const checkAuth = async () => {
       try {
-        // Try to get user from cookie/localStorage or API
-        const response = await fetch('/api/auth/session');
-        if (response.ok) {
-          const session = await response.json();
-          if (session?.user) {
-            setUser({
-              id: session.user.id,
-              stravaId: session.stravaId,
-              email: session.user.email || '',
-              name: session.user.name || '',
-              image: session.user.image || null,
-              accessToken: session.accessToken || '',
-              refreshToken: '',
-              expiresAt: session.expiresAt || 0,
-            });
-          } else if (shouldClearAuthStateForSessionError(session.error)) {
-            if (shouldPromptReauthForSessionError(session.error)) {
-              setNeedsReauth(true);
-            }
-            logout();
-          } else {
-            // No session, set loading to false
-            useAuthStore.getState().setLoading(false);
+        const session = await getClientSession();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            stravaId: session.stravaId ?? Number(session.user.id),
+            email: session.user.email || '',
+            name: session.user.name || '',
+            image: session.user.image || null,
+            accessToken: session.accessToken || '',
+            refreshToken: '',
+            expiresAt: session.expiresAt || 0,
+          });
+        } else if (shouldClearAuthStateForSessionError(session.error, session.status)) {
+          if (shouldPromptReauthForSessionError(session.error, session.status)) {
+            setNeedsReauth(true);
           }
+          checkedSessionKeyRef.current = 'anonymous';
+          logout();
         } else {
           useAuthStore.getState().setLoading(false);
         }
@@ -84,23 +87,22 @@ export function useAuth() {
   // Force refresh session - useful after OAuth callback
   const refreshSession = useCallback(async () => {
     try {
-      const response = await fetch('/api/auth/session');
-      if (response.ok) {
-        const session = await response.json();
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            stravaId: session.stravaId,
-            email: session.user.email || '',
-            name: session.user.name || '',
-            image: session.user.image || null,
-            accessToken: session.accessToken || '',
-            refreshToken: '',
-            expiresAt: session.expiresAt || 0,
-          });
-          return true;
-        }
+      const session = await getClientSession({ force: true });
+      if (session?.user) {
+        setNeedsReauth(false);
+        setUser({
+          id: session.user.id,
+          stravaId: session.stravaId ?? Number(session.user.id),
+          email: session.user.email || '',
+          name: session.user.name || '',
+          image: session.user.image || null,
+          accessToken: session.accessToken || '',
+          refreshToken: '',
+          expiresAt: session.expiresAt || 0,
+        });
+        return true;
       }
+      if (shouldPromptReauthForSessionError(session.error, session.status)) setNeedsReauth(true);
       return false;
     } catch {
       return false;
@@ -111,6 +113,7 @@ export function useAuth() {
     if (isGuestUser(user)) {
       logout();
     }
+    invalidateClientSessionCache();
     window.location.assign('/api/auth/signin/strava');
   };
 
@@ -122,6 +125,7 @@ export function useAuth() {
     }
 
     await fetch('/api/auth/signout', { method: 'POST' });
+    invalidateClientSessionCache();
     logout();
     router.push('/');
   };

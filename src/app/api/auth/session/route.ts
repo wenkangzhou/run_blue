@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAccessToken } from '@/lib/strava';
-import { getAuthCookieOptions, parseCookieHeader, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
+import {
+  AUTH_COOKIE_NAMES,
+  AUTH_PROFILE_COOKIE_NAME,
+  type AuthProfileCookie,
+  getAuthCookieOptions,
+  getExpiredAuthCookieOptions,
+  parseAuthProfileCookie,
+  parseCookieHeader,
+  serializeAuthProfileCookie,
+  THIRTY_DAYS_SECONDS,
+} from '@/lib/authCookies';
 
 interface StravaAthleteResponse {
   id: number;
@@ -20,106 +30,163 @@ interface SessionData {
   accessToken: string;
 }
 
-// In-memory cache to reduce Strava API calls (30s TTL)
-const sessionCache = new Map<string, { data: SessionData; timestamp: number }>();
-const SESSION_CACHE_TTL = 30 * 1000; // 30 seconds
-export async function GET(request: NextRequest) {
-  // Get cookies from request headers
-  const cookieHeader = request.headers.get('cookie') || '';
-  const cookies = parseCookieHeader(cookieHeader);
-  
-  let accessToken = cookies['access_token'];
-  const userId = cookies['user_id'];
-  let refreshToken = cookies['refresh_token'];
+interface TokenUpdate {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
 
-  if (!accessToken || !userId) {
-    return NextResponse.json({ user: null, error: 'no_token' });
+function applyTokenUpdate(response: NextResponse, tokenUpdate?: TokenUpdate) {
+  if (!tokenUpdate) return;
+  response.cookies.set('access_token', tokenUpdate.accessToken, getAuthCookieOptions(tokenUpdate.expiresIn));
+  response.cookies.set('refresh_token', tokenUpdate.refreshToken, getAuthCookieOptions(THIRTY_DAYS_SECONDS));
+}
+
+function expiredSessionResponse() {
+  const response = NextResponse.json({ user: null, error: 'token_expired' });
+  const expiredOptions = getExpiredAuthCookieOptions();
+  for (const name of AUTH_COOKIE_NAMES) {
+    response.cookies.set(name, '', expiredOptions);
   }
+  return response;
+}
 
-  // Check in-memory cache first
-  const cacheKey = `${userId}:${accessToken.slice(-8)}`;
-  const cached = sessionCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < SESSION_CACHE_TTL) {
-    return NextResponse.json(cached.data);
-  }
+function rateLimitedSessionResponse(tokenUpdate?: TokenUpdate) {
+  const response = NextResponse.json({ user: null, error: 'rate_limited' });
+  applyTokenUpdate(response, tokenUpdate);
+  return response;
+}
 
-  // Try to get user info from Strava
-  let response = await fetch('https://www.strava.com/api/v3/athlete', {
+function unavailableSessionResponse(status?: number, tokenUpdate?: TokenUpdate) {
+  const response = NextResponse.json({ user: null, error: 'session_unavailable', status });
+  applyTokenUpdate(response, tokenUpdate);
+  return response;
+}
+
+function fetchStravaAthlete(accessToken: string) {
+  return fetch('https://www.strava.com/api/v3/athlete', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
+}
 
-  // If token expired, try to refresh
-  if (response.status === 401 && refreshToken) {
+function createSessionData(profile: AuthProfileCookie, accessToken: string): SessionData {
+  return {
+    user: {
+      id: profile.id.toString(),
+      name: `${profile.firstname} ${profile.lastname}`.trim(),
+      email: '',
+      image: profile.profile,
+    },
+    stravaId: profile.id,
+    accessToken,
+  };
+}
+
+function createSessionResponse(profile: AuthProfileCookie, accessToken: string, tokenUpdate?: TokenUpdate) {
+  const response = NextResponse.json(createSessionData(profile, accessToken));
+  applyTokenUpdate(response, tokenUpdate);
+  response.cookies.set(
+    AUTH_PROFILE_COOKIE_NAME,
+    serializeAuthProfileCookie(profile),
+    getAuthCookieOptions(THIRTY_DAYS_SECONDS)
+  );
+  return response;
+}
+
+function isTerminalRefreshError(error: unknown): boolean {
+  return error instanceof Error && /:\s*(400|401|403)$/.test(error.message);
+}
+
+export async function GET(request: NextRequest) {
+  const cookies = parseCookieHeader(request.headers.get('cookie') || '');
+  let accessToken = cookies.access_token;
+  const userId = cookies.user_id;
+  let refreshToken = cookies.refresh_token;
+  let profile = parseAuthProfileCookie(cookies[AUTH_PROFILE_COOKIE_NAME]);
+  const forceRefresh = request.nextUrl.searchParams.get('refresh') === '1';
+  let tokenUpdate: TokenUpdate | undefined;
+
+  if (!userId || (!accessToken && !refreshToken)) {
+    return NextResponse.json({ user: null, error: 'no_token' });
+  }
+
+  if (profile?.id.toString() !== userId) {
+    profile = null;
+  }
+
+  // The OAuth response already includes the athlete profile. Keeping that
+  // server-side avoids an extra Strava request on every page load.
+  if (accessToken && profile && !forceRefresh) {
+    return createSessionResponse(profile, accessToken);
+  }
+
+  if ((!accessToken || forceRefresh) && refreshToken) {
     try {
       const tokenData = await refreshAccessToken(refreshToken);
       accessToken = tokenData.access_token;
       refreshToken = tokenData.refresh_token;
-      
-      // Retry request with new token
-      response = await fetch('https://www.strava.com/api/v3/athlete', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Refresh failed: ${response.status}`);
-      }
-      
-      const athlete = (await response.json()) as StravaAthleteResponse;
-
-      const sessionData = {
-        user: {
-          id: userId,
-          name: `${athlete.firstname} ${athlete.lastname}`,
-          email: '',
-          image: athlete.profile,
-        },
-        stravaId: athlete.id,
+      tokenUpdate = {
         accessToken,
+        refreshToken,
+        expiresIn: tokenData.expires_in,
       };
-
-      // Update cache with new token
-      const newCacheKey = `${userId}:${accessToken.slice(-8)}`;
-      sessionCache.set(newCacheKey, { data: sessionData, timestamp: Date.now() });
-
-      const res = NextResponse.json(sessionData);
-      res.cookies.set('access_token', accessToken, getAuthCookieOptions(tokenData.expires_in));
-      res.cookies.set('refresh_token', refreshToken, getAuthCookieOptions(THIRTY_DAYS_SECONDS));
-      
-      return res;
     } catch (error) {
       console.error('[Session] Failed to refresh token:', error);
-      return NextResponse.json({ user: null, error: 'token_expired' });
+      if (error instanceof Error && error.message.includes('429')) {
+        return rateLimitedSessionResponse();
+      }
+      return isTerminalRefreshError(error) ? expiredSessionResponse() : unavailableSessionResponse();
     }
   }
 
-  if (!response.ok) {
-    const status = response.status;
-    if (status === 401) {
-      return NextResponse.json({ user: null, error: 'token_expired' });
-    }
-    if (status === 429) {
-      return NextResponse.json({ user: null, error: 'rate_limited' });
-    }
-    return NextResponse.json({ user: null, error: 'strava_error', status });
+  if (!accessToken) {
+    return NextResponse.json({ user: null, error: 'no_token' });
   }
 
-  const athlete = (await response.json()) as StravaAthleteResponse;
+  if (profile) {
+    return createSessionResponse(profile, accessToken, tokenUpdate);
+  }
 
-  const sessionData = {
-    user: {
-      id: userId,
-      name: `${athlete.firstname} ${athlete.lastname}`,
-      email: '',
-      image: athlete.profile,
-    },
-    stravaId: athlete.id,
-    accessToken,
+  // Compatibility path for cookies created before athlete_profile existed.
+  let athleteResponse: Response;
+  try {
+    athleteResponse = await fetchStravaAthlete(accessToken);
+
+    if ((athleteResponse.status === 401 || athleteResponse.status === 403) && refreshToken && !tokenUpdate) {
+      const tokenData = await refreshAccessToken(refreshToken);
+      accessToken = tokenData.access_token;
+      refreshToken = tokenData.refresh_token;
+      tokenUpdate = {
+        accessToken,
+        refreshToken,
+        expiresIn: tokenData.expires_in,
+      };
+      athleteResponse = await fetchStravaAthlete(accessToken);
+    }
+  } catch (error) {
+    console.error('[Session] Failed to restore legacy session:', error);
+    if (error instanceof Error && error.message.includes('429')) {
+      return rateLimitedSessionResponse(tokenUpdate);
+    }
+    if (isTerminalRefreshError(error)) {
+      return expiredSessionResponse();
+    }
+    return unavailableSessionResponse(undefined, tokenUpdate);
+  }
+
+  if (!athleteResponse.ok) {
+    if (athleteResponse.status === 429) return rateLimitedSessionResponse(tokenUpdate);
+    return unavailableSessionResponse(athleteResponse.status, tokenUpdate);
+  }
+
+  const athlete = (await athleteResponse.json()) as StravaAthleteResponse;
+  profile = {
+    id: athlete.id,
+    firstname: athlete.firstname,
+    lastname: athlete.lastname,
+    profile: athlete.profile,
   };
-
-  sessionCache.set(cacheKey, { data: sessionData, timestamp: Date.now() });
-  return NextResponse.json(sessionData);
+  return createSessionResponse(profile, accessToken, tokenUpdate);
 }

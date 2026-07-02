@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeToken } from '@/lib/strava';
-import { getAuthCookieOptions, THIRTY_DAYS_SECONDS } from '@/lib/authCookies';
+import {
+  AUTH_PROFILE_COOKIE_NAME,
+  getAuthCookieOptions,
+  serializeAuthProfileCookie,
+  THIRTY_DAYS_SECONDS,
+} from '@/lib/authCookies';
 import { getAuthErrorRedirectPath } from '@/lib/authRedirect';
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -36,6 +41,18 @@ export async function GET(request: NextRequest) {
     response.cookies.set('access_token', tokenData.access_token, getAuthCookieOptions(tokenData.expires_in));
     response.cookies.set('refresh_token', tokenData.refresh_token, getAuthCookieOptions(THIRTY_DAYS_SECONDS));
     response.cookies.set('user_id', tokenData.athlete.id.toString(), getAuthCookieOptions(THIRTY_DAYS_SECONDS));
+    response.cookies.set(
+      AUTH_PROFILE_COOKIE_NAME,
+      serializeAuthProfileCookie({
+        id: tokenData.athlete.id,
+        firstname: tokenData.athlete.firstname,
+        lastname: tokenData.athlete.lastname,
+        profile: tokenData.athlete.profile || null,
+      }),
+      getAuthCookieOptions(THIRTY_DAYS_SECONDS)
+    );
+
+    console.info('[Auth] Strava callback completed', { athleteId: tokenData.athlete.id });
 
     return response;
   } catch (err) {

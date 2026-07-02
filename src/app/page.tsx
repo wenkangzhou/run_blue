@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/auth';
 import i18n from '@/i18n';
 import { StravaConnect } from '@/components/StravaConnect';
 import { GUEST_USER, isGuestUser } from '@/lib/guestMode';
+import { getClientSession } from '@/lib/clientSession';
 import {
   AlertCircle,
   BarChart3,
@@ -66,10 +67,7 @@ export default function HomePage() {
       }
 
       try {
-        const response = await fetch('/api/auth/session');
-        if (!response.ok) return;
-
-        const session = await response.json();
+        const session = await getClientSession();
         if (cancelled) return;
 
         if (session.user) {
@@ -80,6 +78,8 @@ export default function HomePage() {
           setToast({ message: t('errors.rateLimitedDesc'), type: 'warning' });
         } else if (session.error === 'strava_error' && session.status === 429) {
           setToast({ message: t('errors.rateLimitedDesc'), type: 'warning' });
+        } else if (session.error === 'strava_error' && session.status === 403) {
+          setToast({ message: t('auth.sessionExpired'), type: 'warning' });
         }
       } finally {
         if (!cancelled) setIsLoading(false);

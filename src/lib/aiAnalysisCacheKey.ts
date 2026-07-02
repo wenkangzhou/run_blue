@@ -1,7 +1,7 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v20';
+export const AI_ANALYSIS_CACHE_VERSION = 'v21';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -39,6 +39,7 @@ interface AIAnalysisCacheKeyInput {
   historyActivities: HistoryActivity[];
   locale: string;
   profile: UserProfile | null;
+  analysisMode?: 'kimi' | 'fallback';
 }
 
 function hashString(value: string): string {
@@ -174,9 +175,11 @@ function buildAIAnalysisCacheKey({
   historyActivities,
   locale,
   profile,
+  analysisMode = 'kimi',
 }: AIAnalysisCacheKeyInput, version: string): string {
   const inputFingerprint = {
     version,
+    analysisMode,
     activity: {
       id: activity.id,
       distance: roundNumber(activity.distance, 0),

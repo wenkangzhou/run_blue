@@ -95,13 +95,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v20 keys for identical AI analysis inputs', () => {
+test('builds stable v21 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v20');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v21');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v20_1_/);
+  assert.match(first, /^ai_analysis_v21_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -112,6 +112,13 @@ test('builds legacy fallback keys for existing cached analysis', () => {
   assert.match(legacy[0], /^ai_analysis_v19_1_/);
   assert.match(legacy[1], /^ai_analysis_v18_1_/);
   assert.notEqual(legacy[0], current);
+});
+
+test('keeps Kimi and local fallback analysis in separate cache entries', () => {
+  assert.notEqual(
+    key({ analysisMode: 'kimi' }),
+    key({ analysisMode: 'fallback' })
+  );
 });
 
 test('skips the unsafe workout fallback while keeping the latest compatible cache', () => {

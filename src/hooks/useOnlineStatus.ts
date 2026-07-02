@@ -3,14 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 
 export function useOnlineStatus() {
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
+  // Keep the server render and the client's first render identical. Node may
+  // expose a partial navigator object without a reliable onLine value.
+  const [isOnline, setIsOnline] = useState(true);
 
   const handleOnline = useCallback(() => setIsOnline(true), []);
   const handleOffline = useCallback(() => setIsOnline(false), []);
 
   useEffect(() => {
+    setIsOnline(window.navigator.onLine);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 

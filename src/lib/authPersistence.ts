@@ -19,10 +19,12 @@ export function stripAuthTokens(user: User | null | undefined): User | null {
   };
 }
 
-export function shouldClearAuthStateForSessionError(error: unknown): boolean {
+export function shouldClearAuthStateForSessionError(error: unknown, status?: unknown): boolean {
+  void status;
   return error === 'no_token' || error === 'token_expired';
 }
 
-export function shouldPromptReauthForSessionError(error: unknown): boolean {
+export function shouldPromptReauthForSessionError(error: unknown, status?: unknown): boolean {
+  void status;
   return error === 'token_expired';
 }

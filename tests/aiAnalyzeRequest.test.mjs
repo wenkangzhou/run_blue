@@ -70,6 +70,7 @@ test('parseAIAnalyzeRequest accepts and normalizes a valid payload', () => {
     locale: 'zh',
     physique: { height: 178, weight: 68 },
     lthr: 180,
+    allowThirdPartyAI: true,
   });
 
   assert.equal('payload' in result, true);
@@ -78,6 +79,7 @@ test('parseAIAnalyzeRequest accepts and normalizes a valid payload', () => {
   assert.equal(result.payload.recentActivities.length, 1);
   assert.deepEqual(result.payload.physique, { height: 178, weight: 68 });
   assert.equal(result.payload.lthr, 180);
+  assert.equal(result.payload.allowThirdPartyAI, true);
 });
 
 test('parseAIAnalyzeRequest rejects missing or malformed activity data', () => {
@@ -111,4 +113,5 @@ test('parseAIAnalyzeRequest normalizes optional streams and locale', () => {
   assert.equal('payload' in result, true);
   assert.equal(result.payload.streams, null);
   assert.equal(result.payload.locale, undefined);
+  assert.equal(result.payload.allowThirdPartyAI, false);
 });
