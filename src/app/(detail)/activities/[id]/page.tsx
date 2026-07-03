@@ -31,6 +31,7 @@ import { calculatePaceTrend } from '@/lib/paceTrend';
 import {
   BarChart3,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   Gauge,
   HeartPulse,
@@ -88,6 +89,11 @@ export default function ActivityDetailPage() {
   );
   const [lapsExpanded, setLapsExpanded] = useSessionPageState<boolean>(
     `run_blue_page:activity:${activityId}:laps-expanded`,
+    false,
+    (value): value is boolean => typeof value === 'boolean'
+  );
+  const [segmentEffortsExpanded, setSegmentEffortsExpanded] = useSessionPageState<boolean>(
+    `run_blue_page:activity:${activityId}:segment-efforts-expanded`,
     false,
     (value): value is boolean => typeof value === 'boolean'
   );
@@ -612,7 +618,10 @@ export default function ActivityDetailPage() {
       {currentActivity.segment_efforts && currentActivity.segment_efforts.length > 0 && (
         <SectionCard
           title={t('activity.segmentEfforts', '路段成绩')}
+          icon={<Route size={15} />}
           aside={`${currentActivity.segment_efforts.length}`}
+          collapsed={!segmentEffortsExpanded}
+          onToggle={() => setSegmentEffortsExpanded(!segmentEffortsExpanded)}
         >
           <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
             {currentActivity.segment_efforts.map((effort) => (
@@ -1112,7 +1121,7 @@ function GuestAIAnalysisPreview({ activity }: { activity: StravaActivity }) {
         </p>
         <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
           <p className="font-mono text-[10px] font-bold uppercase text-zinc-400">
-            {t('aiAnalysis.analysisDetails', '分析依据与建议')}
+            {t('aiAnalysis.analysisDetails', '完整分析')}
           </p>
           <p className="mt-1 font-mono text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
             {isInterval
@@ -1138,29 +1147,57 @@ function SectionCard({
   title,
   aside,
   icon,
+  collapsed = false,
+  onToggle,
   children,
 }: {
   title: string;
   aside?: React.ReactNode;
   icon?: React.ReactNode;
+  collapsed?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 }) {
+  const heading = (
+    <div className="flex min-w-0 items-center gap-1.5">
+      {icon && <span className="shrink-0 text-zinc-400">{icon}</span>}
+      <h2 className="truncate font-mono text-xs font-bold uppercase text-zinc-500">
+        {title}
+      </h2>
+    </div>
+  );
+
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {icon && <span className="shrink-0 text-zinc-400">{icon}</span>}
-          <h2 className="truncate font-mono text-xs font-bold uppercase text-zinc-500">
-            {title}
-          </h2>
-        </div>
-        {aside && (
-          <div className="shrink-0 font-mono text-[10px] text-zinc-400">
-            {aside}
+      {onToggle ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          className={`flex w-full items-center justify-between gap-3 text-left ${collapsed ? '' : 'mb-3'}`}
+        >
+          {heading}
+          <div className="flex shrink-0 items-center gap-2">
+            {aside && (
+              <span className="font-mono text-[10px] text-zinc-400">{aside}</span>
+            )}
+            <ChevronDown
+              size={15}
+              className={`text-zinc-400 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+            />
           </div>
-        )}
-      </div>
-      {children}
+        </button>
+      ) : (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          {heading}
+          {aside && (
+            <div className="shrink-0 font-mono text-[10px] text-zinc-400">
+              {aside}
+            </div>
+          )}
+        </div>
+      )}
+      {!collapsed && children}
     </section>
   );
 }

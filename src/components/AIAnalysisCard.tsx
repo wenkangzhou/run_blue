@@ -437,17 +437,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const zoneFallbackLabel = zoneKey;
   const zoneLabel = t(zoneTranslationKey, zoneFallbackLabel);
   const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
-  const briefSignals = (() => {
-    if (!analysis || !verdict) return [];
-    const warnings = (analysis.warnings ?? []).filter(Boolean);
-    if (warnings.length > 0) {
-      return warnings.slice(0, 2).map((text) => ({ tone: 'warning' as const, text: compactSummary(text, 1, 56) }));
-    }
-    if (verdict.cons.length > 0) {
-      return verdict.cons.slice(0, 2).map((text) => ({ tone: 'caution' as const, text: compactSummary(text, 1, 56) }));
-    }
-    return verdict.pros.slice(0, 2).map((text) => ({ tone: 'positive' as const, text: compactSummary(text, 1, 56) }));
-  })();
   const briefAdvice = (() => {
     if (!analysis || !verdict) return [];
     const candidates = [
@@ -650,49 +639,21 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                 </div>
               )}
 
-              {(briefSignals.length > 0 || briefAdvice.length > 0) && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {briefSignals.length > 0 && (
-                    <div className="rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
-                      <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-                        {t('aiAnalysis.keyEvidence', '关键依据')}
-                      </p>
-                      <div className="space-y-1">
-                        {briefSignals.map((item, index) => (
-                          <div key={index} className="flex items-start gap-1.5">
-                            <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
-                              item.tone === 'positive'
-                                ? 'bg-emerald-500'
-                                : item.tone === 'warning'
-                                  ? 'bg-red-500'
-                                  : 'bg-amber-500'
-                            }`} />
-                            <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-                              {item.text}
-                            </p>
-                          </div>
-                        ))}
+              {briefAdvice.length > 0 && (
+                <div className="mt-3 rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
+                  <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
+                    {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
+                  </p>
+                  <div className="space-y-1">
+                    {briefAdvice.map((item, index) => (
+                      <div key={index} className="flex items-start gap-1.5">
+                        <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-blue-500" />
+                        <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+                          {item}
+                        </p>
                       </div>
-                    </div>
-                  )}
-
-                  {briefAdvice.length > 0 && (
-                    <div className="rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
-                      <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-                        {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
-                      </p>
-                      <div className="space-y-1">
-                        {briefAdvice.map((item, index) => (
-                          <div key={index} className="flex items-start gap-1.5">
-                            <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-blue-500" />
-                            <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-                              {item}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -703,7 +664,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                 className="flex w-full items-center justify-between p-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
                 <span className="font-mono text-xs font-bold uppercase text-zinc-500">
-                  {t('aiAnalysis.analysisDetails', '分析依据与建议')}
+                  {t('aiAnalysis.analysisDetails', '完整分析')}
                 </span>
                 <ChevronRight className={`w-4 h-4 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
               </button>

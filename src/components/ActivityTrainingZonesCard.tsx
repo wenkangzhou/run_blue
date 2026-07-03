@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Gauge, HeartPulse, Timer } from 'lucide-react';
+import { ChevronDown, Gauge, HeartPulse, Timer } from 'lucide-react';
 import type { ActivityStream, StravaActivity } from '@/types';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 import { formatPaceSeconds } from '@/lib/paceFormat';
@@ -63,6 +63,11 @@ export function ActivityTrainingZonesCard({
     'pace',
     isZoneMode
   );
+  const [collapsed, setCollapsed] = useSessionPageState<boolean>(
+    `run_blue_page:activity:${activity.id}:zones-collapsed`,
+    true,
+    (value): value is boolean => typeof value === 'boolean'
+  );
 
   useEffect(() => {
     setProfile(getUserProfile());
@@ -94,56 +99,76 @@ export function ActivityTrainingZonesCard({
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Gauge size={15} className="shrink-0 text-blue-600 dark:text-blue-400" />
-              <h2 className="font-mono text-xs font-bold uppercase text-zinc-600 dark:text-zinc-300">
+      <div className={`${collapsed ? '' : 'border-b border-zinc-100 dark:border-zinc-800'} p-4`}>
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-expanded={!collapsed}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Gauge size={15} className="shrink-0 text-blue-600 dark:text-blue-400" />
+            <div className="min-w-0">
+              <h2 className="truncate font-mono text-xs font-bold uppercase text-zinc-600 dark:text-zinc-300">
                 {t('activity.trainingZones', '本次训练区间')}
               </h2>
+              {collapsed && (
+                <p className="mt-0.5 truncate font-mono text-[10px] text-zinc-400">
+                  {t('activity.trainingZonesCollapsed', '查看配速与心率区间分布')}
+                </p>
+              )}
             </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {distribution.source !== 'unavailable' && (
+              <span className={`rounded-md px-2 py-1 font-mono text-[10px] font-bold ${
+                distribution.source === 'stream' || distribution.source === 'splits'
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+              }`}>
+                {sourceLabel}
+              </span>
+            )}
+            <ChevronDown
+              size={16}
+              className={`text-zinc-400 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+            />
+          </div>
+        </button>
+
+        {!collapsed && (
+          <>
             <p className="mt-1 font-mono text-[10px] leading-4 text-zinc-400">
               {t('activity.trainingZonesHint', '按运动流中的有效训练时长统计')}
             </p>
-          </div>
-          {distribution.source !== 'unavailable' && (
-            <span className={`shrink-0 rounded-md px-2 py-1 font-mono text-[10px] font-bold ${
-              distribution.source === 'stream' || distribution.source === 'splits'
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
-            }`}>
-              {sourceLabel}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-950">
-          {(['pace', 'heartRate'] as const).map((value) => {
-            const Icon = value === 'pace' ? Timer : HeartPulse;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setMode(value)}
-                aria-pressed={mode === value}
-                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 font-mono text-[11px] transition-colors ${
-                  mode === value
-                    ? 'bg-white font-bold text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-                }`}
-              >
-                <Icon size={13} />
-                <span className="truncate">
-                  {value === 'pace' ? t('stats.paceZones', '配速 Z1–Z6') : t('stats.heartRateZones', '心率 Z1–Z5')}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+            <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-950">
+              {(['pace', 'heartRate'] as const).map((value) => {
+                const Icon = value === 'pace' ? Timer : HeartPulse;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setMode(value)}
+                    aria-pressed={mode === value}
+                    className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 font-mono text-[11px] transition-colors ${
+                      mode === value
+                        ? 'bg-white font-bold text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span className="truncate">
+                      {value === 'pace' ? t('stats.paceZones', '配速 Z1–Z6') : t('stats.heartRateZones', '心率 Z1–Z5')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
-      {!hasReference || distribution.totalSeconds === 0 ? (
+      {!collapsed && (!hasReference || distribution.totalSeconds === 0 ? (
         <div className="px-4 py-6 text-center">
           <p className="font-mono text-xs leading-5 text-zinc-500 dark:text-zinc-400">
             {!hasReference
@@ -207,7 +232,7 @@ export function ActivityTrainingZonesCard({
             <span>{t('activity.zoneCoverage', { percent: distribution.coveragePercent })}</span>
           </div>
         </>
-      )}
+      ))}
     </section>
   );
 }
