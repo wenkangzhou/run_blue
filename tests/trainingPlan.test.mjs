@@ -25,9 +25,11 @@ function compileLibFile(sourceFile, outputFile) {
   writeFileSync(path.join(tempDir, outputFile), compiled);
 }
 
+compileLibFile('src/lib/dates.ts', 'dates.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/paceFormat.ts', 'paceFormat.js');
 compileLibFile('src/lib/userProfile.ts', 'userProfile.js');
+compileLibFile('src/lib/trainingZones.ts', 'trainingZones.js');
 compileLibFile('src/lib/trainingPlan.ts', 'trainingPlan.js');
 
 const {

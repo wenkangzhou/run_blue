@@ -1,4 +1,5 @@
 import { getHRZones } from './heartRateZones';
+import { calculateSemanticPaceZones } from './trainingZones';
 import { formatPaceSeconds } from './paceFormat';
 import { formatSecondsToTime, getUserProfile } from './userProfile';
 
@@ -308,13 +309,13 @@ export function getDistanceLabelEn(distance: RaceDistance): string {
 }
 
 export function calculatePaceZones(pb5kSec: number) {
-  const pbPace = pb5kSec / 5;
+  const zones = calculateSemanticPaceZones(pb5kSec);
   return {
-    E: { min: pbPace * 1.20, max: pbPace * 1.35, desc: '轻松跑' },
-    M: { min: pbPace * 1.05, max: pbPace * 1.15, desc: '马拉松配速' },
-    T: { min: pbPace * 0.93, max: pbPace * 0.97, desc: '乳酸阈值' },
-    I: { min: pbPace * 0.88, max: pbPace * 0.92, desc: '间歇跑' },
-    R: { min: pbPace * 0.82, max: pbPace * 0.87, desc: '重复跑' },
+    E: { min: zones.easy.min, max: zones.easy.max, desc: '轻松跑' },
+    M: { min: zones.marathon.min, max: zones.marathon.max, desc: '稳态/马拉松配速' },
+    T: { min: zones.threshold.min, max: zones.threshold.max, desc: '乳酸阈值' },
+    I: { min: zones.interval.min, max: zones.interval.max, desc: '间歇跑' },
+    R: { min: zones.repetition.min, max: zones.repetition.max, desc: '重复跑' },
   };
 }
 

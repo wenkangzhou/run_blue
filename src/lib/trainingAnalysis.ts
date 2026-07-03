@@ -1,6 +1,7 @@
 import { StravaActivity } from '@/types';
 import { formatLocalDateKey, getActivityDate, getActivityTimestamp, getISOWeek } from './dates';
 import { getZoneForHR } from './heartRateZones';
+import { calculateSemanticPaceZones } from './trainingZones';
 
 // Estimated Personal Bests from activity history
 export interface EstimatedPBs {
@@ -777,7 +778,11 @@ function inferWorkoutType(
     (hrAssessment.avgZone === 'z1' || hrAssessment.avgZone === 'z2') &&
     structure.splitPattern === 'steady' &&
     distanceKm <= 12 &&
-    (paceZone === 'M' || paceZone === 'T')
+    (
+      paceZone === 'M'
+      || paceZone === 'T'
+      || (paceZone === 'I' && paceAssessment.confidence === 'low')
+    )
   ) {
     evidence.push(`average HR stayed in low aerobic zone (${Math.round(hrAssessment.average ?? 0)} bpm)`);
     if (paceAssessment.evidence.length > 0) {
@@ -1418,46 +1423,7 @@ function estimateFromPace(runs: StravaActivity[], targetKm: number): number {
  * Using Daniels' RUNNING Formula methodology
  */
 export function calculatePaceZones(pb5kSeconds: number): PaceZones {
-  const pb5kPace = pb5kSeconds / 5; // seconds per km
-  
-  // If PB is 0 or unreasonable, use defaults
-  if (pb5kSeconds === 0 || pb5kPace > 480) { // slower than 8:00/km
-    return {
-      easy: { min: 360, max: Infinity, description: '轻松跑 - 恢复、有氧基础' },
-      marathon: { min: 300, max: 360, description: '马拉松配速 - 比赛节奏' },
-      threshold: { min: 270, max: 300, description: '乳酸阈值 - 舒适艰苦的边缘' },
-      interval: { min: 240, max: 270, description: '间歇跑 - VO2max训练' },
-      repetition: { min: 0, max: 240, description: '重复跑 - 速度和跑姿' },
-    };
-  }
-  
-  return {
-    easy: {
-      min: Math.round(pb5kPace * 1.15),
-      max: Infinity,
-      description: '轻松跑 - 恢复、有氧基础',
-    },
-    marathon: {
-      min: Math.round(pb5kPace * 0.97),
-      max: Math.round(pb5kPace * 1.15),
-      description: '马拉松配速 - 比赛节奏',
-    },
-    threshold: {
-      min: Math.round(pb5kPace * 0.92),
-      max: Math.round(pb5kPace * 0.97),
-      description: '乳酸阈值 - 舒适艰苦的边缘',
-    },
-    interval: {
-      min: Math.round(pb5kPace * 0.87),
-      max: Math.round(pb5kPace * 0.92),
-      description: '间歇跑 - VO2max训练',
-    },
-    repetition: {
-      min: 0,
-      max: Math.round(pb5kPace * 0.87),
-      description: '重复跑 - 速度和跑姿',
-    },
-  };
+  return calculateSemanticPaceZones(pb5kSeconds);
 }
 
 /**

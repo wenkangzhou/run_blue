@@ -40,6 +40,8 @@ import {
 import { formatDuration } from '@/lib/strava';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 import type { LucideIcon } from 'lucide-react';
+import { TrainingLoadPanel } from './TrainingLoadPanel';
+import { TrainingZonesPanel } from './TrainingZonesPanel';
 
 interface VolumeDashboardProps {
   activities: StravaActivity[];
@@ -843,6 +845,10 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
           </div>
         </div>
       </section>
+
+      <TrainingLoadPanel activities={runs} />
+
+      <TrainingZonesPanel activities={runs} />
 
       <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 sm:p-4 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">

@@ -20,6 +20,7 @@ import { useRoutesStore } from '@/store/routes';
 import { getGuestActivities, getGuestActivity, getGuestActivityStreams, getGuestSavedRoutes, isGuestUser } from '@/lib/guestMode';
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
+import { ActivityTrainingZonesCard } from '@/components/ActivityTrainingZonesCard';
 import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
@@ -888,6 +889,12 @@ export default function ActivityDetailPage() {
               <div className="space-y-5 xl:hidden">
                 {renderPrimarySideSections(activity)}
               </div>
+
+              <ActivityTrainingZonesCard
+                activity={activity}
+                activities={allActivities}
+                streams={streams}
+              />
 
               <div className="min-w-0">
                 {isGuest ? (

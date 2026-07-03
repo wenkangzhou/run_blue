@@ -1,7 +1,7 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v21';
+export const AI_ANALYSIS_CACHE_VERSION = 'v22';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 

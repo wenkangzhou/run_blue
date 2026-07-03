@@ -27,6 +27,7 @@ function compileLibFile(sourceFile, outputFile) {
 
 compileLibFile('src/lib/dates.ts', 'dates.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
+compileLibFile('src/lib/trainingZones.ts', 'trainingZones.js');
 compileLibFile('src/lib/trainingAnalysis.ts', 'trainingAnalysis.js');
 
 const originalLoad = Module._load;
@@ -214,7 +215,7 @@ test('classifyActivity treats repeated lap workouts as interval candidates befor
 
   const classification = classifyActivity(activity, calculatePaceZones(1850), 'medium', 176);
 
-  assert.equal(classification.paceZone, 'T');
+  assert.equal(classification.paceZone, 'I');
   assert.equal(classification.workoutType, 'interval');
   assert.equal(classification.workoutTypeConfidence, 'medium');
   assert.ok(
@@ -336,10 +337,9 @@ test('classifyActivity does not snap low-confidence pace models into threshold',
 
   const classification = classifyActivity(activity, calculatePaceZones(1790), 'low');
 
-  // Low reliability still gets a zone (continuous zones), but confidence is low
-  assert.equal(classification.paceZone, 'M');
+  // Numeric zones remain continuous, but the model confidence stays low.
+  assert.equal(classification.paceZone, 'I');
   assert.equal(classification.paceZoneConfidence, 'low');
-  // Marathon-zone pace without clear structure maps to tempo
   assert.equal(classification.workoutType, 'tempo');
   assert.equal(classification.workoutTypeConfidence, 'low');
 });
