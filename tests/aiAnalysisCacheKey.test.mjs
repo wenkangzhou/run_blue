@@ -42,6 +42,7 @@ function makeActivity(id, overrides = {}) {
     has_heartrate: true,
     average_heartrate: 150,
     max_heartrate: 170,
+    average_temp: 18,
     workout_type: 0,
     calories: 320,
     map: { id: String(id), polyline: null, summary_polyline: null },
@@ -95,13 +96,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v22 keys for identical AI analysis inputs', () => {
+test('builds stable v23 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v22');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v23');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v22_1_/);
+  assert.match(first, /^ai_analysis_v23_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -165,6 +166,17 @@ test('changes key when runner profile inputs change', () => {
 
   assert.notEqual(changedLthr, original);
   assert.notEqual(changedWeight, original);
+});
+
+test('changes key when current or historical temperature changes', () => {
+  const original = key();
+  const changedCurrent = key({ activity: makeActivity(1, { average_temp: 32 }) });
+  const changedHistory = key({
+    historyActivities: [makeActivity(3), makeActivity(2, { average_temp: 31 }), makeActivity(1)],
+  });
+
+  assert.notEqual(changedCurrent, original);
+  assert.notEqual(changedHistory, original);
 });
 
 test('changes key when stream samples change without changing stream length', () => {

@@ -168,6 +168,7 @@ function makeProfile(overrides = {}) {
       comparisonMode: 'strict',
       sampleConfidence: 'low',
     },
+    thermalStats: null,
     totalRunsAnalyzed: 50,
     dateRange: { start: '2025-01-01', end: '2026-01-01' },
     ...overrides,
@@ -379,6 +380,35 @@ test('buildProfessionalPrompt treats muggy but not hot weather as minor context'
   assert.match(prompt, /热环境判断: 偏闷或偏暖/);
   assert.match(prompt, /只带来轻度的闷热负担/);
   assert.match(prompt, /不要直接写成“热应激”/);
+});
+
+test('buildProfessionalPrompt prioritizes the athlete personal same-temperature baseline', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({ average_temp: 32, moving_time: 2640, average_heartrate: 150 }),
+    null,
+    makeProfile({
+      thermalStats: {
+        count: 6,
+        currentTemperature: 32,
+        averageTemperature: 31.5,
+        averagePaceSeconds: 345,
+        paceDifferenceSeconds: 3,
+        averageHeartRate: 148,
+        heartRateDifference: 2,
+        sampleConfidence: 'medium',
+      },
+    }),
+    makeClassification({ workoutType: 'easy', intensity: 'easy', paceZone: 'E' }),
+    'zh',
+    undefined,
+    176
+  );
+
+  assert.match(prompt, /个人同温训练基线/);
+  assert.match(prompt, /6 次相近训练，平均温度 31.5°C/);
+  assert.match(prompt, /本次慢 3 秒\/公里/);
+  assert.match(prompt, /本次高 2 bpm/);
+  assert.match(prompt, /应视为高温下的正常表现，不要写成能力下降/);
 });
 
 test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {

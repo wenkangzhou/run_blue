@@ -38,6 +38,7 @@ function makeProfile() {
     patterns: { workoutTypeCounts: { easy: 8 }, trainingDeficiencies: [] },
     recentLoad: Array.from({ length: 8 }, (_, index) => ({ week: `2026-W${index + 1}`, totalDistance: 40000, totalTime: 14000, runs: 4, avgIntensity: 4 })),
     similarStats: null,
+    thermalStats: null,
     totalRunsAnalyzed: 120,
     physiologyMetrics: {},
     dateRange: { start: '2025-01-01', end: '2026-01-01' },

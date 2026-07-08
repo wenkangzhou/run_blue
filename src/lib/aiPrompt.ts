@@ -405,7 +405,7 @@ export function buildProfessionalPrompt(
   const paceSecKm = (activity.moving_time / activity.distance * 1000);
   const paceStr = formatPace(paceSecKm);
 
-  const { estimatedPBs, recentLoad, similarStats, patterns } = trainingProfile;
+  const { estimatedPBs, recentLoad, similarStats, thermalStats, patterns } = trainingProfile;
 
   // Build the comprehensive prompt
   let prompt = en
@@ -666,6 +666,38 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n\n${thermalContext.guidance}`
       : `\n\n${thermalContext.guidance}`;
+  }
+
+  if (thermalStats) {
+    const paceDelta = Math.abs(thermalStats.paceDifferenceSeconds);
+    const paceComparison = thermalStats.paceDifferenceSeconds > 0
+      ? (en ? `${paceDelta}s/km slower` : `慢 ${paceDelta} 秒/公里`)
+      : thermalStats.paceDifferenceSeconds < 0
+        ? (en ? `${paceDelta}s/km faster` : `快 ${paceDelta} 秒/公里`)
+        : (en ? 'the same pace' : '配速持平');
+    const heartRateComparison = thermalStats.heartRateDifference === null
+      ? null
+      : thermalStats.heartRateDifference > 0
+        ? (en ? `${thermalStats.heartRateDifference} bpm higher` : `高 ${thermalStats.heartRateDifference} bpm`)
+        : thermalStats.heartRateDifference < 0
+          ? (en ? `${Math.abs(thermalStats.heartRateDifference)} bpm lower` : `低 ${Math.abs(thermalStats.heartRateDifference)} bpm`)
+          : (en ? 'the same heart rate' : '心率持平');
+
+    prompt += en ? `\n\n## Personal Same-Temperature Baseline` : `\n\n## 个人同温训练基线`;
+    prompt += en
+      ? `\n- ${thermalStats.count} comparable workouts around ${thermalStats.averageTemperature}°C (confidence ${thermalStats.sampleConfidence})`
+      : `\n- ${thermalStats.count} 次相近训练，平均温度 ${thermalStats.averageTemperature}°C（置信度${getConfidenceLabel(thermalStats.sampleConfidence, false)}）`;
+    prompt += en
+      ? `\n- Same-temperature average pace: ${formatPace(thermalStats.averagePaceSeconds)}/km; this workout is ${paceComparison}`
+      : `\n- 同温历史平均配速: ${formatPace(thermalStats.averagePaceSeconds)}/km；本次${paceComparison}`;
+    if (thermalStats.averageHeartRate !== null && heartRateComparison) {
+      prompt += en
+        ? `\n- Same-temperature average HR: ${thermalStats.averageHeartRate} bpm; this workout is ${heartRateComparison}`
+        : `\n- 同温历史平均心率: ${thermalStats.averageHeartRate} bpm；本次${heartRateComparison}`;
+    }
+    prompt += en
+      ? `\n- IMPORTANT: Use this athlete-specific same-temperature baseline before all-weather pace comparisons. If pace and HR are close to this baseline, treat the result as normal heat-adjusted performance rather than fitness decline. With low confidence, describe it only as directional context.`
+      : `\n- 重要：判断夏季表现时，应优先使用这组个人同温基线，再参考跨季节配速。如果本次配速和心率接近同温基线，应视为高温下的正常表现，不要写成能力下降。低置信度样本只能作为方向提示。`;
   }
 
   // Similar activities comparison

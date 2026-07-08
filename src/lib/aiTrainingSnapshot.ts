@@ -10,11 +10,11 @@ const MAX_SPLITS = 50;
 
 type PromptTrainingProfile = Pick<
   TrainingProfile,
-  'estimatedPBs' | 'paceZones' | 'patterns' | 'recentLoad' | 'similarStats' | 'totalRunsAnalyzed'
+  'estimatedPBs' | 'paceZones' | 'patterns' | 'recentLoad' | 'similarStats' | 'thermalStats' | 'totalRunsAnalyzed'
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '1';
+  schemaVersion: '2';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -79,7 +79,7 @@ export function buildAITrainingSnapshot(input: {
   const { activity, streams, trainingProfile, classification, physique, lthr, streamSummary } = input;
 
   return {
-    schemaVersion: '1',
+    schemaVersion: '2',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -104,6 +104,7 @@ export function buildAITrainingSnapshot(input: {
         week: `relative-${weeks.length - index - 1}`,
       })),
       similarStats: trainingProfile.similarStats,
+      thermalStats: trainingProfile.thermalStats,
       totalRunsAnalyzed: trainingProfile.totalRunsAnalyzed,
     },
     physique,

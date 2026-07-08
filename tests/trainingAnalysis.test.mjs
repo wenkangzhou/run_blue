@@ -478,6 +478,30 @@ test('analyzeTrainingHistory keeps easy runs separate from tempo runs when build
   assert.equal(profile.patterns.workoutTypeCounts.interval, 1);
 });
 
+test('analyzeTrainingHistory builds a personal same-temperature baseline', () => {
+  const current = makeActivity(40, {
+    name: 'Hot easy run',
+    average_temp: 32,
+    moving_time: 2640,
+    average_heartrate: 150,
+  });
+  const history = [
+    makeActivity(41, { name: 'Hot easy 1', average_temp: 30, moving_time: 2560, average_heartrate: 146 }),
+    makeActivity(42, { name: 'Hot easy 2', average_temp: 31, moving_time: 2600, average_heartrate: 148 }),
+    makeActivity(43, { name: 'Hot easy 3', average_temp: 33, moving_time: 2640, average_heartrate: 151 }),
+    makeActivity(44, { name: 'Hot easy 4', average_temp: 34, moving_time: 2680, average_heartrate: 152 }),
+    makeActivity(45, { name: 'Cool easy', average_temp: 18, moving_time: 2360, average_heartrate: 140 }),
+  ];
+
+  const profile = analyzeTrainingHistory(history, current, { '5k': 1200 }, 176);
+
+  assert.equal(profile.thermalStats?.count, 4);
+  assert.equal(profile.thermalStats?.averageTemperature, 32);
+  assert.equal(profile.thermalStats?.sampleConfidence, 'medium');
+  assert.equal(profile.thermalStats?.paceDifferenceSeconds, 3);
+  assert.equal(profile.thermalStats?.heartRateDifference, 1);
+});
+
 test('analyzeTrainingHistory excludes low-confidence guesses from workout mix counts', () => {
   const current = makeActivity(30, {
     name: 'Steady run',

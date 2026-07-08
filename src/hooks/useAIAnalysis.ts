@@ -24,6 +24,7 @@ interface AITrainingStats {
   patterns?: unknown;
   physiologyMetrics?: unknown;
   similarStats?: SimilarActivityStats | null;
+  thermalStats?: unknown;
 }
 
 interface CachedAIAnalysis {
@@ -64,6 +65,7 @@ type AIHistoryActivity = Pick<
       StravaActivity,
       | 'average_heartrate'
       | 'max_heartrate'
+      | 'average_temp'
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
@@ -94,6 +96,7 @@ function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
     has_heartrate: activity.has_heartrate,
     average_heartrate: activity.average_heartrate,
     max_heartrate: activity.max_heartrate,
+    average_temp: activity.average_temp,
     workout_type: activity.workout_type,
     calories: activity.calories,
     splits_metric: activity.splits_metric,

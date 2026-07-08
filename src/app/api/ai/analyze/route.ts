@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
         patterns: trainingProfile.patterns,
         physiologyMetrics: trainingProfile.physiologyMetrics,
         similarStats: trainingProfile.similarStats,
+        thermalStats: trainingProfile.thermalStats,
       },
       classification,
       officialPBs: mergedPBs,

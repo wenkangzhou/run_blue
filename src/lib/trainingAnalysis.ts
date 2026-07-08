@@ -94,6 +94,17 @@ export interface SimilarActivityStats {
   sampleConfidence: ClassificationConfidence;
 }
 
+export interface ThermalComparisonStats {
+  count: number;
+  currentTemperature: number;
+  averageTemperature: number;
+  averagePaceSeconds: number;
+  paceDifferenceSeconds: number;
+  averageHeartRate: number | null;
+  heartRateDifference: number | null;
+  sampleConfidence: ClassificationConfidence;
+}
+
 // Running physiology metrics (the three key factors)
 export interface PhysiologyMetrics {
   vo2max: {
@@ -139,6 +150,7 @@ export interface TrainingProfile {
   physiologyMetrics: PhysiologyMetrics;
   recentLoad: WeeklyLoad[];
   similarStats: SimilarActivityStats | null;
+  thermalStats: ThermalComparisonStats | null;
   totalRunsAnalyzed: number;
   dateRange: { start: string; end: string };
 }
@@ -1043,6 +1055,13 @@ export function analyzeTrainingHistory(
   
   // Compare with similar activities
   const similarStats = compareSimilarActivities(sortedRuns, currentActivity, paceZones, estimatedPBs.reliability, lthr);
+  const thermalStats = compareSimilarTemperatureActivities(
+    sortedRuns,
+    currentActivity,
+    paceZones,
+    estimatedPBs.reliability,
+    lthr
+  );
 
   return {
     estimatedPBs,
@@ -1051,6 +1070,7 @@ export function analyzeTrainingHistory(
     physiologyMetrics,
     recentLoad,
     similarStats,
+    thermalStats,
     totalRunsAnalyzed: sortedRuns.length,
     dateRange: {
       start: sortedRuns[sortedRuns.length - 1]?.start_date || currentActivity.start_date,
@@ -1712,6 +1732,79 @@ function compareSimilarActivities(
     recentAvgPace,
     olderAvgPace,
     comparisonMode,
+    sampleConfidence,
+  };
+}
+
+function compareSimilarTemperatureActivities(
+  runs: StravaActivity[],
+  currentActivity: StravaActivity,
+  paceZones: PaceZones,
+  paceZoneModelReliability: EstimatedPBs['reliability'] = 'medium',
+  lthr?: number | null
+): ThermalComparisonStats | null {
+  const currentTemperature = currentActivity.average_temp;
+  if (!Number.isFinite(currentTemperature) || currentTemperature! < 10 || currentTemperature! > 50) return null;
+
+  const currentDistance = currentActivity.distance;
+  const currentPaceSeconds = currentActivity.moving_time / (currentDistance / 1000);
+  const currentClimbPerKm = currentActivity.total_elevation_gain / Math.max(1, currentDistance / 1000);
+  const currentClassification = classifyActivity(
+    currentActivity,
+    paceZones,
+    paceZoneModelReliability,
+    lthr
+  );
+  const distanceThreshold = currentDistance >= 15000 ? 0.12 : 0.2;
+
+  const comparableRuns = runs.filter((run) => {
+    if (run.id === currentActivity.id || run.distance <= 1000) return false;
+    if (!Number.isFinite(run.average_temp) || Math.abs(run.average_temp! - currentTemperature!) > 3) return false;
+    if (Math.abs(run.distance - currentDistance) / currentDistance >= distanceThreshold) return false;
+
+    const runClimbPerKm = run.total_elevation_gain / Math.max(1, run.distance / 1000);
+    if (Math.abs(runClimbPerKm - currentClimbPerKm) > 15) return false;
+
+    const runClassification = classifyActivity(run, paceZones, paceZoneModelReliability, lthr);
+    if (runClassification.isRace !== currentClassification.isRace) return false;
+    if (
+      currentClassification.workoutTypeConfidence !== 'low'
+      && runClassification.workoutTypeConfidence !== 'low'
+      && !areWorkoutTypesComparable(currentClassification.workoutType, runClassification.workoutType)
+    ) return false;
+
+    return true;
+  });
+
+  if (comparableRuns.length < 2) return null;
+
+  const averageTemperature = comparableRuns.reduce((sum, run) => sum + run.average_temp!, 0) / comparableRuns.length;
+  const averagePaceSeconds = comparableRuns.reduce(
+    (sum, run) => sum + run.moving_time / (run.distance / 1000),
+    0
+  ) / comparableRuns.length;
+  const heartRateRuns = comparableRuns.filter(
+    (run) => Number.isFinite(run.average_heartrate) && run.average_heartrate! > 0
+  );
+  const averageHeartRate = heartRateRuns.length > 0
+    ? heartRateRuns.reduce((sum, run) => sum + run.average_heartrate!, 0) / heartRateRuns.length
+    : null;
+  const sampleConfidence: ClassificationConfidence = comparableRuns.length >= 8
+    ? 'high'
+    : comparableRuns.length >= 4
+      ? 'medium'
+      : 'low';
+
+  return {
+    count: comparableRuns.length,
+    currentTemperature: Math.round(currentTemperature! * 10) / 10,
+    averageTemperature: Math.round(averageTemperature * 10) / 10,
+    averagePaceSeconds: Math.round(averagePaceSeconds),
+    paceDifferenceSeconds: Math.round(currentPaceSeconds - averagePaceSeconds),
+    averageHeartRate: averageHeartRate === null ? null : Math.round(averageHeartRate),
+    heartRateDifference: averageHeartRate === null || !currentActivity.average_heartrate
+      ? null
+      : Math.round(currentActivity.average_heartrate - averageHeartRate),
     sampleConfidence,
   };
 }

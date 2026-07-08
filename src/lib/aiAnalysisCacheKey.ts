@@ -1,7 +1,7 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v22';
+export const AI_ANALYSIS_CACHE_VERSION = 'v23';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -25,6 +25,7 @@ type HistoryActivity = Pick<
       StravaActivity,
       | 'average_heartrate'
       | 'max_heartrate'
+      | 'average_temp'
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
@@ -125,6 +126,7 @@ function getHistoryFingerprint(activities: HistoryActivity[]): string {
     hasHeartrate: activity.has_heartrate,
     avgHr: roundNumber(activity.average_heartrate),
     maxHr: roundNumber(activity.max_heartrate),
+    averageTemp: roundNumber(activity.average_temp),
     workoutType: activity.workout_type ?? null,
     calories: roundNumber(activity.calories, 0),
     bestEfforts: getBestEffortsFingerprint(activity),
@@ -189,6 +191,7 @@ function buildAIAnalysisCacheKey({
       startDateLocal: activity.start_date_local,
       avgHr: roundNumber(activity.average_heartrate),
       maxHr: roundNumber(activity.max_heartrate),
+      averageTemp: roundNumber(activity.average_temp),
       workoutType: activity.workout_type ?? null,
       bestEfforts: getBestEffortsFingerprint(activity),
       splits: getSplitsFingerprint(activity),
