@@ -126,6 +126,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     error,
     isQuotaError,
     isAuthError,
+    fallbackReason,
     consentStatus,
     consentReady,
     consentRequired,
@@ -583,9 +584,19 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
               <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
                 <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
                 <span className="flex-1 font-mono text-[10px] text-amber-700 dark:text-amber-300">
-                  {consentStatus === 'declined'
-                    ? t('aiAnalysis.localOnlyNotice', '当前仅使用本地算法，不会向第三方 AI 发送训练摘要。')
-                    : t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
+                  <span className="block">
+                    {consentStatus === 'declined'
+                      ? t('aiAnalysis.localOnlyNotice', '当前仅使用本地算法，不会向第三方 AI 发送训练摘要。')
+                      : t('aiAnalysis.fallbackWarning', 'AI 服务暂不可用，以下为系统生成的基础分析。点击右上角可重新尝试。')}
+                  </span>
+                  {consentStatus !== 'declined' && fallbackReason && (
+                    <span className="mt-1 block break-words opacity-80 [overflow-wrap:anywhere]">
+                      {t('aiAnalysis.fallbackReason', {
+                        reason: fallbackReason,
+                        defaultValue: '失败原因：{{reason}}',
+                      })}
+                    </span>
+                  )}
                 </span>
                 {consentStatus === 'declined' && (
                   <button

@@ -365,7 +365,7 @@ export function getWeatherSourceLabel(weather: ActivityWeatherContext, locale: s
         strava: 'Strava weather',
         device: 'device temperature',
         stream: 'temperature stream',
-        description: 'activity description',
+        description: 'from activity notes',
         mixed: 'mixed sources',
         none: 'no weather data',
       }
@@ -373,7 +373,7 @@ export function getWeatherSourceLabel(weather: ActivityWeatherContext, locale: s
         strava: 'Strava 天气',
         device: '设备温度',
         stream: '温度流',
-        description: '活动描述',
+        description: '来自活动备注',
         mixed: '多来源',
         none: '暂无天气',
       };

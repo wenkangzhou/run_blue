@@ -34,6 +34,7 @@ interface CachedAIAnalysis {
   classification: ActivityClassification | null;
   isQuotaExceeded?: boolean;
   analysisSource?: 'claude-mcp' | 'kimi' | 'fallback';
+  analysisError?: string;
 }
 
 interface AIAnalyzeResponse {
@@ -42,6 +43,7 @@ interface AIAnalyzeResponse {
   trainingProfile: AITrainingStats | null;
   classification: ActivityClassification | null;
   analysisSource: 'claude-mcp' | 'kimi' | 'fallback';
+  analysisError?: string;
 }
 
 type AIHistoryActivity = Pick<
@@ -78,6 +80,13 @@ const AI_ANALYSIS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 const AI_ANALYSIS_QUOTA_TTL = 60 * 60 * 1000;
 const AI_HISTORY_LIMIT = 1000;
 const aiAnalysisRequestsInFlight = new Map<string, Promise<AIAnalyzeResponse>>();
+
+function isTransientFallback(payload: CachedAIAnalysis, consentStatus: AIDataConsent): boolean {
+  return consentStatus === 'accepted' && (
+    payload.analysisSource === 'fallback' ||
+    payload.analysis?.isFallback === true
+  );
+}
 
 function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
   return {
@@ -157,6 +166,7 @@ export function useAIAnalysis(
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fallbackReason, setFallbackReason] = useState('');
   const [analysisSource, setAnalysisSource] = useState<CachedAIAnalysis['analysisSource']>();
 
   useEffect(() => {
@@ -185,6 +195,7 @@ export function useAIAnalysis(
     setTrainingStats(normalizedPayload.trainingStats);
     setClassification(normalizedPayload.classification);
     setAnalysisSource(normalizedPayload.analysisSource);
+    setFallbackReason(normalizedPayload.analysisError || '');
   }, [normalizeCachedPayload]);
 
   const refreshAnalysis = useCallback(async () => {
@@ -201,6 +212,7 @@ export function useAIAnalysis(
 
     setLoading(true);
     setError('');
+    setFallbackReason('');
 
     const profile = getUserProfile();
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
@@ -240,15 +252,21 @@ export function useAIAnalysis(
         trainingStats: data.trainingProfile,
         classification: data.classification,
         analysisSource: data.analysisSource,
+        analysisError: data.analysisError,
       });
 
-      await setCachedAIAnalysis(cacheKey, {
+      const payload = {
         analysis: data.analysis,
         streamAnalysis: data.streamAnalysis,
         trainingStats: data.trainingProfile,
         classification: data.classification,
         analysisSource: data.analysisSource,
-      });
+        analysisError: data.analysisError,
+      };
+
+      if (!isTransientFallback(payload, consentStatus)) {
+        await setCachedAIAnalysis(cacheKey, payload);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
       setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
@@ -271,7 +289,11 @@ export function useAIAnalysis(
         if (cancelled) return;
         if (!parsed) continue;
 
-        const maxAge = parsed.isQuotaExceeded ? AI_ANALYSIS_QUOTA_TTL : AI_ANALYSIS_CACHE_TTL;
+        const maxAge = parsed.isQuotaExceeded
+          ? AI_ANALYSIS_QUOTA_TTL
+          : isTransientFallback(parsed, consentStatus)
+            ? 0
+            : AI_ANALYSIS_CACHE_TTL;
         const generatedAt = parsed.analysis?.generatedAt ?? 0;
         if (generatedAt && Date.now() - generatedAt < maxAge) {
           applyAnalysisPayload(parsed);
@@ -311,6 +333,7 @@ export function useAIAnalysis(
     setConsentStatus('accepted');
     setAnalysis(null);
     setError('');
+    setFallbackReason('');
   }, []);
 
   const declineAIConsent = useCallback(() => {
@@ -318,6 +341,7 @@ export function useAIAnalysis(
     setConsentStatus('declined');
     setAnalysis(null);
     setError('');
+    setFallbackReason('');
   }, []);
 
   const isQuotaError = error?.includes('配额') || error?.includes('quota');
@@ -338,6 +362,7 @@ export function useAIAnalysis(
     isQuotaError,
     isAuthError,
     analysisSource,
+    fallbackReason,
     consentStatus,
     consentReady,
     consentRequired: consentReady && consentStatus === 'unknown',

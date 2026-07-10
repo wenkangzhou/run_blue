@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
       : undefined;
 
     let analysisSource: 'claude-mcp' | 'kimi' | 'fallback' = 'kimi';
+    let analysisError: string | undefined;
     let analysis;
     if (!allowThirdPartyAI) {
       analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
@@ -115,13 +116,21 @@ export async function POST(request: NextRequest) {
         analysisSource = 'fallback';
       }
     } else {
-      analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
-      analysisSource = analysis.isFallback ? 'fallback' : 'kimi';
+      try {
+        analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
+        analysisSource = 'kimi';
+      } catch (error) {
+        analysisError = getErrorMessage(error, 'Kimi analysis failed');
+        console.error('[AI] Kimi analysis failed, falling back locally:', error);
+        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+        analysisSource = 'fallback';
+      }
     }
 
     return NextResponse.json({ 
       analysis,
       analysisSource,
+      analysisError,
       streamAnalysis: streamAnalysisRaw,
       trainingProfile: {
         totalRunsAnalyzed: trainingProfile.totalRunsAnalyzed,
