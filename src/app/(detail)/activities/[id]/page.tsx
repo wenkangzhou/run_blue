@@ -51,7 +51,6 @@ import { getClientSession } from '@/lib/clientSession';
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
 const LAP_DISTANCE_THRESHOLD = 20; // km
-const DESCRIPTION_PREVIEW_LENGTH = 128;
 const WORKOUT_TYPE_BADGE_STYLES: Record<ActivityWorkoutCategory, string> = {
   normal: 'border-zinc-200 bg-white/90 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300',
   race: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/70 dark:bg-red-950/50 dark:text-red-300',
@@ -101,11 +100,6 @@ export default function ActivityDetailPage() {
   const [rateLimited, setRateLimited] = useState(false);
   const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [descriptionExpanded, setDescriptionExpanded] = useSessionPageState<boolean>(
-    `run_blue_page:activity:${activityId}:description-expanded`,
-    false,
-    (value): value is boolean => typeof value === 'boolean'
-  );
 
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -539,10 +533,6 @@ export default function ActivityDetailPage() {
   const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
   const activityDescription = activity?.description?.trim() ?? '';
   const workoutCategory = activity ? getActivityWorkoutCategory(activity) : null;
-  const shouldCollapseDescription = activityDescription.length > DESCRIPTION_PREVIEW_LENGTH;
-  const displayedDescription = shouldCollapseDescription && !descriptionExpanded
-    ? `${activityDescription.slice(0, DESCRIPTION_PREVIEW_LENGTH)}...`
-    : activityDescription;
   const renderPrimarySideSections = (currentActivity: StravaActivity) => (
     <>
       <ActivityStats activity={currentActivity} streams={streams} />
@@ -743,17 +733,8 @@ export default function ActivityDetailPage() {
                   {activityDescription.length > 0 && (
                     <div className="mt-2 max-w-2xl">
                       <p className="break-words font-mono text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                        {displayedDescription}
+                        {activityDescription}
                       </p>
-                      {shouldCollapseDescription && (
-                        <button
-                          type="button"
-                          onClick={() => setDescriptionExpanded((expanded) => !expanded)}
-                          className="mt-1 font-mono text-[10px] font-bold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                        >
-                          {descriptionExpanded ? t('common.showLess', '收起') : t('common.showMore', '展开')}
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
