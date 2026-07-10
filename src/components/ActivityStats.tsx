@@ -2,11 +2,13 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 import { formatPace, formatGearDistance } from '@/lib/strava';
+import { buildActivityWeatherContext, formatWeatherContextSummary, getThermalContext, getWeatherSourceLabel } from '@/lib/weather';
 
 interface ActivityStatsProps {
   activity: StravaActivity;
+  streams?: Record<string, ActivityStream> | null;
 }
 
 type ActivityStat = {
@@ -16,9 +18,11 @@ type ActivityStat = {
   wide?: boolean;
 };
 
-export function ActivityStats({ activity }: ActivityStatsProps) {
-  const { t } = useTranslation();
+export function ActivityStats({ activity, streams }: ActivityStatsProps) {
+  const { t, i18n } = useTranslation();
   const gearDistance = activity.gear ? formatGearDistance(activity.gear.distance) : null;
+  const weather = buildActivityWeatherContext(activity, streams);
+  const thermalContext = getThermalContext(weather, i18n.language);
   
   const stats: ActivityStat[] = [
     { label: t('activity.averagePace', '平均配速'), value: formatPace(activity.distance, activity.moving_time, 'min/km') },
@@ -33,7 +37,21 @@ export function ActivityStats({ activity }: ActivityStatsProps) {
     ...(activity.elev_low ? [{ label: t('activity.minElevation', '最低海拔'), value: `${Math.round(activity.elev_low)} m` }] : []),
     ...(activity.calories ? [{ label: t('activity.calories', '卡路里'), value: `${activity.calories} kcal` }] : []),
     ...(activity.average_cadence ? [{ label: t('activity.cadence', '步频'), value: `${Math.round(activity.average_cadence)} spm` }] : []),
-    ...(activity.average_temp ? [{ label: t('activity.temperature', '温度'), value: `${Math.round(activity.average_temp)}°C` }] : []),
+    ...(weather.hasWeather ? [{
+      label: t('activity.weather', '天气'),
+      title: `${formatWeatherContextSummary(weather, i18n.language)} · ${getWeatherSourceLabel(weather, i18n.language)}`,
+      wide: true,
+      value: (
+        <span className="block min-w-0">
+          <span className="block font-mono text-sm font-bold leading-5 text-zinc-900 dark:text-zinc-100">
+            {formatWeatherContextSummary(weather, i18n.language)}
+          </span>
+          <span className="mt-1 block font-mono text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+            {thermalContext.label} · {getWeatherSourceLabel(weather, i18n.language)}
+          </span>
+        </span>
+      ),
+    }] : []),
     ...(activity.gear ? [{
       label: t('activity.gear', '装备'),
       title: `${activity.gear.name}${gearDistance ? ` (${gearDistance})` : ''}`,

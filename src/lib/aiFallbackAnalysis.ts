@@ -3,6 +3,7 @@ import type { AIAnalysis } from './aiTypes';
 import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
+import { buildActivityWeatherContext, getThermalContext } from './weather';
 
 function getZoneDescription(
   zone: ActivityClassification['paceZone'],
@@ -58,6 +59,8 @@ export function generateFallbackAnalysis(
   const en = locale.startsWith('en');
   const paceSecKm = activity.moving_time / activity.distance * 1000;
   const paceStr = formatPace(paceSecKm);
+  const weather = buildActivityWeatherContext(activity);
+  const thermalContext = getThermalContext(weather, locale);
 
   const zone = classification.paceZone;
   const zoneDesc = getZoneDescription(zone, profile, locale);
@@ -151,11 +154,19 @@ export function generateFallbackAnalysis(
       ? " 👍 Solid workout — consistency is key!"
       : " 👍 扎实的训练——坚持就是胜利！";
   })();
+  const weatherNote = weather.hasWeather && weather.thermalSeverity !== 'neutral'
+    ? (en
+      ? ` Weather context: ${thermalContext.label}; treat pace and HR with that thermal cost in mind.`
+      : ` 天气背景：${thermalContext.label}，配速和心率需要结合这部分热负荷理解。`)
+    : '';
+  const weatherWarnings = weather.thermalSeverity === 'heat-stress'
+    ? [en ? 'Clear heat stress detected; reduce expectations, prioritize cooling and hydration.' : '检测到明显热应激，应下调配速预期，优先做好降温和补水。']
+    : [];
 
   return {
     summary: en
-      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${encouragement}`
-      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${encouragement}`,
+      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${encouragement}`
+      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${encouragement}`,
     intensity: 'moderate',
     recoveryHours: activity.distance > 10000 ? 36 : 24,
     comparisonToAverage: comparisonText,
@@ -174,6 +185,6 @@ export function generateFallbackAnalysis(
     nextWorkoutSuggestion: profile.patterns.hasLongRuns
       ? (en ? 'Next session: easy recovery run.' : '建议下次进行轻松跑恢复')
       : (en ? 'Next session: schedule a long aerobic run.' : '建议下次安排长距离有氧训练'),
-    warnings: [],
+    warnings: weatherWarnings,
   };
 }

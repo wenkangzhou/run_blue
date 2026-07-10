@@ -27,6 +27,7 @@ function compileLibFile(sourceFile, outputFile) {
 
 compileLibFile('src/lib/aiTypes.ts', 'aiTypes.js');
 compileLibFile('src/lib/aiComparison.ts', 'aiComparison.js');
+compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
 
@@ -78,6 +79,7 @@ writeFileSync(
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
+  if (request === './weather') return require(path.join(tempDir, 'weather.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 

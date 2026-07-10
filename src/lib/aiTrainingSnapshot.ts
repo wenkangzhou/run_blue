@@ -4,6 +4,7 @@ import type {
   TrainingProfile,
 } from '@/lib/trainingAnalysis';
 import type { UserPhysique } from '@/lib/aiTypes';
+import { buildActivityWeatherContext } from '@/lib/weather';
 
 const MAX_LAPS = 40;
 const MAX_SPLITS = 50;
@@ -14,7 +15,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '2';
+  schemaVersion: '3';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -23,6 +24,7 @@ export interface AITrainingSnapshot {
     type: string;
     sportType: string;
     averageTemperatureC?: number;
+    weatherContext?: ReturnType<typeof buildActivityWeatherContext>;
     hasHeartRate: boolean;
     averageHeartRate?: number;
     maxHeartRate?: number;
@@ -77,9 +79,10 @@ export function buildAITrainingSnapshot(input: {
   streamSummary?: string;
 }): AITrainingSnapshot {
   const { activity, streams, trainingProfile, classification, physique, lthr, streamSummary } = input;
+  const weatherContext = buildActivityWeatherContext(activity, streams);
 
   return {
-    schemaVersion: '2',
+    schemaVersion: '3',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -88,6 +91,7 @@ export function buildAITrainingSnapshot(input: {
       type: activity.type,
       sportType: activity.sport_type,
       averageTemperatureC: finiteNumber(activity.average_temp),
+      weatherContext: weatherContext.hasWeather ? weatherContext : undefined,
       hasHeartRate: activity.has_heartrate,
       averageHeartRate: finiteNumber(activity.average_heartrate),
       maxHeartRate: finiteNumber(activity.max_heartrate),
@@ -127,6 +131,7 @@ export function getPromptInputsFromSnapshot(snapshot: AITrainingSnapshot): {
     type: snapshot.workout.type,
     sport_type: snapshot.workout.sportType,
     average_temp: snapshot.workout.averageTemperatureC,
+    weather_context: snapshot.workout.weatherContext,
     has_heartrate: snapshot.workout.hasHeartRate,
     average_heartrate: snapshot.workout.averageHeartRate,
     max_heartrate: snapshot.workout.maxHeartRate,

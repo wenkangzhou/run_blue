@@ -345,6 +345,30 @@ function getLapPaceSecPerKm(distance: number, movingTime: number): number {
   return movingTime / distance * 1000;
 }
 
+function hasSustainedProgression(paces: number[]): boolean {
+  if (paces.length < 5) return false;
+
+  const firstEnd = Math.ceil(paces.length / 3);
+  const lastStart = Math.floor((paces.length * 2) / 3);
+  const firstThird = paces.slice(0, firstEnd);
+  const middleThird = paces.slice(firstEnd, lastStart);
+  const lastThird = paces.slice(lastStart);
+  const firstAvg = average(firstThird);
+  const middleAvg = average(middleThird);
+  const lastAvg = average(lastThird);
+  if (!firstAvg || !middleAvg || !lastAvg) return false;
+
+  const improvement = (firstAvg - lastAvg) / firstAvg;
+  if (improvement < 0.06) return false;
+
+  const orderedThirds = middleAvg <= firstAvg * 0.985 && lastAvg <= middleAvg * 0.992;
+  if (!orderedThirds) return false;
+
+  const latePaces = paces.slice(Math.floor(paces.length * 0.55));
+  const sustainedFasterCount = latePaces.filter((pace) => pace <= firstAvg * 0.96).length;
+  return sustainedFasterCount >= Math.max(2, Math.ceil(latePaces.length * 0.6));
+}
+
 function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary['splitPattern'] {
   if (paces.length < 3) return 'unknown';
 
@@ -371,25 +395,7 @@ function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary[
     paces.length >= 5 && paces[paces.length - 1] > avgPace * 1.08
       ? paces.slice(0, -1)
       : paces;
-  const firstThird = progressionPaces.slice(0, Math.ceil(progressionPaces.length / 3));
-  const lastThird = progressionPaces.slice(Math.floor((progressionPaces.length * 2) / 3));
-  const firstAvg = average(firstThird);
-  const lastAvg = average(lastThird);
-  if (firstAvg > 0) {
-    const trend = (lastAvg - firstAvg) / firstAvg;
-    if (trend <= -0.06) return 'progression';
-  }
-
-  if (progressionPaces.length >= 5 && firstAvg > 0) {
-    const bestPace = Math.min(...progressionPaces);
-    const bestIndex = progressionPaces.indexOf(bestPace);
-    const lateEnough = bestIndex >= Math.floor(progressionPaces.length * 0.55);
-    const clearLateSurge = (firstAvg - bestPace) / firstAvg >= 0.08;
-    const latePaces = progressionPaces.slice(Math.floor(progressionPaces.length * 0.55));
-    const sustainedFasterCount = latePaces.filter((pace) => pace <= firstAvg * 0.95).length;
-    const sustainedLateSurge = sustainedFasterCount >= Math.max(2, Math.ceil(latePaces.length * 0.6));
-    if (lateEnough && clearLateSurge && sustainedLateSurge) return 'progression';
-  }
+  if (hasSustainedProgression(progressionPaces)) return 'progression';
 
   const steadyCount = paces.filter((pace) => pace >= avgPace * 0.94 && pace <= avgPace * 1.06).length;
   if (steadyCount / paces.length >= 0.7) return 'steady';
@@ -415,6 +421,14 @@ function summarizeActivityStructure(activity: StravaActivity): ActivityStructure
     const recoveryRepCount = medianPace
       ? lapCandidates.filter((lap) => getLapPaceSecPerKm(lap.distance, lap.moving_time) > medianPace * 1.08).length
       : 0;
+    const patternLapCandidates = lapCandidates.filter((lap, index) => (
+      index !== lapCandidates.length - 1
+      || !medianDistance
+      || lap.distance >= medianDistance * 0.8
+    ));
+    const patternPaces = patternLapCandidates
+      .map((lap) => getLapPaceSecPerKm(lap.distance, lap.moving_time))
+      .filter(Boolean);
 
     return {
       source: 'laps',
@@ -425,7 +439,7 @@ function summarizeActivityStructure(activity: StravaActivity): ActivityStructure
       recoveryRepCount,
       hasWarmup: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[0].distance, lapCandidates[0].moving_time) > medianPace * 1.08,
       hasCooldown: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[lapCandidates.length - 1].distance, lapCandidates[lapCandidates.length - 1].moving_time) > medianPace * 1.08,
-      splitPattern: detectSplitPatternFromPaces(paces),
+      splitPattern: detectSplitPatternFromPaces(patternPaces),
       paceVariability,
     };
   }

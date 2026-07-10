@@ -318,6 +318,30 @@ test('classifyActivity does not treat one isolated finishing surge as progressio
   assert.equal(classification.structure.splitPattern, 'steady');
 });
 
+test('classifyActivity ignores a short fast auto-lap tail when detecting progression', () => {
+  const activity = makeActivity(26, {
+    name: 'Easy evening run',
+    distance: 6530,
+    moving_time: 2366,
+    average_heartrate: 134,
+    max_heartrate: 150,
+    laps: [
+      makeLap(0, 1000, 370),
+      makeLap(1, 1000, 372),
+      makeLap(2, 1000, 360),
+      makeLap(3, 1000, 363),
+      makeLap(4, 1000, 371),
+      makeLap(5, 1000, 359),
+      makeLap(6, 530, 171),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1200), 'medium', 176);
+
+  assert.notEqual(classification.workoutType, 'progression');
+  assert.equal(classification.structure.splitPattern, 'steady');
+});
+
 test('classifyActivity does not snap low-confidence pace models into threshold', () => {
   const activity = makeActivity(21, {
     name: 'Morning steady run',

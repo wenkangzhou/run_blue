@@ -5,23 +5,39 @@ import path from 'node:path';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import Module from 'node:module';
 
 const require = createRequire(import.meta.url);
 const tempDir = path.join(os.tmpdir(), 'runblue-aiAnalysisCacheKey-test');
 mkdirSync(tempDir, { recursive: true });
 
-const sourcePath = path.resolve('src/lib/aiAnalysisCacheKey.ts');
 const compiledPath = path.join(tempDir, 'aiAnalysisCacheKey.cjs');
-const source = readFileSync(sourcePath, 'utf8');
-const compiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-    esModuleInterop: true,
-  },
-}).outputText;
 
-writeFileSync(compiledPath, compiled);
+function compileLibFile(sourceFile, outputFile) {
+  const source = readFileSync(path.resolve(sourceFile), 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true,
+    },
+  }).outputText;
+
+  writeFileSync(path.join(tempDir, outputFile), compiled);
+}
+
+compileLibFile('src/lib/weather.ts', 'weather.cjs');
+compileLibFile('src/lib/aiAnalysisCacheKey.ts', 'aiAnalysisCacheKey.cjs');
+
+const originalLoad = Module._load;
+Module._load = function patchedLoad(request, parent, isMain) {
+  if (request === '@/lib/weather') return require(path.join(tempDir, 'weather.cjs'));
+  if (request === '@/types') return {};
+  return originalLoad.call(this, request, parent, isMain);
+};
+test.after(() => {
+  Module._load = originalLoad;
+});
 
 const { AI_ANALYSIS_CACHE_VERSION, getAIAnalysisCacheKey, getLegacyAIAnalysisCacheKeys } = require(compiledPath);
 
@@ -96,13 +112,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v23 keys for identical AI analysis inputs', () => {
+test('builds stable v25 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v23');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v25');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v23_1_/);
+  assert.match(first, /^ai_analysis_v25_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -177,6 +193,29 @@ test('changes key when current or historical temperature changes', () => {
 
   assert.notEqual(changedCurrent, original);
   assert.notEqual(changedHistory, original);
+});
+
+test('changes key when current weather context changes', () => {
+  const original = key();
+  const changedDescription = key({
+    activity: makeActivity(1, {
+      description: '天气：晴 体感 35°C 湿度 82% 风速 12 km/h',
+    }),
+  });
+  const changedStreamTemp = key({
+    streams: makeStreams({
+      temp: {
+        type: 'temp',
+        data: [31, 32, 33],
+        series_type: 'distance',
+        original_size: 3,
+        resolution: 'high',
+      },
+    }),
+  });
+
+  assert.notEqual(changedDescription, original);
+  assert.notEqual(changedStreamTemp, original);
 });
 
 test('changes key when stream samples change without changing stream length', () => {

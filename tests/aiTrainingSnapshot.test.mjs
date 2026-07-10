@@ -11,14 +11,20 @@ const require = createRequire(import.meta.url);
 const tempDir = path.join(os.tmpdir(), 'runblue-aiTrainingSnapshot-test');
 mkdirSync(tempDir, { recursive: true });
 
-const source = readFileSync('src/lib/aiTrainingSnapshot.ts', 'utf8');
-writeFileSync(path.join(tempDir, 'aiTrainingSnapshot.js'), ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-}).outputText);
+function compileLibFile(sourceFile, outputFile) {
+  const source = readFileSync(sourceFile, 'utf8');
+  writeFileSync(path.join(tempDir, outputFile), ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText);
+}
+
+compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/aiTrainingSnapshot.ts', 'aiTrainingSnapshot.js');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types' || request === '@/lib/trainingAnalysis' || request === '@/lib/aiTypes') return {};
+  if (request === '@/lib/weather') return require(path.join(tempDir, 'weather.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 test.after(() => { Module._load = originalLoad; });
@@ -49,7 +55,7 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   const activity = {
     id: 19067060784,
     name: 'Secret Riverside Route',
-    description: 'Meet Jim at home',
+    description: 'Meet Jim at home. 体感 35°C 湿度 86% 风速 12 km/h',
     distance: 7000,
     moving_time: 2400,
     elapsed_time: 2500,
@@ -68,7 +74,10 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   };
   const snapshot = buildAITrainingSnapshot({
     activity,
-    streams: { latlng: { data: [[31.23, 121.47]] } },
+    streams: {
+      latlng: { type: 'latlng', data: [[31.23, 121.47]], series_type: 'distance', original_size: 1, resolution: 'high' },
+      temp: { type: 'temp', data: [31, 32, 33], series_type: 'distance', original_size: 3, resolution: 'high' },
+    },
     trainingProfile: makeProfile(),
     classification: { workoutType: 'easy', workoutTypeConfidence: 'high', workoutTypeEvidence: [], intensity: 'easy', paceZone: 'E', paceZoneConfidence: 'high', paceZoneExactMatch: true, paceZoneGapSeconds: 0, isRace: false, raceType: null, structure: {} },
     streamSummary: 'derived summary only',
@@ -80,11 +89,15 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   }
   assert.equal(snapshot.profile.recentLoad.length, 4);
   assert.equal(snapshot.hasStreamEvidence, true);
+  assert.equal(snapshot.workout.weatherContext.temperatureC, 27);
+  assert.equal(snapshot.workout.weatherContext.feelsLikeC, 35);
+  assert.equal(snapshot.workout.weatherContext.humidityPercent, 86);
 
   const promptInputs = getPromptInputsFromSnapshot(snapshot);
   assert.equal(promptInputs.activity.name, undefined);
   assert.equal(promptInputs.activity.description, undefined);
   assert.equal(promptInputs.activity.map, undefined);
   assert.equal(promptInputs.activity.start_latlng, undefined);
+  assert.equal(promptInputs.activity.weather_context.feelsLikeC, 35);
   assert.equal(promptInputs.streams.summary.data.length, 0);
 });

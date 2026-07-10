@@ -2,53 +2,10 @@ import { StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
 import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
-
-function parseWeatherContext(activity: StravaActivity): { temperature?: number; feelsLike?: number; humidity?: number } {
-  const result: { temperature?: number; feelsLike?: number; humidity?: number } = {};
-
-  if (typeof activity.average_temp === 'number' && Number.isFinite(activity.average_temp)) {
-    result.temperature = Math.round(activity.average_temp);
-  }
-
-  const description = activity.description || '';
-  const tempMatch = description.match(/(?:Feels like|体感[温度]*[:\s]*)([\d.]+)\s*[°℃]?\s*C?/i);
-  if (tempMatch) {
-    result.feelsLike = parseFloat(tempMatch[1]);
-  }
-  const humidityMatch = description.match(/(?:湿度|Humidity)[:\s]*([\d]+)\s*%?/i) || description.match(/💧?\s*([\d]+)\s*%/);
-  if (humidityMatch) {
-    result.humidity = parseInt(humidityMatch[1], 10);
-  }
-
-  return result;
-}
+import { buildActivityWeatherContext } from './weather';
 
 function getThermalSeverity(activity: StravaActivity): 'neutral' | 'muggy' | 'heat-load' | 'heat-stress' {
-  const weather = parseWeatherContext(activity);
-  const temp = weather.feelsLike ?? weather.temperature;
-  const humidity = weather.humidity;
-
-  if (
-    (temp !== undefined && temp >= 30) ||
-    ((weather.feelsLike ?? 0) >= 32) ||
-    (temp !== undefined && temp >= 28 && humidity !== undefined && humidity >= 80)
-  ) {
-    return 'heat-stress';
-  }
-
-  if (
-    (temp !== undefined && temp >= 26) ||
-    ((weather.feelsLike ?? 0) >= 29) ||
-    (temp !== undefined && temp >= 24 && humidity !== undefined && humidity >= 78)
-  ) {
-    return 'heat-load';
-  }
-
-  if ((humidity !== undefined && humidity >= 70) || (temp !== undefined && temp >= 22)) {
-    return 'muggy';
-  }
-
-  return 'neutral';
+  return buildActivityWeatherContext(activity).thermalSeverity;
 }
 
 function normalizeConfidenceText(text: string, locale: string): string {

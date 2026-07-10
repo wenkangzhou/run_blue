@@ -461,7 +461,15 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
       recovery: analysis.recoveryHours,
       defaultValue: '配速区间 {{zone}}，建议恢复约 {{recovery}}h',
     });
-    const hasWarnings = (analysis.warnings ?? []).map(cleanClause).filter(Boolean).length > 0;
+    const warningSignals = (analysis.warnings ?? []).map(cleanClause).filter(Boolean);
+    const hasWarnings = warningSignals.length > 0;
+    const mainSignal = warningSignals[0] ?? verdict.cons[0] ?? verdict.pros[0] ?? '';
+    const signalText = mainSignal
+      ? t('aiAnalysis.conclusionSignal', {
+          signal: mainSignal,
+          defaultValue: '关键观察：{{signal}}',
+        })
+      : '';
     const focus = hasWarnings
       ? t('aiAnalysis.conclusionRisk', '这次优先处理风险信号，训练收益放在第二位。')
       : isRace
@@ -476,7 +484,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     return {
       headline,
-      detail: `${base}；${focus}`,
+      detail: closeSentence([base, signalText, focus].map(cleanClause).filter(Boolean).join('；')),
     };
   })();
 

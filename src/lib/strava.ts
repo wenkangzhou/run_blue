@@ -176,7 +176,7 @@ export async function getActivity(
 export async function getActivityStreams(
   accessToken: string,
   activityId: number,
-  types: string[] = ['time', 'distance', 'latlng', 'altitude', 'velocity_smooth', 'heartrate', 'watts']
+  types: string[] = ['time', 'distance', 'latlng', 'altitude', 'velocity_smooth', 'heartrate', 'watts', 'temp']
 ): Promise<Record<string, ActivityStream>> {
   // Try to get a valid token (may refresh automatically)
   const validToken = await getValidAccessToken() || accessToken;

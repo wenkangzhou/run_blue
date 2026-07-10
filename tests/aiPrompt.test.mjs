@@ -25,6 +25,7 @@ function compileLibFile(sourceFile, outputFile) {
   writeFileSync(path.join(tempDir, outputFile), compiled);
 }
 
+compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
 writeFileSync(
@@ -83,6 +84,7 @@ const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === './trainingAnalysis') return require(path.join(tempDir, 'trainingAnalysis.js'));
+  if (request === './weather') return require(path.join(tempDir, 'weather.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -297,6 +299,21 @@ test('buildProfessionalPrompt tells the model to acknowledge uncertainty when ev
   assert.match(prompt, /缺失证据/);
   assert.match(prompt, /最佳判断/);
   assert.match(prompt, /必须在 summary 中直接说明/);
+});
+
+test('buildProfessionalPrompt asks for a concise complete summary', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity(),
+    null,
+    makeProfile(),
+    makeClassification(),
+    'zh'
+  );
+
+  assert.match(prompt, /简要但完整的教练总结/);
+  assert.match(prompt, /60-120字/);
+  assert.match(prompt, /2-3个完整句子/);
+  assert.doesNotMatch(prompt, /80-200字/);
 });
 
 test('buildProfessionalPrompt tells the model not to overstate nearest-zone hints', () => {

@@ -1,3 +1,19 @@
+export type ActivityWeatherSource = 'strava' | 'device' | 'stream' | 'description';
+
+export type ActivityThermalSeverity = 'neutral' | 'muggy' | 'heat-load' | 'heat-stress';
+
+export interface ActivityWeatherContext {
+  temperatureC?: number;
+  feelsLikeC?: number;
+  humidityPercent?: number;
+  windSpeedKmh?: number;
+  condition?: string;
+  source: ActivityWeatherSource | 'mixed' | 'none';
+  sources: ActivityWeatherSource[];
+  thermalSeverity: ActivityThermalSeverity;
+  hasWeather: boolean;
+}
+
 export interface StravaActivity {
   id: number;
   name: string;
@@ -43,6 +59,7 @@ export interface StravaActivity {
   max_speed: number;
   average_cadence?: number;
   average_temp?: number;
+  weather_context?: ActivityWeatherContext;
   has_heartrate: boolean;
   average_heartrate?: number;
   max_heartrate?: number;

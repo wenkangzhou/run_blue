@@ -545,7 +545,7 @@ export default function ActivityDetailPage() {
     : activityDescription;
   const renderPrimarySideSections = (currentActivity: StravaActivity) => (
     <>
-      <ActivityStats activity={currentActivity} />
+      <ActivityStats activity={currentActivity} streams={streams} />
 
       {paceTrend && (
         <SectionCard

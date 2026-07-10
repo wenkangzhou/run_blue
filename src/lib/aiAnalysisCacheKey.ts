@@ -1,7 +1,8 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
+import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v23';
+export const AI_ANALYSIS_CACHE_VERSION = 'v25';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -171,6 +172,20 @@ function getStreamFingerprint(streams: Record<string, ActivityStream> | null): s
   return hashString(JSON.stringify(normalized));
 }
 
+function getWeatherFingerprint(activity: StravaActivity, streams: Record<string, ActivityStream> | null) {
+  const weather = buildActivityWeatherContext(activity, streams);
+  if (!weather.hasWeather) return null;
+  return {
+    temperatureC: roundNumber(weather.temperatureC),
+    feelsLikeC: roundNumber(weather.feelsLikeC),
+    humidityPercent: roundNumber(weather.humidityPercent, 0),
+    windSpeedKmh: roundNumber(weather.windSpeedKmh),
+    condition: weather.condition ?? null,
+    source: weather.source,
+    thermalSeverity: weather.thermalSeverity,
+  };
+}
+
 function buildAIAnalysisCacheKey({
   activity,
   streams,
@@ -192,6 +207,7 @@ function buildAIAnalysisCacheKey({
       avgHr: roundNumber(activity.average_heartrate),
       maxHr: roundNumber(activity.max_heartrate),
       averageTemp: roundNumber(activity.average_temp),
+      weather: getWeatherFingerprint(activity, streams),
       workoutType: activity.workout_type ?? null,
       bestEfforts: getBestEffortsFingerprint(activity),
       splits: getSplitsFingerprint(activity),

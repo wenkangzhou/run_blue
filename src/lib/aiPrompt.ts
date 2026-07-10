@@ -7,6 +7,7 @@ import {
   formatPace,
   getWorkoutTypeLabel,
 } from './trainingAnalysis';
+import { buildActivityWeatherContext, getThermalContext, getWeatherSourceLabel } from './weather';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -18,164 +19,6 @@ function formatDuration(seconds: number): string {
     return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-// ── Weather parsing ──────────────────────────────────────────────
-
-interface ParsedWeather {
-  temperature?: number;
-  feelsLike?: number;
-  humidity?: number;
-  windSpeed?: number;
-  source: 'description' | 'device' | 'both';
-}
-
-interface ThermalContext {
-  level: 'neutral' | 'muggy' | 'heat-load' | 'heat-stress';
-  label: string;
-  guidance: string;
-}
-
-/**
- * Extract weather info from activity.description (commonly injected by
- * COROS / Garmin / etc.) and/or the device-reported average_temp.
- */
-function parseWeatherFromDescription(
-  description?: string,
-  averageTemp?: number
-): ParsedWeather | null {
-  const result: ParsedWeather = { source: 'description' };
-
-  // 1. Device-reported average temperature
-  if (averageTemp !== undefined && averageTemp !== null) {
-    result.temperature = Math.round(averageTemp);
-    result.source = 'device';
-  }
-
-  if (!description) {
-    return result.temperature !== undefined ? result : null;
-  }
-
-  // 2. Temperature from description emoji/text
-  const tempPatterns = [
-    /🌡️?\s*([\d.]+)\s*[°℃]?\s*C/i,
-    /气温[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
-    /Temp(?:erature)?[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
-  ];
-  for (const p of tempPatterns) {
-    const m = description.match(p);
-    if (m) {
-      result.temperature = parseFloat(m[1]);
-      result.source = result.source === 'device' ? 'both' : 'description';
-      break;
-    }
-  }
-
-  // 3. Feels-like / apparent temperature
-  const feelsPatterns = [
-    /Feels like\s+([\d.]+)\s*[°℃]?\s*C?/i,
-    /体感[温度]*[:\s]*([\d.]+)\s*[°℃]?\s*C?/i,
-  ];
-  for (const p of feelsPatterns) {
-    const m = description.match(p);
-    if (m) {
-      result.feelsLike = parseFloat(m[1]);
-      break;
-    }
-  }
-
-  // 4. Humidity
-  const humPatterns = [
-    /💧?\s*([\d]+)\s*%/,
-    /湿度[:\s]*([\d]+)\s*%?/i,
-    /Humidity[:\s]*([\d]+)\s*%?/i,
-  ];
-  for (const p of humPatterns) {
-    const m = description.match(p);
-    if (m) {
-      result.humidity = parseInt(m[1], 10);
-      break;
-    }
-  }
-
-  // 5. Wind speed
-  const windPatterns = [
-    /💨?\s*([\d.]+)\s*km\/h/i,
-    /风速[:\s]*([\d.]+)\s*km\/h/i,
-    /Wind[:\s]*([\d.]+)\s*km\/h/i,
-  ];
-  for (const p of windPatterns) {
-    const m = description.match(p);
-    if (m) {
-      result.windSpeed = parseFloat(m[1]);
-      break;
-    }
-  }
-
-  const hasAny =
-    result.temperature !== undefined ||
-    result.feelsLike !== undefined ||
-    result.humidity !== undefined ||
-    result.windSpeed !== undefined;
-
-  return hasAny ? result : null;
-}
-
-function getThermalContext(weather: ParsedWeather, en: boolean): ThermalContext {
-  const temp = weather.feelsLike ?? weather.temperature;
-  const humidity = weather.humidity;
-
-  const strongHeatStress =
-    (temp !== undefined && temp >= 30) ||
-    ((weather.feelsLike ?? 0) >= 32) ||
-    (temp !== undefined && temp >= 28 && humidity !== undefined && humidity >= 80);
-
-  if (strongHeatStress) {
-    return {
-      level: 'heat-stress',
-      label: en ? 'clear heat stress' : '明显热应激',
-      guidance: en
-        ? 'Weather is a major factor here. Explicitly adjust pace and heart-rate expectations, and discuss cooling, hydration, and recovery cost.'
-        : '天气已构成明显热应激，应明确下调对配速和心率的要求，并讨论降温、补水和恢复成本。',
-    };
-  }
-
-  const meaningfulHeatLoad =
-    (temp !== undefined && temp >= 26) ||
-    ((weather.feelsLike ?? 0) >= 29) ||
-    (temp !== undefined && temp >= 24 && humidity !== undefined && humidity >= 78);
-
-  if (meaningfulHeatLoad) {
-    return {
-      level: 'heat-load',
-      label: en ? 'meaningful heat load' : '热负荷偏高',
-      guidance: en
-        ? 'Heat is a meaningful context factor. Account for it when reading pace and heart rate, but do not make it the whole story unless drift or unusual effort supports that.'
-        : '天气带来明显热负荷，应把它作为配速和心率解读的重要背景，但除非有明显漂移或异常费力证据，不要把它写成全部原因。',
-    };
-  }
-
-  const muggyButNotHot =
-    (humidity !== undefined && humidity >= 70) ||
-    (temp !== undefined && temp >= 22);
-
-  if (muggyButNotHot) {
-    return {
-      level: 'muggy',
-      label: en ? 'mild warm / muggy context' : '偏闷或偏暖',
-      guidance: en
-        ? 'Weather adds only a mild thermal cost. Mention it as secondary context if relevant, and do NOT call this heat stress.'
-        : '天气只带来轻度的闷热负担，如有必要可作为次要背景提一句，明确不要直接写成“热应激”。',
-    };
-  }
-
-  return {
-    level: 'neutral',
-    label: en ? 'broadly neutral conditions' : '天气中性',
-    guidance: en
-      ? 'Weather looks broadly neutral. Do not foreground it unless the data clearly points there.'
-      : '天气整体中性，除非数据明确指向天气因素，否则不要把它放到前台。',
-  };
 }
 
 function getDistanceLabel(distanceMeters: number, en: boolean): string {
@@ -646,23 +489,29 @@ export function buildProfessionalPrompt(
   }
 
   // Weather conditions
-  const weatherInfo = parseWeatherFromDescription(activity.description, activity.average_temp);
-  if (weatherInfo) {
-    const thermalContext = getThermalContext(weatherInfo, en);
+  const weatherInfo = buildActivityWeatherContext(activity, streams);
+  if (weatherInfo.hasWeather) {
+    const thermalContext = getThermalContext(weatherInfo, locale);
     prompt += en ? `\n\n## Weather Conditions` : `\n\n## 天气条件`;
-    if (weatherInfo.temperature !== undefined) {
-      prompt += en ? `\n- Temperature: ${weatherInfo.temperature}°C` : `\n- 气温: ${weatherInfo.temperature}°C`;
+    if (weatherInfo.condition) {
+      prompt += en ? `\n- Condition: ${weatherInfo.condition}` : `\n- 天气: ${weatherInfo.condition}`;
     }
-    if (weatherInfo.feelsLike !== undefined) {
-      prompt += en ? `\n- Feels like: ${weatherInfo.feelsLike}°C` : `\n- 体感温度: ${weatherInfo.feelsLike}°C`;
+    if (weatherInfo.temperatureC !== undefined) {
+      prompt += en ? `\n- Temperature: ${weatherInfo.temperatureC}°C` : `\n- 气温: ${weatherInfo.temperatureC}°C`;
     }
-    if (weatherInfo.humidity !== undefined) {
-      prompt += en ? `\n- Humidity: ${weatherInfo.humidity}%` : `\n- 湿度: ${weatherInfo.humidity}%`;
+    if (weatherInfo.feelsLikeC !== undefined) {
+      prompt += en ? `\n- Feels like: ${weatherInfo.feelsLikeC}°C` : `\n- 体感温度: ${weatherInfo.feelsLikeC}°C`;
     }
-    if (weatherInfo.windSpeed !== undefined) {
-      prompt += en ? `\n- Wind: ${weatherInfo.windSpeed} km/h` : `\n- 风速: ${weatherInfo.windSpeed} km/h`;
+    if (weatherInfo.humidityPercent !== undefined) {
+      prompt += en ? `\n- Humidity: ${weatherInfo.humidityPercent}%` : `\n- 湿度: ${weatherInfo.humidityPercent}%`;
+    }
+    if (weatherInfo.windSpeedKmh !== undefined) {
+      prompt += en ? `\n- Wind: ${weatherInfo.windSpeedKmh} km/h` : `\n- 风速: ${weatherInfo.windSpeedKmh} km/h`;
     }
     prompt += en ? `\n- Thermal context: ${thermalContext.label}` : `\n- 热环境判断: ${thermalContext.label}`;
+    prompt += en
+      ? `\n- Weather source: ${getWeatherSourceLabel(weatherInfo, locale)}`
+      : `\n- 天气来源: ${getWeatherSourceLabel(weatherInfo, locale)}`;
     prompt += en
       ? `\n\n${thermalContext.guidance}`
       : `\n\n${thermalContext.guidance}`;
@@ -857,8 +706,8 @@ export function buildProfessionalPrompt(
 
   if (classification.isRace) {
     prompt += en
-      ? `\n{\n  "summary": "Race performance analysis (include PB comparison and pacing strategy evaluation)",`
-      : `\n{\n  "summary": "比赛表现分析（包含与PB对比、配速策略评价）",`;
+      ? `\n{\n  "summary": "Race performance analysis in 2-3 complete sentences: result, pacing execution, and recovery priority.",`
+      : `\n{\n  "summary": "用2-3个完整句子总结比赛：结果、配速执行、恢复重点。",`;
     prompt += `\n  "intensity": "extreme",`;
     prompt += `\n  "recoveryHours": ${activity.distance > 40000 ? 168 : 48},`;
     prompt += en
@@ -869,8 +718,8 @@ export function buildProfessionalPrompt(
       : `\n  "suggestions": ["赛后恢复建议1", "避免立即进行强度训练", "下次比赛准备建议"],`;
   } else {
     prompt += en
-      ? `\n{\n  "summary": "Overall evaluation (80-200 words, professional coach tone). Must include: (1) what type of workout this was and why, (2) a sentence of performance assessment with specific data reference, (3) one concrete highlight or area to watch, (4) brief context from weekly load trend. Do NOT just list numbers—explain what they mean.",`
-      : `\n{\n  "summary": "总体评价（80-200字，专业教练口吻）。必须包含：(1)本次训练类型判定及原因，(2)结合具体数据的一句话表现点评，(3)一个具体亮点或注意点，(4)结合周跑量趋势的简要上下文。不要简单罗列数字——要解释数字背后的意义。",`;
+      ? `\n{\n  "summary": "A concise but complete coach summary (35-70 words, 2-3 complete sentences). Cover: workout type with confidence, execution quality using one key data point, and the main recovery/load implication. Do NOT duplicate detailed suggestions or simply list numbers.",`
+      : `\n{\n  "summary": "简要但完整的教练总结（60-120字，2-3个完整句子）。包含：训练类型与置信度、结合一个关键数据点说明执行质量、主要恢复/负荷含义。不要重复详细建议，也不要简单罗列数字。",`;
     prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
     prompt += en ? `\n  "recoveryHours": number,` : `\n  "recoveryHours": 数字,`;
     prompt += en
@@ -933,8 +782,8 @@ export function buildProfessionalPrompt(
       : `\n- 对轻松/恢复跑，避免使用“目标配速”话术。如果配速比近期慢，除非心率或负荷证据显示异常，否则应表述为更放松的执行。`;
   }
   prompt += en
-    ? `\n- Each field must be substantive (at least 30 words for summary, at least 20 words for trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion). Empty or one-sentence responses are NOT acceptable.`
-    : `\n- 每个字段必须有实质内容（summary 至少30字，trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion 至少20字）。空值或一句话敷衍 unacceptable。`;
+    ? `\n- Each field must be substantive. Keep summary concise (2-3 complete sentences), and keep trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion at least 20 words. Empty, cut-off, or one-clause responses are NOT acceptable.`
+    : `\n- 每个字段必须有实质内容。summary 保持简洁（2-3个完整句子），trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion 至少20字。空值、截断句或半句话式敷衍 unacceptable。`;
   if (estimatedPBs['5k'] > 0) {
     const calculated5k = estimatedPBs['5k'];
     const calculated10k = estimatedPBs['10k'];
