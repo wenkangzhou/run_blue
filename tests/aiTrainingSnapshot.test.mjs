@@ -19,17 +19,20 @@ function compileLibFile(sourceFile, outputFile) {
 }
 
 compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/aiTrainingSnapshot.ts', 'aiTrainingSnapshot.js');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types' || request === '@/lib/trainingAnalysis' || request === '@/lib/aiTypes') return {};
   if (request === '@/lib/weather') return require(path.join(tempDir, 'weather.js'));
+  if (request === '@/lib/activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 test.after(() => { Module._load = originalLoad; });
 
 const { buildAITrainingSnapshot, getPromptInputsFromSnapshot } = require(path.join(tempDir, 'aiTrainingSnapshot.js'));
+const { mergePersonalBestTimes } = require(path.join(tempDir, 'activityAchievements.js'));
 
 function makeProfile() {
   return {
@@ -71,6 +74,10 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     map: { summary_polyline: 'SECRET_POLYLINE' },
     laps: [{ id: 99, name: 'Private lap', start_date: '2026-07-01', lap_index: 1, distance: 1000, moving_time: 330, elapsed_time: 335, average_speed: 3, max_speed: 4, total_elevation_gain: 2 }],
     splits_metric: [{ split: 1, distance: 1000, moving_time: 330, elapsed_time: 335, average_speed: 3, elevation_difference: 2 }],
+    best_efforts: [
+      { name: '5K', distance: 5000, elapsed_time: 1260, pr_rank: 1 },
+      { name: '1K', distance: 1000, elapsed_time: 240, pr_rank: 2 },
+    ],
   };
   const snapshot = buildAITrainingSnapshot({
     activity,
@@ -92,6 +99,9 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   assert.equal(snapshot.workout.weatherContext.temperatureC, 27);
   assert.equal(snapshot.workout.weatherContext.feelsLikeC, 35);
   assert.equal(snapshot.workout.weatherContext.humidityPercent, 86);
+  assert.deepEqual(snapshot.workout.personalRecords, [
+    { name: '5K', distanceMeters: 5000, elapsedTimeSeconds: 1260, rank: 1 },
+  ]);
 
   const promptInputs = getPromptInputsFromSnapshot(snapshot);
   assert.equal(promptInputs.activity.name, undefined);
@@ -99,5 +109,18 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   assert.equal(promptInputs.activity.map, undefined);
   assert.equal(promptInputs.activity.start_latlng, undefined);
   assert.equal(promptInputs.activity.weather_context.feelsLikeC, 35);
+  assert.deepEqual(promptInputs.activity.best_efforts, [
+    { name: '5K', distance: 5000, elapsed_time: 1260, pr_rank: 1 },
+  ]);
   assert.equal(promptInputs.streams.summary.data.length, 0);
+});
+
+test('personal best merge keeps the fastest value from profile and current Strava PRs', () => {
+  assert.deepEqual(
+    mergePersonalBestTimes(
+      { '5k': 1254, '10k': 2700 },
+      { '5k': 1276, '10k': 2650 }
+    ),
+    { '5k': 1254, '10k': 2650 }
+  );
 });

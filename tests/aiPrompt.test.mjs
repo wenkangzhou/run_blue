@@ -26,6 +26,7 @@ function compileLibFile(sourceFile, outputFile) {
 }
 
 compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
 writeFileSync(
@@ -85,6 +86,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === './trainingAnalysis') return require(path.join(tempDir, 'trainingAnalysis.js'));
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
+  if (request === './activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -426,6 +428,32 @@ test('buildProfessionalPrompt prioritizes the athlete personal same-temperature 
   assert.match(prompt, /本次慢 3 秒\/公里/);
   assert.match(prompt, /本次高 2 bpm/);
   assert.match(prompt, /应视为高温下的正常表现，不要写成能力下降/);
+});
+
+test('buildProfessionalPrompt makes a hot-weather personal best the primary outcome', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 12020,
+      moving_time: 3588,
+      description: 'Temperature 30.2°C, Feels like 33.1°C, Humidity 70%',
+      best_efforts: [
+        { name: '5K', distance: 5000, elapsed_time: 1254, pr_rank: 1 },
+        { name: '1K', distance: 1000, elapsed_time: 238, pr_rank: 2 },
+      ],
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'workout', paceZone: 'M' }),
+    'zh'
+  );
+
+  assert.match(prompt, /本次刷新个人最佳/);
+  assert.match(prompt, /5K: 20:54（个人最佳，第1名）/);
+  assert.doesNotMatch(prompt, /1K: 3:58（个人最佳/);
+  assert.match(prompt, /summary 前两句必须直接写出最重要的 PB/);
+  assert.match(prompt, /PB 出现在明显热应激下/);
+  assert.match(prompt, /把高温高湿作为一级训练变量/);
+  assert.match(prompt, /配速\/心率解读、实际训练刺激和恢复成本/);
 });
 
 test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {

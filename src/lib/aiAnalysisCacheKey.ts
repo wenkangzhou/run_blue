@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v25';
+export const AI_ANALYSIS_CACHE_VERSION = 'v26';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -66,6 +66,7 @@ function getBestEffortsFingerprint(activity: Pick<HistoryActivity, 'best_efforts
       name: effort.name,
       distance: roundNumber(effort.distance, 0),
       elapsedTime: effort.elapsed_time,
+      prRank: effort.pr_rank ?? null,
     })) ?? null;
 }
 

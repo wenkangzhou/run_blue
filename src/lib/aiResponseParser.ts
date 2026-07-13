@@ -3,6 +3,79 @@ import type { AIAnalysis } from './aiTypes';
 import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext } from './weather';
+import { getPrimaryPersonalRecord } from './activityAchievements';
+
+function formatRecordTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function getWeatherFact(activity: StravaActivity, locale: string): string {
+  const weather = buildActivityWeatherContext(activity);
+  const en = locale.startsWith('en');
+  const facts: string[] = [];
+  if (weather.feelsLikeC !== undefined) {
+    facts.push(en ? `feels like ${weather.feelsLikeC}°C` : `体感 ${weather.feelsLikeC}°C`);
+  } else if (weather.temperatureC !== undefined) {
+    facts.push(en ? `${weather.temperatureC}°C` : `${weather.temperatureC}°C`);
+  }
+  if (weather.humidityPercent !== undefined) {
+    facts.push(en ? `${weather.humidityPercent}% humidity` : `湿度 ${weather.humidityPercent}%`);
+  }
+  return facts.join(en ? ' with ' : '、');
+}
+
+function ensurePrioritySummary(summary: string, activity: StravaActivity, locale: string): string {
+  const en = locale.startsWith('en');
+  const record = getPrimaryPersonalRecord(activity);
+  const weather = buildActivityWeatherContext(activity);
+  const hasMeaningfulHeat = weather.thermalSeverity === 'heat-load' || weather.thermalSeverity === 'heat-stress';
+  const mentionsRecord = en
+    ? /\b(?:PB|PR|personal (?:best|record))\b/i.test(summary)
+    : /(?:PB|个人最佳|刷新.{0,8}(?:最佳|纪录|记录)|突破.{0,8}(?:最佳|纪录|记录))/i.test(summary);
+  const recordTime = record ? formatRecordTime(record.elapsedTimeSeconds) : '';
+  const mentionsRecordDetail = !record || (
+    mentionsRecord &&
+    summary.toLowerCase().includes(record.name.toLowerCase()) &&
+    summary.includes(recordTime)
+  );
+  const mentionsHeat = en
+    ? /(?:heat|hot|humid|humidity|temperature|feels like)/i.test(summary)
+    : /(?:高温|热负荷|热应激|闷热|湿度|体感温度|体感\s*\d)/i.test(summary);
+  const mentionsHeatEffect = mentionsHeat && (
+    en
+      ? /(?:pace|heart rate|training stimulus|physiological|recovery|cooling)/i.test(summary)
+      : /(?:配速|心率|训练刺激|生理|恢复|散热|降温)/i.test(summary)
+  );
+
+  if (mentionsRecordDetail && (!hasMeaningfulHeat || mentionsHeatEffect)) return summary;
+
+  const weatherFact = getWeatherFact(activity, locale);
+  let prioritySentence = '';
+  if (record && !mentionsRecordDetail && hasMeaningfulHeat && !mentionsHeatEffect) {
+    prioritySentence = en
+      ? `This activity set a ${record.name} personal best of ${formatRecordTime(record.elapsedTimeSeconds)} despite ${weatherFact || 'meaningful heat load'}; that makes the performance especially strong, while the conditions also raise its recovery cost.`
+      : `本次在${weatherFact || '明显热负荷'}下刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，突破含金量很高，同时高温也抬高了生理与恢复成本。`;
+  } else if (record && !mentionsRecordDetail) {
+    prioritySentence = en
+      ? `This activity set a ${record.name} personal best of ${formatRecordTime(record.elapsedTimeSeconds)}, which is the primary outcome of the workout.`
+      : `本次刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，这是本次训练最重要的结果。`;
+  } else if (hasMeaningfulHeat && !mentionsHeatEffect) {
+    const severity = weather.thermalSeverity === 'heat-stress'
+      ? (en ? 'clear heat stress' : '明显热应激')
+      : (en ? 'meaningful heat load' : '明显热负荷');
+    prioritySentence = en
+      ? `${weatherFact || 'The conditions'} created ${severity}; interpret pace, heart rate, training stimulus, and recovery cost against that higher physiological load.`
+      : `${weatherFact || '当前天气'}构成${severity}；配速、心率、训练刺激和恢复成本都应结合更高的生理负担解读。`;
+  }
+
+  return [prioritySentence, summary].filter(Boolean).join(en ? ' ' : '');
+}
 
 function getThermalSeverity(activity: StravaActivity): 'neutral' | 'muggy' | 'heat-load' | 'heat-stress' {
   return buildActivityWeatherContext(activity).thermalSeverity;
@@ -254,7 +327,7 @@ export function normalizeAIAnalysisForDisplay(
 
   return {
     ...analysis,
-    summary: normalizeForDisplay(analysis.summary || ''),
+    summary: ensurePrioritySummary(normalizeForDisplay(analysis.summary || ''), activity, locale),
     trainingLoadContext: normalizeForDisplay(analysis.trainingLoadContext || ''),
     similarActivitiesInsight: normalizeForDisplay(analysis.similarActivitiesInsight || ''),
     nextWorkoutSuggestion: normalizeForDisplay(analysis.nextWorkoutSuggestion || ''),
@@ -351,7 +424,11 @@ export function parseAIResponse(
     ? buildAccurateComparison(activity, similarStats, locale, classification.workoutType)
     : null;
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
-  const normalizedSummary = normalizeForDisplay(result.summary || '训练分析完成');
+  const normalizedSummary = ensurePrioritySummary(
+    normalizeForDisplay(result.summary || '训练分析完成'),
+    activity,
+    locale
+  );
   const normalizedTrainingLoadContext = normalizeForDisplay(result.trainingLoadContext || '');
   const normalizedNextWorkoutSuggestion = normalizeForDisplay(
     result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),

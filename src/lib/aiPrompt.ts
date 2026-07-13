@@ -8,6 +8,7 @@ import {
   getWorkoutTypeLabel,
 } from './trainingAnalysis';
 import { buildActivityWeatherContext, getThermalContext, getWeatherSourceLabel } from './weather';
+import { getActivityPersonalRecords } from './activityAchievements';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -249,6 +250,12 @@ export function buildProfessionalPrompt(
   const paceStr = formatPace(paceSecKm);
 
   const { estimatedPBs, recentLoad, similarStats, thermalStats, patterns } = trainingProfile;
+  const personalRecords = getActivityPersonalRecords(activity);
+  const weatherInfo = buildActivityWeatherContext(activity, streams);
+  const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
+  const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
+    ? (en ? 'clear heat stress' : '明显热应激')
+    : (en ? 'meaningful heat load' : '明显热负荷');
 
   // Build the comprehensive prompt
   let prompt = en
@@ -448,6 +455,23 @@ export function buildProfessionalPrompt(
       : `\n- 由于训练类型识别置信度较低，请明确写出这只是当前证据下的最佳判断，而不是确定结论。`;
   }
 
+  if (personalRecords.length > 0) {
+    prompt += en ? `\n\n## Personal Records Set in This Activity` : `\n\n## 本次刷新个人最佳`;
+    personalRecords.forEach((record) => {
+      prompt += en
+        ? `\n- ${record.name}: ${formatTime(record.elapsedTimeSeconds)} (PR rank 1)`
+        : `\n- ${record.name}: ${formatTime(record.elapsedTimeSeconds)}（个人最佳，第1名）`;
+    });
+    prompt += en
+      ? `\n- CRITICAL FACT: This activity set a personal record. Mention the most meaningful PR explicitly in the first two summary sentences and evaluate what enabled it. Do not bury it in evidence or replace it with a generic workout template.`
+      : `\n- 关键事实：本次明确刷新了个人最佳。summary 前两句必须直接写出最重要的 PB 及成绩，并评价这次突破的执行价值；禁止把它埋在依据里，或只输出泛化训练模板。`;
+    if (hasMeaningfulHeat) {
+      prompt += en
+        ? `\n- The PR was achieved under ${meaningfulHeatLabel}. Treat this as stronger evidence of performance, while still increasing the recovery cost. Do not let heat-risk wording erase the achievement.`
+        : `\n- 这次 PB 出现在${meaningfulHeatLabel}下，成绩含金量应得到明确肯定，同时上调恢复成本；禁止让高温风险提示淹没本次突破。`;
+    }
+  }
+
   // Weekly load trend: show current week, last week, and 4-week average
   if (recentLoad.length > 0) {
     const currentWeek = recentLoad[recentLoad.length - 1];
@@ -489,7 +513,6 @@ export function buildProfessionalPrompt(
   }
 
   // Weather conditions
-  const weatherInfo = buildActivityWeatherContext(activity, streams);
   if (weatherInfo.hasWeather) {
     const thermalContext = getThermalContext(weatherInfo, locale);
     prompt += en ? `\n\n## Weather Conditions` : `\n\n## 天气条件`;
@@ -515,6 +538,11 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n\n${thermalContext.guidance}`
       : `\n\n${thermalContext.guidance}`;
+    if (hasMeaningfulHeat) {
+      prompt += en
+        ? `\n- REQUIRED: Treat heat and humidity as a first-class training variable. In the summary, explain how they change the interpretation of pace/HR, the achieved training stimulus, and recovery cost. Use the athlete's same-temperature baseline when available; never invent an exact pace penalty.`
+        : `\n- 必须执行：把高温高湿作为一级训练变量。summary 中需要说明它如何改变配速/心率解读、实际训练刺激和恢复成本；有个人同温基线时优先使用，禁止凭空编造精确的配速折损秒数。`;
+    }
   }
 
   if (thermalStats) {
@@ -770,6 +798,11 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- If confidence is low or evidence is missing, you MUST say so directly in the summary instead of writing overconfident prose.`
     : `\n- 如果识别置信度较低或关键证据缺失，必须在 summary 中直接说明，不要用很笃定的口吻掩盖不确定性。`;
+  if (personalRecords.length > 0) {
+    prompt += en
+      ? `\n- A personal record is the highest-priority outcome fact for this activity. The summary must name it before generic workout classification, load, or recovery commentary.`
+      : `\n- 个人最佳是本次活动最高优先级的结果事实。summary 必须先点名 PB，再展开训练类型、负荷和恢复判断。`;
+  }
   prompt += en
     ? `\n- If you mention confidence in Chinese output, localize it naturally as 高/中等/低 confidence instead of copying raw labels like medium or low.`
     : `\n- 如果在中文输出里提到置信度，必须写成“高/中等/低置信度”，不要直接照抄 medium / low 这类内部标签。`;

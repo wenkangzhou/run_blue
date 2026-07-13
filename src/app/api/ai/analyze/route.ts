@@ -7,6 +7,7 @@ import { parseCookieHeader } from '@/lib/authCookies';
 import { parseAIAnalyzeRequest, type AnalysisHistoryActivity } from '@/lib/aiAnalyzeRequest';
 import { analyzeActivityViaClaudeStravaMcp } from '@/lib/claudeStravaAnalysis';
 import { generateFallbackAnalysis } from '@/lib/aiFallbackAnalysis';
+import { getActivityPersonalRecords, mergePersonalBestTimes } from '@/lib/activityAchievements';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -63,8 +64,9 @@ export async function POST(request: NextRequest) {
     // Extract PBs from current activity's best_efforts if available
     const activityPBs = extractPBsFromActivity(currentActivity);
     
-    // Merge priority: user profile PBs > activity PBs
-    const mergedPBs = { ...activityPBs, ...userProfilePBs };
+    // Keep the fastest known time. A fresh Strava PR must not be hidden by a
+    // stale manually entered profile PB, while a faster manual PB stays valid.
+    const mergedPBs = mergePersonalBestTimes(activityPBs, userProfilePBs);
     
     // Use frontend-provided cached history only. The analysis route should not
     // quietly fetch activity pages because that bypasses the app-level sync cache.
@@ -191,15 +193,16 @@ function normalizeHistoryActivities(activities?: AnalysisHistoryActivity[]): Str
  * This is more reliable than athlete stats API which requires special permissions
  */
 function extractPBsFromActivity(activity: StravaActivity): Record<string, number> | null {
-  if (!activity.best_efforts || activity.best_efforts.length === 0) {
+  const personalRecords = getActivityPersonalRecords(activity);
+  if (personalRecords.length === 0) {
     return null;
   }
   
   const pbs: Record<string, number> = {};
   
-  for (const effort of activity.best_efforts) {
+  for (const effort of personalRecords) {
     const name = effort.name?.toLowerCase() || '';
-    const time = effort.elapsed_time;
+    const time = effort.elapsedTimeSeconds;
     
     // Map effort names to our standard format
     if (name.includes('400m')) pbs['400m'] = time;

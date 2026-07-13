@@ -28,6 +28,7 @@ function compileLibFile(sourceFile, outputFile) {
 compileLibFile('src/lib/aiTypes.ts', 'aiTypes.js');
 compileLibFile('src/lib/aiComparison.ts', 'aiComparison.js');
 compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
 
@@ -80,6 +81,7 @@ const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
+  if (request === './activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -367,6 +369,29 @@ test('parseAIResponse softens heat-stress wording in merely muggy conditions', (
   assert.doesNotMatch(result.summary, /热应激/);
   assert.match(result.summary, /偏闷湿环境|闷热负荷/);
   assert.doesNotMatch(result.suggestions[0], /热应激/);
+});
+
+test('parseAIResponse restores omitted PB and heat-stress facts in the summary', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '这是一次结构稳定的训练，后续注意恢复。',
+      intensity: 'hard',
+      recoveryHours: 36,
+      suggestions: ['下一次安排轻松跑。'],
+    }),
+    makeActivity({
+      description: 'Temperature 30.2°C, Feels like 33.1°C, Humidity 70%',
+      best_efforts: [{ name: '5K', distance: 5000, elapsed_time: 1254, pr_rank: 1 }],
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'workout', paceZone: 'M' }),
+    'zh'
+  );
+
+  assert.match(result.summary, /体感 33.1°C、湿度 70%/);
+  assert.match(result.summary, /刷新 5K 个人最佳至 20:54/);
+  assert.match(result.summary, /突破含金量很高/);
+  assert.match(result.summary, /恢复成本/);
 });
 
 test('parseAIResponse softens harsh ranking language for recovery runs', () => {

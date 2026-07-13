@@ -123,6 +123,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     trainingStats,
     classification,
     loading,
+    retrying,
     error,
     isQuotaError,
     isAuthError,
@@ -514,10 +515,12 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
             )}
           </div>
           <button
-            onClick={refreshAnalysis}
+            type="button"
+            onClick={() => refreshAnalysis({ force: true })}
             disabled={loading || !consentReady || consentRequired}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-zinc-400 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            title="重新分析"
+            aria-label={t('aiAnalysis.reanalyze', '重新分析')}
+            title={retrying ? t('aiAnalysis.retrying', '正在重新连接 Kimi...') : t('aiAnalysis.reanalyze', '重新分析')}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -565,7 +568,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
               <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
               <div className="h-24 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
             </div>
-            <p className="font-mono text-xs text-zinc-500">{t('aiAnalysis.analyzing')}</p>
+            <p className="font-mono text-xs text-zinc-500">
+              {retrying ? t('aiAnalysis.retrying', '正在重新连接 Kimi...') : t('aiAnalysis.analyzing')}
+            </p>
           </div>
         ) : error ? (
           <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-4 text-center dark:border-zinc-800 dark:bg-zinc-950/40">
@@ -575,7 +580,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                 : error}
             </p>
             {!isQuotaError && !isAuthError && (
-              <button onClick={refreshAnalysis} className="font-mono text-xs text-blue-600 hover:underline">{t('common.retry')}</button>
+              <button type="button" onClick={() => refreshAnalysis({ force: true })} className="font-mono text-xs text-blue-600 hover:underline">{t('common.retry')}</button>
             )}
           </div>
         ) : analysis ? (

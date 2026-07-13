@@ -84,9 +84,12 @@ export interface StravaActivity {
   weighted_average_watts?: number;
   workout_type?: number;
   best_efforts?: Array<{
+    id?: number;
     name: string;
     elapsed_time: number;
+    moving_time?: number;
     distance: number;
+    pr_rank?: number | null;
   }>;
   segment_efforts?: Array<{
     id: number;

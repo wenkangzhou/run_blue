@@ -5,6 +5,7 @@ import type {
 } from '@/lib/trainingAnalysis';
 import type { UserPhysique } from '@/lib/aiTypes';
 import { buildActivityWeatherContext } from '@/lib/weather';
+import { getActivityPersonalRecords } from '@/lib/activityAchievements';
 
 const MAX_LAPS = 40;
 const MAX_SPLITS = 50;
@@ -15,7 +16,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '3';
+  schemaVersion: '4';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -28,6 +29,7 @@ export interface AITrainingSnapshot {
     hasHeartRate: boolean;
     averageHeartRate?: number;
     maxHeartRate?: number;
+    personalRecords: ReturnType<typeof getActivityPersonalRecords>;
     laps: Array<Pick<ActivityLap, 'lap_index' | 'distance' | 'moving_time' | 'elapsed_time' | 'average_speed' | 'max_speed' | 'average_heartrate' | 'max_heartrate' | 'total_elevation_gain'>>;
     splits: Array<Pick<ActivitySplit, 'split' | 'distance' | 'moving_time' | 'elapsed_time' | 'average_speed' | 'average_heartrate' | 'elevation_difference'>>;
   };
@@ -80,9 +82,10 @@ export function buildAITrainingSnapshot(input: {
 }): AITrainingSnapshot {
   const { activity, streams, trainingProfile, classification, physique, lthr, streamSummary } = input;
   const weatherContext = buildActivityWeatherContext(activity, streams);
+  const personalRecords = getActivityPersonalRecords(activity);
 
   return {
-    schemaVersion: '3',
+    schemaVersion: '4',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -95,6 +98,7 @@ export function buildAITrainingSnapshot(input: {
       hasHeartRate: activity.has_heartrate,
       averageHeartRate: finiteNumber(activity.average_heartrate),
       maxHeartRate: finiteNumber(activity.max_heartrate),
+      personalRecords,
       laps: sanitizeLaps(activity.laps),
       splits: sanitizeSplits(activity.splits_metric),
     },
@@ -135,6 +139,12 @@ export function getPromptInputsFromSnapshot(snapshot: AITrainingSnapshot): {
     has_heartrate: snapshot.workout.hasHeartRate,
     average_heartrate: snapshot.workout.averageHeartRate,
     max_heartrate: snapshot.workout.maxHeartRate,
+    best_efforts: snapshot.workout.personalRecords.map((record) => ({
+      name: record.name,
+      distance: record.distanceMeters,
+      elapsed_time: record.elapsedTimeSeconds,
+      pr_rank: record.rank,
+    })),
     laps: snapshot.workout.laps,
     splits_metric: snapshot.workout.splits,
   } as StravaActivity;

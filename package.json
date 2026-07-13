@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 6364 --webpack",
+    "dev": "node scripts/start-dev.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "data:update-activities": "node scripts/update-activities-json.mjs",

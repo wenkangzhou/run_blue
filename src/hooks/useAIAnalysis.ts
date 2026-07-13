@@ -81,6 +81,10 @@ const AI_ANALYSIS_QUOTA_TTL = 60 * 60 * 1000;
 const AI_HISTORY_LIMIT = 1000;
 const aiAnalysisRequestsInFlight = new Map<string, Promise<AIAnalyzeResponse>>();
 
+interface RefreshAnalysisOptions {
+  force?: boolean;
+}
+
 function isTransientFallback(payload: CachedAIAnalysis, consentStatus: AIDataConsent): boolean {
   return consentStatus === 'accepted' && (
     payload.analysisSource === 'fallback' ||
@@ -165,6 +169,7 @@ export function useAIAnalysis(
   const [trainingStats, setTrainingStats] = useState<AITrainingStats | null>(null);
   const [classification, setClassification] = useState<ActivityClassification | null>(null);
   const [loading, setLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
   const [fallbackReason, setFallbackReason] = useState('');
   const [analysisSource, setAnalysisSource] = useState<CachedAIAnalysis['analysisSource']>();
@@ -198,7 +203,8 @@ export function useAIAnalysis(
     setFallbackReason(normalizedPayload.analysisError || '');
   }, [normalizeCachedPayload]);
 
-  const refreshAnalysis = useCallback(async () => {
+  const refreshAnalysis = useCallback(async (options: RefreshAnalysisOptions = {}) => {
+    const force = options.force === true;
     if (!consentReady || consentStatus === 'unknown') {
       setLoading(false);
       return;
@@ -211,6 +217,7 @@ export function useAIAnalysis(
     }
 
     setLoading(true);
+    setRetrying(force);
     setError('');
     setFallbackReason('');
 
@@ -218,11 +225,17 @@ export function useAIAnalysis(
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
     const physique = profile ? { height: profile.height, weight: profile.weight } : undefined;
 
+    let request: Promise<AIAnalyzeResponse> | undefined;
     try {
-      let request = aiAnalysisRequestsInFlight.get(cacheKey);
+      if (force) {
+        await clearCachedAIAnalysis(cacheKey);
+      } else {
+        request = aiAnalysisRequestsInFlight.get(cacheKey);
+      }
       if (!request) {
         request = fetch('/api/ai/analyze', {
           method: 'POST',
+          cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             activity,
@@ -271,8 +284,11 @@ export function useAIAnalysis(
       const message = err instanceof Error ? err.message : '';
       setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
-      aiAnalysisRequestsInFlight.delete(cacheKey);
+      if (request && aiAnalysisRequestsInFlight.get(cacheKey) === request) {
+        aiAnalysisRequestsInFlight.delete(cacheKey);
+      }
       setLoading(false);
+      setRetrying(false);
     }
   }, [enabled, consentReady, consentStatus, activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
 
@@ -358,6 +374,7 @@ export function useAIAnalysis(
     trainingStats,
     classification,
     loading,
+    retrying,
     error,
     isQuotaError,
     isAuthError,
