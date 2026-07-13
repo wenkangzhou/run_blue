@@ -9,6 +9,7 @@ import {
 } from './trainingAnalysis';
 import { buildActivityWeatherContext, getThermalContext, getWeatherSourceLabel } from './weather';
 import { getActivityPersonalRecords } from './activityAchievements';
+import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -251,6 +252,7 @@ export function buildProfessionalPrompt(
 
   const { estimatedPBs, recentLoad, similarStats, thermalStats, patterns } = trainingProfile;
   const personalRecords = getActivityPersonalRecords(activity);
+  const keySustainedEffort = getKeySustainedEffort(activity);
   const weatherInfo = buildActivityWeatherContext(activity, streams);
   const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
   const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
@@ -469,6 +471,38 @@ export function buildProfessionalPrompt(
       prompt += en
         ? `\n- The PR was achieved under ${meaningfulHeatLabel}. Treat this as stronger evidence of performance, while still increasing the recovery cost. Do not let heat-risk wording erase the achievement.`
         : `\n- 这次 PB 出现在${meaningfulHeatLabel}下，成绩含金量应得到明确肯定，同时上调恢复成本；禁止让高温风险提示淹没本次突破。`;
+    }
+  }
+
+  if (keySustainedEffort) {
+    const effortDistanceLabel = formatSustainedEffortDistance(keySustainedEffort.distanceMeters);
+    const splitRange = keySustainedEffort.startSplit === keySustainedEffort.endSplit
+      ? `${keySustainedEffort.startSplit}`
+      : `${keySustainedEffort.startSplit}-${keySustainedEffort.endSplit}`;
+    prompt += en ? `\n\n## Key Sustained Quality Segment` : `\n\n## 本次核心连续质量段`;
+    prompt += en
+      ? `\n- Splits ${splitRange}: ${effortDistanceLabel} km in ${formatTime(keySustainedEffort.movingTimeSeconds)} moving time, avg ${formatPace(keySustainedEffort.averagePaceSecondsPerKm)}/km.`
+      : `\n- 第${splitRange}公里: 连续 ${effortDistanceLabel} km，移动用时 ${formatTime(keySustainedEffort.movingTimeSeconds)}，平均配速 ${formatPace(keySustainedEffort.averagePaceSecondsPerKm)}/km。`;
+    prompt += en
+      ? `\n- This block was ${Math.round(keySustainedEffort.paceGainVsActivitySeconds)}s/km faster than the whole-activity average.`
+      : `\n- 该区间比全程平均配速快 ${Math.round(keySustainedEffort.paceGainVsActivitySeconds)} 秒/公里。`;
+    if (keySustainedEffort.averageHeartRate !== undefined) {
+      prompt += en
+        ? `\n- Average heart rate across the block: ${Math.round(keySustainedEffort.averageHeartRate)} bpm.`
+        : `\n- 该区间平均心率约 ${Math.round(keySustainedEffort.averageHeartRate)} bpm。`;
+    }
+    if (keySustainedEffort.officialBestEffortElapsedSeconds !== undefined) {
+      prompt += en
+        ? `\n- Strava's official elapsed-time best effort for this distance is ${formatTime(keySustainedEffort.officialBestEffortElapsedSeconds)}. The split total above is moving time; do not conflate the two.`
+        : `\n- Strava 本次该距离的官方最佳区间用时为 ${formatTime(keySustainedEffort.officialBestEffortElapsedSeconds)}。上面的分段合计是移动时间，两个口径不得混写。`;
+    }
+    prompt += en
+      ? `\n- CRITICAL: This is the workout's main performance achievement even if it is not a PR. Lead the summary with this sustained block and explain its training value; do not let whole-run average pace, cooldown, load warnings, or a generic workout label bury it.`
+      : `\n- 关键：即使它不是 PB，这也是本次训练最值得肯定的表现成果。summary 必须优先写出这段连续输出及训练价值；不得让全程均配、冷身段、跑量风险或泛化训练类型淹没它。`;
+    if (hasMeaningfulHeat) {
+      prompt += en
+        ? `\n- Completing this sustained block under ${meaningfulHeatLabel} increases its performance value, while also increasing physiological and recovery cost.`
+        : `\n- 该连续质量段出现在${meaningfulHeatLabel}下，应明确提高对表现含金量的评价，同时上调生理与恢复成本。`;
     }
   }
 
@@ -802,6 +836,11 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- A personal record is the highest-priority outcome fact for this activity. The summary must name it before generic workout classification, load, or recovery commentary.`
       : `\n- 个人最佳是本次活动最高优先级的结果事实。summary 必须先点名 PB，再展开训练类型、负荷和恢复判断。`;
+  }
+  if (keySustainedEffort) {
+    prompt += en
+      ? `\n- The key sustained segment is a priority outcome fact. Mention its distance, moving time or pace, and coaching significance before generic load commentary.`
+      : `\n- 核心连续质量段属于优先级很高的结果事实。必须先写出距离、移动用时或配速及其训练意义，再展开泛化负荷提示。`;
   }
   prompt += en
     ? `\n- If you mention confidence in Chinese output, localize it naturally as 高/中等/低 confidence instead of copying raw labels like medium or low.`

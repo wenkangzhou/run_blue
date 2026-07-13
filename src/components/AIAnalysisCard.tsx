@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
+import { formatSustainedEffortDistance, getKeySustainedEffort } from '@/lib/activityHighlights';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -136,6 +137,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     refreshAnalysis,
   } = useAIAnalysis(activity, streams, enabled);
   const [expanded, setExpanded] = useState(false);
+  const keySustainedEffort = useMemo(() => getKeySustainedEffort(activity), [activity]);
 
   const intensity = analysis?.intensity
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
@@ -450,6 +452,16 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   })();
   const coachConclusion = (() => {
     if (!analysis) return null;
+    if (keySustainedEffort) {
+      const distanceLabel = formatSustainedEffortDistance(keySustainedEffort.distanceMeters);
+      return {
+        headline: t('aiAnalysis.qualitySegmentHeadline', {
+          distance: distanceLabel,
+          defaultValue: `连续 ${distanceLabel}K · 核心质量段`,
+        }),
+        detail: compactNaturalSentence(analysis.summary, 2, 148),
+      };
+    }
     if (!verdict) {
       return {
         headline: t('aiAnalysis.trainingConclusion', '训练结论'),

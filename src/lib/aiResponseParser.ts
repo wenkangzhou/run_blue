@@ -1,9 +1,10 @@
 import { StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
-import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
+import { formatPace, type ActivityClassification, type TrainingProfile } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext } from './weather';
 import { getPrimaryPersonalRecord } from './activityAchievements';
+import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
 
 function formatRecordTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -33,6 +34,7 @@ function getWeatherFact(activity: StravaActivity, locale: string): string {
 function ensurePrioritySummary(summary: string, activity: StravaActivity, locale: string): string {
   const en = locale.startsWith('en');
   const record = getPrimaryPersonalRecord(activity);
+  const keySustainedEffort = getKeySustainedEffort(activity);
   const weather = buildActivityWeatherContext(activity);
   const hasMeaningfulHeat = weather.thermalSeverity === 'heat-load' || weather.thermalSeverity === 'heat-stress';
   const mentionsRecord = en
@@ -44,6 +46,25 @@ function ensurePrioritySummary(summary: string, activity: StravaActivity, locale
     summary.toLowerCase().includes(record.name.toLowerCase()) &&
     summary.includes(recordTime)
   );
+  const effortTime = keySustainedEffort ? formatRecordTime(keySustainedEffort.movingTimeSeconds) : '';
+  const effortDistanceLabel = keySustainedEffort
+    ? formatSustainedEffortDistance(keySustainedEffort.distanceMeters)
+    : '';
+  const effortDistancePattern = effortDistanceLabel
+    ? new RegExp(`${effortDistanceLabel}(?:\\.0)?\\s*(?:K|k|公里|km)`, 'i')
+    : null;
+  const effortSplitRange = keySustainedEffort
+    ? (keySustainedEffort.startSplit === keySustainedEffort.endSplit
+        ? `${keySustainedEffort.startSplit}`
+        : `${keySustainedEffort.startSplit}-${keySustainedEffort.endSplit}`)
+    : '';
+  const effortSplitPattern = effortSplitRange
+    ? new RegExp(`(?:第\\s*)?${effortSplitRange.replace('-', '(?:-|–|—|至)')}\\s*(?:公里|km|splits?)?`, 'i')
+    : null;
+  const effortPace = keySustainedEffort ? formatPace(keySustainedEffort.averagePaceSecondsPerKm) : '';
+  const mentionsSustainedEffort = !keySustainedEffort || (
+    summary.includes(effortTime) && Boolean(effortDistancePattern?.test(summary))
+  );
   const mentionsHeat = en
     ? /(?:heat|hot|humid|humidity|temperature|feels like)/i.test(summary)
     : /(?:高温|热负荷|热应激|闷热|湿度|体感温度|体感\s*\d)/i.test(summary);
@@ -53,28 +74,55 @@ function ensurePrioritySummary(summary: string, activity: StravaActivity, locale
       : /(?:配速|心率|训练刺激|生理|恢复|散热|降温)/i.test(summary)
   );
 
-  if (mentionsRecordDetail && (!hasMeaningfulHeat || mentionsHeatEffect)) return summary;
+  if (
+    mentionsRecordDetail &&
+    mentionsSustainedEffort &&
+    (!hasMeaningfulHeat || mentionsHeatEffect)
+  ) return summary;
 
   const weatherFact = getWeatherFact(activity, locale);
-  let prioritySentence = '';
+  const prioritySentences: string[] = [];
   if (record && !mentionsRecordDetail && hasMeaningfulHeat && !mentionsHeatEffect) {
-    prioritySentence = en
+    prioritySentences.push(en
       ? `This activity set a ${record.name} personal best of ${formatRecordTime(record.elapsedTimeSeconds)} despite ${weatherFact || 'meaningful heat load'}; that makes the performance especially strong, while the conditions also raise its recovery cost.`
-      : `本次在${weatherFact || '明显热负荷'}下刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，突破含金量很高，同时高温也抬高了生理与恢复成本。`;
+      : `本次在${weatherFact || '明显热负荷'}下刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，突破含金量很高，同时高温也抬高了生理与恢复成本。`);
   } else if (record && !mentionsRecordDetail) {
-    prioritySentence = en
+    prioritySentences.push(en
       ? `This activity set a ${record.name} personal best of ${formatRecordTime(record.elapsedTimeSeconds)}, which is the primary outcome of the workout.`
-      : `本次刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，这是本次训练最重要的结果。`;
-  } else if (hasMeaningfulHeat && !mentionsHeatEffect) {
+      : `本次刷新 ${record.name} 个人最佳至 ${formatRecordTime(record.elapsedTimeSeconds)}，这是本次训练最重要的结果。`);
+  }
+
+  if (keySustainedEffort && !mentionsSustainedEffort) {
+    const gain = Math.round(keySustainedEffort.paceGainVsActivitySeconds);
+    prioritySentences.push(en
+      ? `The standout result was splits ${effortSplitRange}: ${effortDistanceLabel} km in ${effortTime} moving time (${effortPace}/km), ${gain}s/km faster than the full-run average${hasMeaningfulHeat ? ` despite ${weatherFact || 'meaningful heat load'}` : ''}; this sustained block shows strong speed endurance and is the workout's main quality achievement.`
+      : `本次最值得肯定的是第${effortSplitRange}公里连续 ${effortDistanceLabel} 公里移动用时 ${effortTime}（${effortPace}/km），比全程均配快 ${gain} 秒/公里${hasMeaningfulHeat ? `，且发生在${weatherFact || '明显热负荷'}下` : ''}；这段持续输出说明中段速度耐力${hasMeaningfulHeat ? '和高温下的质量课执行' : '与质量课执行'}都很出色，是本次训练的核心质量成果。`);
+  }
+
+  if (hasMeaningfulHeat && !mentionsHeatEffect && prioritySentences.length === 0) {
     const severity = weather.thermalSeverity === 'heat-stress'
       ? (en ? 'clear heat stress' : '明显热应激')
       : (en ? 'meaningful heat load' : '明显热负荷');
-    prioritySentence = en
+    prioritySentences.push(en
       ? `${weatherFact || 'The conditions'} created ${severity}; interpret pace, heart rate, training stimulus, and recovery cost against that higher physiological load.`
-      : `${weatherFact || '当前天气'}构成${severity}；配速、心率、训练刺激和恢复成本都应结合更高的生理负担解读。`;
+      : `${weatherFact || '当前天气'}构成${severity}；配速、心率、训练刺激和恢复成本都应结合更高的生理负担解读。`);
   }
 
-  return [prioritySentence, summary].filter(Boolean).join(en ? ' ' : '');
+  const combined = [...prioritySentences, summary].filter(Boolean).join(en ? ' ' : '');
+  if (!keySustainedEffort) return combined;
+
+  const sentences = combined.match(/[^。！？!?]+[。！？!?]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+  let keptEffortSentence = false;
+  return sentences.filter((sentence) => {
+    const mentionsEffortIdentity = sentence.includes(effortTime) ||
+      sentence.includes(effortPace) ||
+      Boolean(effortSplitPattern?.test(sentence));
+    const describesSameEffort = mentionsEffortIdentity && Boolean(effortDistancePattern?.test(sentence));
+    if (!describesSameEffort) return true;
+    if (keptEffortSentence) return false;
+    keptEffortSentence = true;
+    return true;
+  }).join(en ? ' ' : '');
 }
 
 function getThermalSeverity(activity: StravaActivity): 'neutral' | 'muggy' | 'heat-load' | 'heat-stress' {
@@ -163,6 +211,12 @@ function normalizeWorkoutSpecificText(
   locale: string
 ): string {
   if (!text || locale.startsWith('en')) return text;
+  if (classification.workoutType === 'workout' && classification.structure.splitPattern === 'mixed') {
+    return text
+      .replace(/(?:中等置信度的|高置信度的|低置信度的)?渐进跑训练/g, '包含连续质量段的混合训练')
+      .replace(/配速构建能力/g, '持续输出能力');
+  }
+
   if (classification.workoutType === 'interval' || classification.workoutType === 'fartlek') {
     return text
       .replace(/全程平均配速(?:偏慢|太慢|不达标|慢于[^，。；]*)/g, '全程平均配速仅作参考')

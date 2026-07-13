@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v26';
+export const AI_ANALYSIS_CACHE_VERSION = 'v28';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -66,6 +66,7 @@ function getBestEffortsFingerprint(activity: Pick<HistoryActivity, 'best_efforts
       name: effort.name,
       distance: roundNumber(effort.distance, 0),
       elapsedTime: effort.elapsed_time,
+      movingTime: effort.moving_time ?? null,
       prRank: effort.pr_rank ?? null,
     })) ?? null;
 }
@@ -73,20 +74,17 @@ function getBestEffortsFingerprint(activity: Pick<HistoryActivity, 'best_efforts
 function getSplitsFingerprint(activity: Pick<HistoryActivity, 'splits_metric'>) {
   const splits = activity.splits_metric;
   if (!splits || splits.length === 0) return null;
-  const first = splits[0];
-  const last = splits[splits.length - 1];
+  const normalized = splits.map((split) => ({
+    split: split.split,
+    distance: roundNumber(split.distance, 0),
+    movingTime: split.moving_time,
+    elapsedTime: split.elapsed_time,
+    elevation: roundNumber(split.elevation_difference),
+    avgHr: roundNumber(split.average_heartrate),
+  }));
   return {
     count: splits.length,
-    first: {
-      distance: roundNumber(first.distance, 0),
-      movingTime: first.moving_time,
-      avgHr: roundNumber(first.average_heartrate),
-    },
-    last: {
-      distance: roundNumber(last.distance, 0),
-      movingTime: last.moving_time,
-      avgHr: roundNumber(last.average_heartrate),
-    },
+    hash: hashString(JSON.stringify(normalized)),
   };
 }
 

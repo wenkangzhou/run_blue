@@ -112,13 +112,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v26 keys for identical AI analysis inputs', () => {
+test('builds stable v28 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v26');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v28');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v26_1_/);
+  assert.match(first, /^ai_analysis_v28_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -229,6 +229,24 @@ test('changes key when stream samples change without changing stream length', ()
         original_size: 3,
         resolution: 'high',
       },
+    }),
+  });
+
+  assert.notEqual(changed, original);
+});
+
+test('changes key when a middle split changes', () => {
+  const splits = [360, 350, 340].map((movingTime, index) => ({
+    split: index + 1,
+    distance: 1000,
+    moving_time: movingTime,
+    elapsed_time: movingTime,
+    elevation_difference: 0,
+  }));
+  const original = key({ activity: makeActivity(1, { splits_metric: splits }) });
+  const changed = key({
+    activity: makeActivity(1, {
+      splits_metric: splits.map((split, index) => index === 1 ? { ...split, moving_time: 330 } : split),
     }),
   });
 

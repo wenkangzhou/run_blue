@@ -29,6 +29,7 @@ compileLibFile('src/lib/aiTypes.ts', 'aiTypes.js');
 compileLibFile('src/lib/aiComparison.ts', 'aiComparison.js');
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
+compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
 
@@ -82,6 +83,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
   if (request === './activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
+  if (request === './activityHighlights') return require(path.join(tempDir, 'activityHighlights.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -384,7 +386,22 @@ test('parseAIResponse restores omitted PB and heat-stress facts in the summary',
       best_efforts: [{ name: '5K', distance: 5000, elapsed_time: 1254, pr_rank: 1 }],
     }),
     makeProfile({ similarStats: null }),
-    makeClassification({ workoutType: 'workout', paceZone: 'M' }),
+    makeClassification({
+      workoutType: 'workout',
+      paceZone: 'M',
+      structure: {
+        source: 'splits',
+        lapCount: 12,
+        medianLapDistance: 1000,
+        shortRepCount: 0,
+        fastRepCount: 5,
+        recoveryRepCount: 0,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'mixed',
+        paceVariability: 0.16,
+      },
+    }),
     'zh'
   );
 
@@ -530,6 +547,48 @@ test('parseAIResponse changes target-pace wording to reference pace without expl
   const joined = [result.summary, ...result.suggestions].join(' ');
   assert.doesNotMatch(joined, /目标配速|目标区间/);
   assert.match(joined, /参考配速|训练区间/);
+});
+
+test('parseAIResponse restores a standout sustained 5K block omitted by the model', () => {
+  const splits = [305, 292, 258, 253, 250, 255, 209, 325, 359, 338, 342, 300]
+    .map((movingTime, index) => ({
+      split: index + 1,
+      distance: 1000,
+      moving_time: movingTime,
+      elapsed_time: movingTime + (index === 6 ? 55 : 0),
+      average_speed: 1000 / movingTime,
+      average_heartrate: [134, 150, 162, 170, 174, 176, 156, 162, 153, 156, 160, 164][index],
+      elevation_difference: 0,
+    }));
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '本次为中等置信度的渐进跑训练，核心亮点是第3-7公里在30°C热应激下连续5公里以4\'05"/km稳定输出，展现了出色的配速构建能力。本周跑量增长较快，需要关注恢复。',
+      intensity: 'moderate',
+      recoveryHours: 36,
+      suggestions: ['下次轻松跑。'],
+    }),
+    makeActivity({
+      distance: 12020,
+      moving_time: 3588,
+      elapsed_time: 4124,
+      description: 'Temperature 30.2°C, Feels like 33.1°C, Humidity 70%',
+      splits_metric: splits,
+      best_efforts: [
+        { name: '5K', distance: 5000, moving_time: 1225, elapsed_time: 1280, pr_rank: null },
+      ],
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'workout', paceZone: 'M' }),
+    'zh'
+  );
+
+  assert.match(result.summary, /第3-7公里连续 5 公里移动用时 20:25（4'05"\/km）/);
+  assert.match(result.summary, /比全程均配快 5[34] 秒\/公里/);
+  assert.match(result.summary, /体感 33\.1°C、湿度 70%/);
+  assert.match(result.summary, /核心质量成果/);
+  assert.equal(result.summary.match(/第3-7公里/g)?.length, 1);
+  assert.doesNotMatch(result.summary, /渐进跑|配速构建能力/);
+  assert.doesNotMatch(result.summary, /个人最佳|PB/);
 });
 
 test('parseAIResponse forces race intensity and default race recovery', () => {

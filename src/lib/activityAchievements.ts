@@ -7,6 +7,14 @@ export interface ActivityPersonalRecord {
   rank: 1;
 }
 
+export interface ActivityBestEffortSummary {
+  name: string;
+  distanceMeters: number;
+  elapsedTimeSeconds: number;
+  movingTimeSeconds?: number;
+  rank?: number | null;
+}
+
 function isPositiveFinite(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
@@ -25,6 +33,24 @@ export function getActivityPersonalRecords(
       distanceMeters: effort.distance,
       elapsedTimeSeconds: effort.elapsed_time,
       rank: 1 as const,
+    }))
+    .sort((a, b) => b.distanceMeters - a.distanceMeters);
+}
+
+export function getActivityBestEfforts(
+  activity: Pick<StravaActivity, 'best_efforts'>
+): ActivityBestEffortSummary[] {
+  return (activity.best_efforts ?? [])
+    .filter((effort) =>
+      isPositiveFinite(effort.distance) &&
+      isPositiveFinite(effort.elapsed_time)
+    )
+    .map((effort) => ({
+      name: effort.name,
+      distanceMeters: effort.distance,
+      elapsedTimeSeconds: effort.elapsed_time,
+      movingTimeSeconds: isPositiveFinite(effort.moving_time) ? effort.moving_time : undefined,
+      rank: effort.pr_rank,
     }))
     .sort((a, b) => b.distanceMeters - a.distanceMeters);
 }

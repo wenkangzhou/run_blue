@@ -27,6 +27,7 @@ function compileLibFile(sourceFile, outputFile) {
 
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
+compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
 writeFileSync(
@@ -87,6 +88,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === './trainingAnalysis') return require(path.join(tempDir, 'trainingAnalysis.js'));
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
   if (request === './activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
+  if (request === './activityHighlights') return require(path.join(tempDir, 'activityHighlights.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -454,6 +456,42 @@ test('buildProfessionalPrompt makes a hot-weather personal best the primary outc
   assert.match(prompt, /PB 出现在明显热应激下/);
   assert.match(prompt, /把高温高湿作为一级训练变量/);
   assert.match(prompt, /配速\/心率解读、实际训练刺激和恢复成本/);
+});
+
+test('buildProfessionalPrompt promotes a standout continuous 5K block even without a PB', () => {
+  const splits = [305, 292, 258, 253, 250, 255, 209, 325, 359, 338, 342, 300]
+    .map((movingTime, index) => ({
+      split: index + 1,
+      distance: 1000,
+      moving_time: movingTime,
+      elapsed_time: movingTime + (index === 6 ? 55 : 0),
+      average_speed: 1000 / movingTime,
+      average_heartrate: [134, 150, 162, 170, 174, 176, 156, 162, 153, 156, 160, 164][index],
+      elevation_difference: 0,
+    }));
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 12020,
+      moving_time: 3588,
+      elapsed_time: 4124,
+      description: 'Temperature 30.2°C, Feels like 33.1°C, Humidity 70%',
+      splits_metric: splits,
+      best_efforts: [
+        { name: '5K', distance: 5000, moving_time: 1225, elapsed_time: 1280, pr_rank: null },
+      ],
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'workout', paceZone: 'M' }),
+    'zh'
+  );
+
+  assert.match(prompt, /本次核心连续质量段/);
+  assert.match(prompt, /第3-7公里: 连续 5 km，移动用时 20:25，平均配速 4'05"\/km/);
+  assert.match(prompt, /比全程平均配速快 5[34] 秒\/公里/);
+  assert.match(prompt, /官方最佳区间用时为 21:20/);
+  assert.match(prompt, /即使它不是 PB/);
+  assert.match(prompt, /明显热应激下，应明确提高对表现含金量的评价/);
 });
 
 test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {

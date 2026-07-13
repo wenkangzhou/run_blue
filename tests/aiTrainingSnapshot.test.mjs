@@ -102,6 +102,10 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   assert.deepEqual(snapshot.workout.personalRecords, [
     { name: '5K', distanceMeters: 5000, elapsedTimeSeconds: 1260, rank: 1 },
   ]);
+  assert.deepEqual(snapshot.workout.bestEfforts, [
+    { name: '5K', distanceMeters: 5000, elapsedTimeSeconds: 1260, movingTimeSeconds: undefined, rank: 1 },
+    { name: '1K', distanceMeters: 1000, elapsedTimeSeconds: 240, movingTimeSeconds: undefined, rank: 2 },
+  ]);
 
   const promptInputs = getPromptInputsFromSnapshot(snapshot);
   assert.equal(promptInputs.activity.name, undefined);
@@ -110,7 +114,8 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   assert.equal(promptInputs.activity.start_latlng, undefined);
   assert.equal(promptInputs.activity.weather_context.feelsLikeC, 35);
   assert.deepEqual(promptInputs.activity.best_efforts, [
-    { name: '5K', distance: 5000, elapsed_time: 1260, pr_rank: 1 },
+    { name: '5K', distance: 5000, elapsed_time: 1260, moving_time: undefined, pr_rank: 1 },
+    { name: '1K', distance: 1000, elapsed_time: 240, moving_time: undefined, pr_rank: 2 },
   ]);
   assert.equal(promptInputs.streams.summary.data.length, 0);
 });
