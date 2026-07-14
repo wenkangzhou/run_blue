@@ -28,6 +28,7 @@ function compileLibFile(sourceFile, outputFile) {
 compileLibFile('src/lib/dates.ts', 'dates.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/trainingZones.ts', 'trainingZones.js');
+compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/trainingAnalysis.ts', 'trainingAnalysis.js');
 
 const originalLoad = Module._load;

@@ -107,7 +107,9 @@ export function generateFallbackAnalysis(
 
   // Normal training fallback
   const suggestions = [...profile.patterns.trainingDeficiencies];
-  const workoutTypeLabel = getWorkoutTypeLabel(classification.workoutType, locale);
+  const workoutTypeLabel = classification.loadAdjustment?.applied
+    ? (en ? 'heat-load aerobic run' : '高温负荷有氧跑')
+    : getWorkoutTypeLabel(classification.workoutType, locale);
   if (!profile.patterns.hasLongRuns && activity.distance < 15000) {
     suggestions.push(en ? 'Try to schedule a 15km+ long run this week.' : '建议本周安排一次15km+的长距离训练');
   }
@@ -167,8 +169,11 @@ export function generateFallbackAnalysis(
     summary: en
       ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${encouragement}`
       : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${encouragement}`,
-    intensity: 'moderate',
-    recoveryHours: activity.distance > 10000 ? 36 : 24,
+    intensity: classification.intensity,
+    recoveryHours: Math.max(
+      activity.distance > 10000 ? 36 : 24,
+      classification.loadAdjustment?.minimumRecoveryHours ?? 0
+    ),
     comparisonToAverage: comparisonText,
     suggestions,
     generatedAt: Date.now(),

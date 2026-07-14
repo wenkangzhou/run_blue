@@ -362,6 +362,59 @@ export function buildProfessionalPrompt(
     ? `\n- IMPORTANT: Treat this supplied workout-type classification as the primary anchor. Do NOT override it based only on average pace unless the rest of the evidence clearly contradicts it.`
     : `\n- 重要：优先使用这里给出的训练类型识别结果，不要仅凭平均配速推翻它，除非其余证据明显矛盾。`;
 
+  const loadAdjustment = classification.loadAdjustment;
+  if (
+    loadAdjustment?.trainingLoadState
+    && loadAdjustment.trainingLoadState !== 'insufficient'
+    && loadAdjustment.current7DayTrainingLoad !== null
+  ) {
+    const stateLabel = en
+      ? loadAdjustment.trainingLoadState
+      : ({ recover: '恢复期', balanced: '平衡', building: '增长中', high: '负荷偏高' } as const)[loadAdjustment.trainingLoadState];
+    prompt += en ? `\n\n## Rolling Training Load (same calculation as Stats)` : `\n\n## 滚动训练负荷（与统计页同口径）`;
+    if (loadAdjustment.activityTrainingLoad !== null) {
+      prompt += en
+        ? `\n- This activity: ${loadAdjustment.activityTrainingLoad} load points${loadAdjustment.activityTrainingLoadSharePercent !== null ? ` (${loadAdjustment.activityTrainingLoadSharePercent}% of current 7-day load)` : ''}`
+        : `\n- 本次活动: ${loadAdjustment.activityTrainingLoad} 负荷点${loadAdjustment.activityTrainingLoadSharePercent !== null ? `（占近 7 天负荷的 ${loadAdjustment.activityTrainingLoadSharePercent}%）` : ''}`;
+    }
+    prompt += en
+      ? `\n- Current 7 days: ${loadAdjustment.current7DayTrainingLoad} points; previous 7 days: ${loadAdjustment.previous7DayTrainingLoad ?? 'n/a'}; prior 3-week average: ${loadAdjustment.averageWeeklyTrainingLoad ?? 'n/a'}`
+      : `\n- 近 7 天: ${loadAdjustment.current7DayTrainingLoad} 点；上一个 7 天: ${loadAdjustment.previous7DayTrainingLoad ?? '未知'} 点；前 3 周均值: ${loadAdjustment.averageWeeklyTrainingLoad ?? '未知'} 点`;
+    if (loadAdjustment.trainingLoadChangePercent !== null) {
+      prompt += en
+        ? `\n- Change vs previous 7 days: ${loadAdjustment.trainingLoadChangePercent >= 0 ? '+' : ''}${loadAdjustment.trainingLoadChangePercent}%`
+        : `\n- 较上一个 7 天: ${loadAdjustment.trainingLoadChangePercent >= 0 ? '+' : ''}${loadAdjustment.trainingLoadChangePercent}%`;
+    }
+    if (loadAdjustment.trainingLoadRatio !== null) {
+      prompt += en
+        ? `; ratio to prior 3-week average: ${loadAdjustment.trainingLoadRatio}x`
+        : `；相对前 3 周均值: ${loadAdjustment.trainingLoadRatio} 倍`;
+    }
+    prompt += en
+      ? `\n- Load state: ${stateLabel}; heart-rate coverage: ${loadAdjustment.trainingLoadHeartRateCoverage ?? 0}%`
+      : `\n- 负荷状态: ${stateLabel}；心率覆盖率: ${loadAdjustment.trainingLoadHeartRateCoverage ?? 0}%`;
+    prompt += en
+      ? `\n- Use these load points as the primary recent-load signal. Distance-only weekly volume is secondary. Explain what this means for this session's real cost and recovery without merely repeating the numbers.`
+      : `\n- 必须把负荷点作为近期负荷的首要信号，单纯周跑量只作补充。需要解释它对本次真实训练成本与恢复安排的影响，禁止只复述数字。`;
+  }
+  if (loadAdjustment?.applied) {
+    const adjustedIntensityLabel = en
+      ? loadAdjustment.adjustedIntensity
+      : ({ easy: '轻松', moderate: '适中', hard: '高强度', extreme: '极限' } as const)[loadAdjustment.adjustedIntensity];
+    prompt += en ? `\n\n## Deterministic Internal-load Override` : `\n\n## 系统综合负荷校正`;
+    prompt += en
+      ? `\n- External pace-zone label: ${classification.paceZone}; adjusted internal intensity: ${adjustedIntensityLabel}`
+      : `\n- 外部配速区间仍为 ${classification.paceZone}，但综合内部强度已校正为：${adjustedIntensityLabel}`;
+    if (loadAdjustment.paceSecondsPerKm !== null) {
+      prompt += en
+        ? `\n- Current pace: ${formatPace(loadAdjustment.paceSecondsPerKm)}/km; pace context: ${loadAdjustment.paceContext}`
+        : `\n- 本次均配: ${formatPace(loadAdjustment.paceSecondsPerKm)}/km；个人配速位置: ${loadAdjustment.paceContext === 'upper-easy' ? 'E 区较快一侧' : loadAdjustment.paceContext === 'quality' ? '质量训练区间' : 'E 区放松侧'}`;
+    }
+    prompt += en
+      ? `\n- HARD RULE: Heat/humidity, pace position, and rolling training-load points jointly override a generic easy/recovery label. Do not call this session easy, light, or recovery-load. Output intensity at least ${adjustedIntensityLabel} and recovery at least ${loadAdjustment.minimumRecoveryHours}h.`
+      : `\n- 硬性规则：高温高湿、个人配速位置与滚动训练负荷点共同优先于泛化的轻松/恢复标签。不得把本次写成“轻松”“低负荷”或“恢复负荷”；intensity 不得低于“${adjustedIntensityLabel}”，建议恢复不得少于 ${loadAdjustment.minimumRecoveryHours}h。`;
+  }
+
   // Athlete physique info
   if (physique?.height || physique?.weight) {
     prompt += en ? `\n\n## Athlete Profile` : `\n\n## 运动员资料`;

@@ -16,7 +16,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '5';
+  schemaVersion: '7';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -87,7 +87,7 @@ export function buildAITrainingSnapshot(input: {
   const bestEfforts = getActivityBestEfforts(activity);
 
   return {
-    schemaVersion: '5',
+    schemaVersion: '7',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,

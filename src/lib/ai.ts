@@ -1,10 +1,11 @@
 import type { ActivityStream, StravaActivity } from '@/types';
 import { classifyActivity } from './trainingAnalysis';
-import type { TrainingProfile } from './trainingAnalysis';
+import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
 import { buildProfessionalPrompt } from './aiPrompt';
 import { parseAIResponse } from './aiResponseParser';
 import type { AIAnalysis, UserPhysique } from './aiTypes';
 import { buildAITrainingSnapshot, getPromptInputsFromSnapshot } from './aiTrainingSnapshot';
+import { adjustClassificationForTrainingStress } from './trainingStress';
 
 export type { AIAnalysis, UserProfile, UserPhysique } from './aiTypes';
 export { buildProfessionalPrompt } from './aiPrompt';
@@ -41,6 +42,7 @@ export async function analyzeActivity(
   physique?: UserPhysique,
   lthr?: number | null,
   streamAnalysis?: string,
+  classificationOverride?: ActivityClassification,
 ): Promise<AIAnalysis> {
   const apiKey = process.env.KIMI_API_KEY;
 
@@ -48,11 +50,15 @@ export async function analyzeActivity(
     throw new Error('KIMI_API_KEY not configured');
   }
 
-  const classification = classifyActivity(
+  const classification = classificationOverride ?? adjustClassificationForTrainingStress(
     activity,
-    trainingProfile.paceZones,
-    trainingProfile.estimatedPBs.reliability,
-    lthr
+    trainingProfile,
+    classifyActivity(
+      activity,
+      trainingProfile.paceZones,
+      trainingProfile.estimatedPBs.reliability,
+      lthr
+    )
   );
   const snapshot = buildAITrainingSnapshot({
     activity,

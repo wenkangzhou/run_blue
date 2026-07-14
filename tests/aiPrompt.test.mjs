@@ -494,6 +494,59 @@ test('buildProfessionalPrompt promotes a standout continuous 5K block even witho
   assert.match(prompt, /明显热应激下，应明确提高对表现含金量的评价/);
 });
 
+test('buildProfessionalPrompt makes the deterministic summer-load override non-negotiable', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 8000,
+      moving_time: 2560,
+      description: 'Temperature 30°C, Feels like 33°C, Humidity 78%',
+    }),
+    null,
+    makeProfile(),
+    makeClassification({
+      workoutType: 'recovery',
+      workoutTypeConfidence: 'low',
+      intensity: 'hard',
+      paceZone: 'E',
+      loadAdjustment: {
+        applied: true,
+        baseIntensity: 'easy',
+        adjustedIntensity: 'hard',
+        thermalSeverity: 'heat-stress',
+        paceContext: 'upper-easy',
+        paceSecondsPerKm: 320,
+        easyFastBoundarySeconds: 331,
+        sameTemperaturePaceDeltaSeconds: -18,
+        recentVolumeChangePercent: 269,
+        recentVolumeRatio: 3.69,
+        activityTrainingLoad: 40,
+        current7DayTrainingLoad: 223,
+        previous7DayTrainingLoad: 56,
+        averageWeeklyTrainingLoad: 162,
+        trainingLoadChangePercent: 298,
+        trainingLoadRatio: 1.38,
+        trainingLoadState: 'high',
+        trainingLoadHeartRateCoverage: 100,
+        activityTrainingLoadSharePercent: 18,
+        minimumRecoveryHours: 48,
+      },
+    }),
+    'zh'
+  );
+
+  assert.match(prompt, /系统综合负荷校正/);
+  assert.match(prompt, /滚动训练负荷（与统计页同口径）/);
+  assert.match(prompt, /本次活动: 40 负荷点（占近 7 天负荷的 18%）/);
+  assert.match(prompt, /近 7 天: 223 点；上一个 7 天: 56 点；前 3 周均值: 162 点/);
+  assert.match(prompt, /较上一个 7 天: \+298%；相对前 3 周均值: 1.38 倍/);
+  assert.match(prompt, /负荷状态: 负荷偏高；心率覆盖率: 100%/);
+  assert.match(prompt, /本次均配: 5'20"\/km；个人配速位置: E 区较快一侧/);
+  assert.match(prompt, /负荷点作为近期负荷的首要信号/);
+  assert.match(prompt, /不得把本次写成“轻松”“低负荷”或“恢复负荷”/);
+  assert.match(prompt, /intensity 不得低于“高强度”/);
+  assert.match(prompt, /建议恢复不得少于 48h/);
+});
+
 test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {
   const prompt = buildProfessionalPrompt(
     makeActivity({

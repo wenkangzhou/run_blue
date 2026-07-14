@@ -8,6 +8,9 @@ import { parseAIAnalyzeRequest, type AnalysisHistoryActivity } from '@/lib/aiAna
 import { analyzeActivityViaClaudeStravaMcp } from '@/lib/claudeStravaAnalysis';
 import { generateFallbackAnalysis } from '@/lib/aiFallbackAnalysis';
 import { getActivityPersonalRecords, mergePersonalBestTimes } from '@/lib/activityAchievements';
+import { adjustClassificationForTrainingStress } from '@/lib/trainingStress';
+import { calculateActivityTrainingLoad, calculateTrainingLoadSummary } from '@/lib/trainingLoad';
+import { getActivityTimestamp } from '@/lib/dates';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 
@@ -79,13 +82,31 @@ export async function POST(request: NextRequest) {
       mergedPBs,
       lthr
     );
+    const loadActivities = [
+      currentActivity,
+      ...historyActivities.filter((item) => item.id !== currentActivity.id),
+    ];
+    const trainingLoadSummary = calculateTrainingLoadSummary(
+      loadActivities,
+      lthr,
+      new Date(getActivityTimestamp(currentActivity) + 1000)
+    );
+    const activityTrainingLoad = calculateActivityTrainingLoad(currentActivity, lthr);
     
     // Classify the current activity
-    const classification = classifyActivity(
+    const classification = adjustClassificationForTrainingStress(
       currentActivity,
-      trainingProfile.paceZones,
-      trainingProfile.estimatedPBs.reliability,
-      lthr
+      trainingProfile,
+      classifyActivity(
+        currentActivity,
+        trainingProfile.paceZones,
+        trainingProfile.estimatedPBs.reliability,
+        lthr
+      ),
+      {
+        activityLoad: activityTrainingLoad,
+        summary: trainingLoadSummary,
+      }
     );
     
     // Stream analysis: segment HR + pace by km
@@ -119,7 +140,16 @@ export async function POST(request: NextRequest) {
       }
     } else {
       try {
-        analysis = await analyzeActivity(currentActivity, streams, trainingProfile, locale, physique, lthr, streamAnalysisText);
+        analysis = await analyzeActivity(
+          currentActivity,
+          streams,
+          trainingProfile,
+          locale,
+          physique,
+          lthr,
+          streamAnalysisText,
+          classification
+        );
         analysisSource = 'kimi';
       } catch (error) {
         analysisError = getErrorMessage(error, 'Kimi analysis failed');
@@ -140,8 +170,10 @@ export async function POST(request: NextRequest) {
         paceZones: trainingProfile.paceZones,
         patterns: trainingProfile.patterns,
         physiologyMetrics: trainingProfile.physiologyMetrics,
+        recentLoad: trainingProfile.recentLoad,
         similarStats: trainingProfile.similarStats,
         thermalStats: trainingProfile.thermalStats,
+        trainingLoad: trainingLoadSummary,
       },
       classification,
       officialPBs: mergedPBs,

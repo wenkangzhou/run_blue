@@ -31,6 +31,167 @@ function getWeatherFact(activity: StravaActivity, locale: string): string {
   return facts.join(en ? ' with ' : '、');
 }
 
+const INTENSITY_RANK: Record<AIAnalysis['intensity'], number> = {
+  easy: 0,
+  moderate: 1,
+  hard: 2,
+  extreme: 3,
+};
+
+function getFinalIntensity(
+  candidate: AIAnalysis['intensity'] | undefined,
+  classification: ActivityClassification
+): AIAnalysis['intensity'] {
+  if (classification.isRace) return 'extreme';
+  const parsed = candidate && candidate in INTENSITY_RANK ? candidate : 'moderate';
+  if (!classification.loadAdjustment?.applied) return parsed;
+  return INTENSITY_RANK[classification.intensity] > INTENSITY_RANK[parsed]
+    ? classification.intensity
+    : parsed;
+}
+
+function getTrainingLoadFact(
+  adjustment: ActivityClassification['loadAdjustment'],
+  locale: string
+): string {
+  if (!adjustment || adjustment.current7DayTrainingLoad === null) return '';
+  const en = locale.startsWith('en');
+  const previous = adjustment.previous7DayTrainingLoad;
+  const average = adjustment.averageWeeklyTrainingLoad;
+  const change = adjustment.trainingLoadChangePercent;
+  const comparison = change !== null && previous !== null
+    ? (en
+        ? `${change >= 0 ? '+' : ''}${change}% vs the previous 7 days`
+        : `较上一个 7 天${change >= 0 ? '+' : ''}${change}%`)
+    : average !== null
+      ? (en ? `prior 3-week average ${average}` : `前 3 周均值 ${average} 点`)
+      : '';
+  return en
+    ? `rolling 7-day load ${adjustment.current7DayTrainingLoad} points${comparison ? ` (${comparison})` : ''}`
+    : `近 7 天训练负荷 ${adjustment.current7DayTrainingLoad} 点${comparison ? `（${comparison}）` : ''}`;
+}
+
+function getLoadAdjustedSummary(
+  summary: string,
+  activity: StravaActivity,
+  classification: ActivityClassification,
+  locale: string
+): string {
+  const adjustment = classification.loadAdjustment;
+  if (!adjustment) return summary;
+
+  const en = locale.startsWith('en');
+  const trainingLoadFact = getTrainingLoadFact(adjustment, locale);
+  if (!adjustment.applied) {
+    const isHighLoad = adjustment.trainingLoadState === 'high';
+    const alreadyMentionsLoad = en
+      ? /(?:rolling|7-day|weekly) (?:training )?load|load points/i.test(summary)
+      : /(?:近\s*7\s*天|滚动|近期|本周).{0,8}(?:训练)?负荷|负荷点/.test(summary);
+    if (!isHighLoad || !trainingLoadFact || alreadyMentionsLoad) return summary;
+    const loadConclusion = en
+      ? `${trainingLoadFact} is elevated, so recovery should be more conservative than this single session alone suggests.`
+      : `${trainingLoadFact}处于偏高状态，因此恢复安排应比只看本次训练更保守。`;
+    return [summary, loadConclusion].filter(Boolean).join(en ? ' ' : '');
+  }
+
+  const intensityLabel = en
+    ? adjustment.adjustedIntensity
+    : ({ easy: '轻松', moderate: '适中', hard: '高强度', extreme: '极限' } as const)[adjustment.adjustedIntensity];
+  const pace = adjustment.paceSecondsPerKm === null
+    ? ''
+    : `${formatPace(adjustment.paceSecondsPerKm)}/km`;
+  const weatherFact = getWeatherFact(activity, locale);
+  const volumeFact = adjustment.recentVolumeChangePercent !== null
+    ? (en
+        ? `recent 7-day volume ${adjustment.recentVolumeChangePercent >= 0 ? '+' : ''}${adjustment.recentVolumeChangePercent}%`
+        : `近 7 天跑量环比${adjustment.recentVolumeChangePercent >= 0 ? '+' : ''}${adjustment.recentVolumeChangePercent}%`)
+    : adjustment.recentVolumeRatio !== null
+      ? (en
+          ? `recent volume at ${adjustment.recentVolumeRatio}x the prior baseline`
+          : `近 7 天跑量达到此前基线的 ${adjustment.recentVolumeRatio} 倍`)
+      : '';
+  const paceFact = adjustment.paceContext === 'upper-easy' && pace
+    ? (en ? `${pace} sits on the faster side of the athlete's easy zone` : `${pace}已处于个人 E 区较快一侧`)
+    : adjustment.paceContext === 'quality' && pace
+      ? (en ? `${pace} is already a quality-zone pace` : `${pace}已进入质量训练配速`)
+      : pace;
+  const facts = [paceFact, weatherFact, trainingLoadFact || volumeFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
+  const lead = en
+    ? `${facts || 'The combined conditions'} make this a ${intensityLabel} internal-load session rather than an easy or recovery effort; allow at least ${adjustment.minimumRecoveryHours}h recovery.`
+    : `${facts || '当前综合条件'}使本次综合负荷应按${intensityLabel}而非轻松或恢复负荷解读；建议至少 ${adjustment.minimumRecoveryHours}h 恢复。`;
+
+  let cleaned = summary;
+  if (en) {
+    cleaned = cleaned
+      .replace(/\b(?:this (?:was|is) an?\s+)?(?:easy|recovery) run\b/gi, 'this heat-load aerobic run')
+      .replace(/\b(?:easy|light) intensity\b/gi, `${intensityLabel} intensity`)
+      .replace(/(?:allow|recommend)\s+(?:about\s+)?\d+\s*h(?:ours?)?\s+(?:of\s+)?recovery/gi, `allow at least ${adjustment.minimumRecoveryHours}h recovery`);
+  } else {
+    cleaned = cleaned
+      .replace(/本次(?:训练)?(?:为|是|属于|识别为|判定为)\s*(?:一次)?(?:恢复跑|轻松跑)/g, '本次为高温负荷有氧跑')
+      .replace(/这是\s*(?:一次)?(?:恢复跑|轻松跑)/g, '这是一次高温负荷有氧跑')
+      .replace(/(?:综合)?强度(?:为|是|判断为)?\s*轻松/g, `综合强度为${intensityLabel}`)
+      .replace(/建议恢复(?:约)?\s*\d+\s*(?:h|小时)/g, `建议至少 ${adjustment.minimumRecoveryHours}h 恢复`)
+      .replace(/恢复(?:约)?\s*\d+\s*(?:h|小时)/g, `至少 ${adjustment.minimumRecoveryHours}h 恢复`);
+  }
+
+  if (cleaned.includes(lead) || /综合负荷应按|internal-load session/i.test(cleaned)) return cleaned;
+  const hasPrimaryAchievement = Boolean(getPrimaryPersonalRecord(activity) || getKeySustainedEffort(activity));
+  return hasPrimaryAchievement
+    ? [cleaned, lead].filter(Boolean).join(en ? ' ' : '')
+    : [lead, cleaned].filter(Boolean).join(en ? ' ' : '');
+}
+
+function getLoadAdjustedWarnings(
+  warnings: string[],
+  classification: ActivityClassification,
+  locale: string
+): string[] {
+  const adjustment = classification.loadAdjustment;
+  if (!adjustment?.applied) return warnings;
+  const loadFact = getTrainingLoadFact(adjustment, locale);
+  const warning = locale.startsWith('en')
+    ? `Heat, pace position, and ${loadFact || 'recent training load'} raise recovery cost beyond what the external pace-zone label suggests.`
+    : `高温、个人配速位置与${loadFact || '近期训练负荷'}叠加，本次恢复成本高于外部配速区间标签所显示的水平。`;
+  const remainingWarnings = warnings.filter(
+    (item) => !/恢复成本高于外部配速区间|recovery cost beyond what the external pace-zone/i.test(item)
+  );
+  return [warning, ...remainingWarnings];
+}
+
+function getTrainingLoadContext(
+  text: string,
+  classification: ActivityClassification,
+  locale: string
+): string {
+  const adjustment = classification.loadAdjustment;
+  const loadFact = getTrainingLoadFact(adjustment, locale);
+  if (!adjustment || !loadFact) return text;
+  const en = locale.startsWith('en');
+  const alreadyMentionsLoad = en
+    ? /load points|rolling 7-day load/i.test(text)
+    : /负荷点|近\s*7\s*天训练负荷/.test(text);
+  if (alreadyMentionsLoad) return text;
+  const stateLabel = en
+    ? adjustment.trainingLoadState
+    : ({
+        insufficient: '数据不足',
+        recover: '恢复期',
+        balanced: '平衡',
+        building: '增长中',
+        high: '负荷偏高',
+      } as const)[adjustment.trainingLoadState ?? 'insufficient'];
+  const activityFact = adjustment.activityTrainingLoad === null
+    ? ''
+    : en
+      ? `; this activity contributed ${adjustment.activityTrainingLoad} points${adjustment.activityTrainingLoadSharePercent !== null ? ` (${adjustment.activityTrainingLoadSharePercent}%)` : ''}`
+      : `；本次贡献 ${adjustment.activityTrainingLoad} 点${adjustment.activityTrainingLoadSharePercent !== null ? `，占 ${adjustment.activityTrainingLoadSharePercent}%` : ''}`;
+  const deterministic = en
+    ? `${loadFact}; state ${stateLabel}${activityFact}.`
+    : `${loadFact}，状态为${stateLabel}${activityFact}。`;
+  return [deterministic, text].filter(Boolean).join(en ? ' ' : '');
+}
+
 function ensurePrioritySummary(summary: string, activity: StravaActivity, locale: string): string {
   const en = locale.startsWith('en');
   const record = getPrimaryPersonalRecord(activity);
@@ -379,16 +540,34 @@ export function normalizeAIAnalysisForDisplay(
         .filter((suggestion): suggestion is string => Boolean(suggestion))
     : [];
 
+  const summary = getLoadAdjustedSummary(
+    ensurePrioritySummary(normalizeForDisplay(analysis.summary || ''), activity, locale),
+    activity,
+    classification,
+    locale
+  );
+  const warnings = getLoadAdjustedWarnings(
+    Array.isArray(analysis.warnings)
+      ? analysis.warnings.map((warning) => normalizeForDisplay(warning))
+      : [],
+    classification,
+    locale
+  );
+
   return {
     ...analysis,
-    summary: ensurePrioritySummary(normalizeForDisplay(analysis.summary || ''), activity, locale),
-    trainingLoadContext: normalizeForDisplay(analysis.trainingLoadContext || ''),
+    summary,
+    intensity: getFinalIntensity(analysis.intensity, classification),
+    recoveryHours: Math.max(analysis.recoveryHours || 0, classification.loadAdjustment?.minimumRecoveryHours ?? 0),
+    trainingLoadContext: getTrainingLoadContext(
+      normalizeForDisplay(analysis.trainingLoadContext || ''),
+      classification,
+      locale
+    ),
     similarActivitiesInsight: normalizeForDisplay(analysis.similarActivitiesInsight || ''),
     nextWorkoutSuggestion: normalizeForDisplay(analysis.nextWorkoutSuggestion || ''),
     suggestions,
-    warnings: Array.isArray(analysis.warnings)
-      ? analysis.warnings.map((warning) => normalizeForDisplay(warning))
-      : [],
+    warnings,
     paceZoneAnalysis: analysis.paceZoneAnalysis
       ? {
           ...analysis.paceZoneAnalysis,
@@ -469,8 +648,7 @@ export function parseAIResponse(
   const jsonStr = extractAIJson(content);
   const result = JSON.parse(jsonStr);
 
-  // Override intensity for races
-  const finalIntensity = classification.isRace ? 'extreme' : (result.intensity || 'moderate');
+  const finalIntensity = getFinalIntensity(result.intensity, classification);
 
   // Override comparison fields with accurate program-generated text
   const { similarStats } = trainingProfile;
@@ -478,12 +656,21 @@ export function parseAIResponse(
     ? buildAccurateComparison(activity, similarStats, locale, classification.workoutType)
     : null;
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
-  const normalizedSummary = ensurePrioritySummary(
-    normalizeForDisplay(result.summary || '训练分析完成'),
+  const normalizedSummary = getLoadAdjustedSummary(
+    ensurePrioritySummary(
+      normalizeForDisplay(result.summary || '训练分析完成'),
+      activity,
+      locale
+    ),
     activity,
+    classification,
     locale
   );
-  const normalizedTrainingLoadContext = normalizeForDisplay(result.trainingLoadContext || '');
+  const normalizedTrainingLoadContext = getTrainingLoadContext(
+    normalizeForDisplay(result.trainingLoadContext || ''),
+    classification,
+    locale
+  );
   const normalizedNextWorkoutSuggestion = normalizeForDisplay(
     result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),
   );
@@ -494,9 +681,13 @@ export function parseAIResponse(
         .map((suggestion: string | null) => suggestion ? normalizeWorkoutSpecificText(suggestion, classification, locale) : suggestion)
         .filter((suggestion: string | null): suggestion is string => Boolean(suggestion))
     : [];
-  const normalizedWarnings = Array.isArray(result.warnings)
-    ? result.warnings.map((warning: string) => normalizeForDisplay(warning))
-    : (classification.isRace ? ['这是高强度比赛，需要充分恢复'] : []);
+  const normalizedWarnings = getLoadAdjustedWarnings(
+    Array.isArray(result.warnings)
+      ? result.warnings.map((warning: string) => normalizeForDisplay(warning))
+      : (classification.isRace ? ['这是高强度比赛，需要充分恢复'] : []),
+    classification,
+    locale
+  );
   const normalizedAIInsight = normalizeForDisplay(result.similarActivitiesInsight || '');
   const normalizedPaceZoneAnalysis = result.paceZoneAnalysis
     ? {
@@ -508,7 +699,10 @@ export function parseAIResponse(
   return {
     summary: normalizedSummary,
     intensity: finalIntensity,
-    recoveryHours: result.recoveryHours || (classification.isRace ? 48 : 24),
+    recoveryHours: Math.max(
+      result.recoveryHours || (classification.isRace ? 48 : 24),
+      classification.loadAdjustment?.minimumRecoveryHours ?? 0
+    ),
     comparisonToAverage: comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
     suggestions: normalizedSuggestions,
     generatedAt: Date.now(),

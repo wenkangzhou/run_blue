@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v28';
+export const AI_ANALYSIS_CACHE_VERSION = 'v30';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -27,6 +27,8 @@ type HistoryActivity = Pick<
       | 'average_heartrate'
       | 'max_heartrate'
       | 'average_temp'
+      | 'description'
+      | 'weather_context'
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
@@ -127,6 +129,7 @@ function getHistoryFingerprint(activities: HistoryActivity[]): string {
     avgHr: roundNumber(activity.average_heartrate),
     maxHr: roundNumber(activity.max_heartrate),
     averageTemp: roundNumber(activity.average_temp),
+    weather: buildActivityWeatherContext(activity as StravaActivity),
     workoutType: activity.workout_type ?? null,
     calories: roundNumber(activity.calories, 0),
     bestEfforts: getBestEffortsFingerprint(activity),

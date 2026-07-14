@@ -591,6 +591,65 @@ test('parseAIResponse restores a standout sustained 5K block omitted by the mode
   assert.doesNotMatch(result.summary, /个人最佳|PB/);
 });
 
+test('parseAIResponse overrides a light recovery verdict when summer heat and rolling load make the load hard', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '本次为恢复跑，综合强度为轻松，建议恢复约18h。',
+      intensity: 'easy',
+      recoveryHours: 18,
+      suggestions: ['下一次继续轻松跑。'],
+      warnings: [],
+    }),
+    makeActivity({
+      distance: 8000,
+      moving_time: 2560,
+      description: 'Temperature 30°C, Feels like 33°C, Humidity 78%',
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({
+      workoutType: 'recovery',
+      workoutTypeConfidence: 'low',
+      intensity: 'hard',
+      paceZone: 'E',
+      loadAdjustment: {
+        applied: true,
+        baseIntensity: 'easy',
+        adjustedIntensity: 'hard',
+        thermalSeverity: 'heat-stress',
+        paceContext: 'upper-easy',
+        paceSecondsPerKm: 320,
+        easyFastBoundarySeconds: 331,
+        sameTemperaturePaceDeltaSeconds: -18,
+        recentVolumeChangePercent: 269,
+        recentVolumeRatio: 3.69,
+        activityTrainingLoad: 40,
+        current7DayTrainingLoad: 223,
+        previous7DayTrainingLoad: 56,
+        averageWeeklyTrainingLoad: 162,
+        trainingLoadChangePercent: 298,
+        trainingLoadRatio: 1.38,
+        trainingLoadState: 'high',
+        trainingLoadHeartRateCoverage: 100,
+        activityTrainingLoadSharePercent: 18,
+        minimumRecoveryHours: 48,
+      },
+    }),
+    'zh'
+  );
+
+  assert.equal(result.intensity, 'hard');
+  assert.equal(result.recoveryHours, 48);
+  assert.match(result.summary, /5'20"\/km已处于个人 E 区较快一侧/);
+  assert.match(result.summary, /体感 33°C、湿度 78%/);
+  assert.match(result.summary, /近 7 天训练负荷 223 点（较上一个 7 天\+298%）/);
+  assert.match(result.summary, /综合负荷应按高强度而非轻松或恢复负荷解读/);
+  assert.doesNotMatch(result.summary, /综合强度为轻松|恢复约18h/);
+  assert.match(result.warnings.join(' '), /近 7 天训练负荷 223 点/);
+  assert.match(result.warnings.join(' '), /恢复成本高于外部配速区间标签/);
+  assert.match(result.trainingLoadContext, /近 7 天训练负荷 223 点/);
+  assert.match(result.trainingLoadContext, /本次贡献 40 点，占 18%/);
+});
+
 test('parseAIResponse forces race intensity and default race recovery', () => {
   const result = parseAIResponse(
     JSON.stringify({ summary: 'Race day', intensity: 'easy' }),

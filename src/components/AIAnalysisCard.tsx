@@ -143,13 +143,18 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
     : null;
   const isRace = classification?.isRace;
+  const hasAdjustedInternalLoad = classification?.loadAdjustment?.applied === true;
   const workoutTypeLabel = classification
-    ? getWorkoutTypeLabel(classification.workoutType, i18n.language)
+    ? hasAdjustedInternalLoad
+      ? t('aiAnalysis.heatLoadRun', '高温负荷有氧跑')
+      : getWorkoutTypeLabel(classification.workoutType, i18n.language)
     : '';
   const confidenceLabel = classification
     ? t(`aiAnalysis.confidence.${classification.workoutTypeConfidence}`, classification.workoutTypeConfidence)
     : '';
-  const isLowIntensityRun = classification?.workoutType === 'easy' || classification?.workoutType === 'recovery';
+  const isLowIntensityRun = !hasAdjustedInternalLoad && (
+    classification?.workoutType === 'easy' || classification?.workoutType === 'recovery'
+  );
   const comparisonMeta = trainingStats?.similarStats ?? null;
   const comparisonIsReferenceOnly = Boolean(
     isLowIntensityRun ||
@@ -269,6 +274,8 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (evidence === 'insufficient workout-structure evidence') return '训练结构证据不足，只能做保守判断';
     if (evidence === 'no clear repeat structure, possibly steady hard effort') return '没有明显重复段结构，更像持续偏强的稳态努力';
     if (evidence === 'lap structure has low pace contrast, analyze reps rather than average pace') return '各圈配速对比不强，重点看分段结构而不是全程均配';
+    if (evidence === 'heat and recent volume raise internal training load') return '高温高湿、个人配速位置与近期跑量共同抬高了内部训练负荷';
+    if (evidence === 'heat, pace, and rolling training load raise internal load') return '高温高湿、个人配速位置与滚动训练负荷共同抬高了内部训练成本';
 
     let match = evidence.match(/^(\d+) laps with (\d+) short reps$/);
     if (match) return `${match[1]} 圈中包含 ${match[2]} 个短重复段`;

@@ -112,13 +112,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v28 keys for identical AI analysis inputs', () => {
+test('builds stable v30 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v28');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v30');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v28_1_/);
+  assert.match(first, /^ai_analysis_v30_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {

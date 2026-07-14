@@ -23,6 +23,8 @@ interface AITrainingStats {
   paceZones?: unknown;
   patterns?: unknown;
   physiologyMetrics?: unknown;
+  recentLoad?: unknown;
+  trainingLoad?: unknown;
   similarStats?: SimilarActivityStats | null;
   thermalStats?: unknown;
 }
@@ -68,6 +70,8 @@ type AIHistoryActivity = Pick<
       | 'average_heartrate'
       | 'max_heartrate'
       | 'average_temp'
+      | 'description'
+      | 'weather_context'
       | 'workout_type'
       | 'calories'
       | 'splits_metric'
@@ -110,6 +114,8 @@ function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
     average_heartrate: activity.average_heartrate,
     max_heartrate: activity.max_heartrate,
     average_temp: activity.average_temp,
+    description: activity.description,
+    weather_context: activity.weather_context,
     workout_type: activity.workout_type,
     calories: activity.calories,
     splits_metric: activity.splits_metric,

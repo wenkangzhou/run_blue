@@ -2,6 +2,7 @@ import { StravaActivity } from '@/types';
 import { formatLocalDateKey, getActivityDate, getActivityTimestamp, getISOWeek } from './dates';
 import { getZoneForHR } from './heartRateZones';
 import { calculateSemanticPaceZones } from './trainingZones';
+import { buildActivityWeatherContext } from './weather';
 
 // Estimated Personal Bests from activity history
 export interface EstimatedPBs {
@@ -54,6 +55,29 @@ export interface ActivityStructureSummary {
   hasCooldown: boolean;
   splitPattern: 'interval' | 'progression' | 'steady' | 'mixed' | 'unknown';
   paceVariability: number | null;
+}
+
+export interface ActivityLoadAdjustment {
+  applied: boolean;
+  baseIntensity: ActivityClassification['intensity'];
+  adjustedIntensity: ActivityClassification['intensity'];
+  thermalSeverity: 'neutral' | 'muggy' | 'heat-load' | 'heat-stress';
+  paceContext: 'relaxed-easy' | 'upper-easy' | 'quality' | 'unknown';
+  paceSecondsPerKm: number | null;
+  easyFastBoundarySeconds: number | null;
+  sameTemperaturePaceDeltaSeconds: number | null;
+  recentVolumeChangePercent: number | null;
+  recentVolumeRatio: number | null;
+  activityTrainingLoad: number | null;
+  current7DayTrainingLoad: number | null;
+  previous7DayTrainingLoad: number | null;
+  averageWeeklyTrainingLoad: number | null;
+  trainingLoadChangePercent: number | null;
+  trainingLoadRatio: number | null;
+  trainingLoadState: 'insufficient' | 'recover' | 'balanced' | 'building' | 'high' | null;
+  trainingLoadHeartRateCoverage: number | null;
+  activityTrainingLoadSharePercent: number | null;
+  minimumRecoveryHours: number;
 }
 
 // Training patterns detected from history
@@ -140,6 +164,7 @@ export interface ActivityClassification {
   workoutTypeConfidence: ClassificationConfidence;
   workoutTypeEvidence: string[];
   structure: ActivityStructureSummary;
+  loadAdjustment?: ActivityLoadAdjustment;
 }
 
 // Complete user training profile from historical data
@@ -1757,8 +1782,9 @@ function compareSimilarTemperatureActivities(
   paceZoneModelReliability: EstimatedPBs['reliability'] = 'medium',
   lthr?: number | null
 ): ThermalComparisonStats | null {
-  const currentTemperature = currentActivity.average_temp;
-  if (!Number.isFinite(currentTemperature) || currentTemperature! < 10 || currentTemperature! > 50) return null;
+  const currentWeather = buildActivityWeatherContext(currentActivity);
+  const currentTemperature = currentWeather.feelsLikeC ?? currentWeather.temperatureC;
+  if (!Number.isFinite(currentTemperature) || currentTemperature! < 10 || currentTemperature! > 55) return null;
 
   const currentDistance = currentActivity.distance;
   const currentPaceSeconds = currentActivity.moving_time / (currentDistance / 1000);
@@ -1773,7 +1799,9 @@ function compareSimilarTemperatureActivities(
 
   const comparableRuns = runs.filter((run) => {
     if (run.id === currentActivity.id || run.distance <= 1000) return false;
-    if (!Number.isFinite(run.average_temp) || Math.abs(run.average_temp! - currentTemperature!) > 3) return false;
+    const runWeather = buildActivityWeatherContext(run);
+    const runTemperature = runWeather.feelsLikeC ?? runWeather.temperatureC;
+    if (!Number.isFinite(runTemperature) || Math.abs(runTemperature! - currentTemperature!) > 3) return false;
     if (Math.abs(run.distance - currentDistance) / currentDistance >= distanceThreshold) return false;
 
     const runClimbPerKm = run.total_elevation_gain / Math.max(1, run.distance / 1000);
@@ -1792,7 +1820,10 @@ function compareSimilarTemperatureActivities(
 
   if (comparableRuns.length < 2) return null;
 
-  const averageTemperature = comparableRuns.reduce((sum, run) => sum + run.average_temp!, 0) / comparableRuns.length;
+  const averageTemperature = comparableRuns.reduce((sum, run) => {
+    const weather = buildActivityWeatherContext(run);
+    return sum + (weather.feelsLikeC ?? weather.temperatureC ?? 0);
+  }, 0) / comparableRuns.length;
   const averagePaceSeconds = comparableRuns.reduce(
     (sum, run) => sum + run.moving_time / (run.distance / 1000),
     0
