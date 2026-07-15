@@ -16,21 +16,26 @@ writeFileSync(path.join(tempDir, 'trainingZones.js'), ts.transpileModule(source,
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText);
 
-function getHRZones(lthr) {
+function getHRZones(maxHeartRate) {
+  const z1Max = Math.round(maxHeartRate * 0.65);
+  const z2Max = Math.round(maxHeartRate * 0.81);
+  const z3Max = Math.round(maxHeartRate * 0.89);
+  const z4Max = Math.round(maxHeartRate * 0.97);
   return {
-    z1: { min: 0, max: Math.round(lthr * 0.849) },
-    z2: { min: Math.round(lthr * 0.85), max: Math.round(lthr * 0.89) },
-    z3: { min: Math.round(lthr * 0.90), max: Math.round(lthr * 0.94) },
-    z4: { min: Math.round(lthr * 0.95), max: Math.round(lthr * 0.99) },
-    z5: { min: Math.round(lthr), max: 999 },
+    z1: { min: 0, max: z1Max },
+    z2: { min: z1Max + 1, max: z2Max },
+    z3: { min: z2Max + 1, max: z3Max },
+    z4: { min: z3Max + 1, max: z4Max },
+    z5: { min: z4Max + 1, max: 999 },
   };
 }
 
-function getZoneForHR(hr, lthr) {
-  if (hr / lthr >= 1) return 'z5';
-  if (hr / lthr >= 0.95) return 'z4';
-  if (hr / lthr >= 0.90) return 'z3';
-  if (hr / lthr >= 0.85) return 'z2';
+function getZoneForHR(hr, maxHeartRate) {
+  const zones = getHRZones(maxHeartRate);
+  if (hr >= zones.z5.min) return 'z5';
+  if (hr >= zones.z4.min) return 'z4';
+  if (hr >= zones.z3.min) return 'z3';
+  if (hr >= zones.z2.min) return 'z2';
   return 'z1';
 }
 
@@ -113,7 +118,7 @@ test('calculates duration-weighted pace and HR distributions with coverage', () 
   ];
   const now = new Date('2026-07-03T12:00:00Z');
   const pace = calculateTrainingZoneDistribution({ activities, mode: 'pace', period: '7d', pb5kSeconds: 1260, now });
-  const hr = calculateTrainingZoneDistribution({ activities, mode: 'heartRate', period: '7d', lthr: 180, now });
+  const hr = calculateTrainingZoneDistribution({ activities, mode: 'heartRate', period: '7d', maxHeartRate: 180, now });
 
   assert.equal(pace.totalActivities, 3);
   assert.equal(pace.coveredActivities, 3);
@@ -122,7 +127,7 @@ test('calculates duration-weighted pace and HR distributions with coverage', () 
   assert.equal(hr.totalActivities, 3);
   assert.equal(hr.coveredActivities, 2);
   assert.equal(hr.coveragePercent, Math.round(7000 / 9500 * 100));
-  assert.equal(hr.dominantZone, 'z1');
+  assert.equal(hr.dominantZone, 'z2');
 });
 
 test('calculates one activity pace zones from time-weighted stream samples', () => {
@@ -150,7 +155,7 @@ test('calculates heart-rate zones from moving samples and falls back to activity
   const streamDistribution = calculateActivityTrainingZoneDistribution({
     activity,
     mode: 'heartRate',
-    lthr: 170,
+    maxHeartRate: 170,
     streams: {
       time: { data: [0, 20, 50, 60] },
       heartrate: { data: [130, 150, 170, 170] },
@@ -158,8 +163,8 @@ test('calculates heart-rate zones from moving samples and falls back to activity
     },
   });
   assert.equal(streamDistribution.source, 'stream');
-  assert.equal(streamDistribution.dominantZone, 'z2');
-  assert.equal(streamDistribution.zones.find((zone) => zone.id === 'z2').percent, 50);
+  assert.equal(streamDistribution.dominantZone, 'z3');
+  assert.equal(streamDistribution.zones.find((zone) => zone.id === 'z3').percent, 50);
 
   const fallback = calculateActivityTrainingZoneDistribution({
     activity: makeRun(1, { moving_time: 3000, distance: 10000 }),

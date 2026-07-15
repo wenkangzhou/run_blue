@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v30';
+export const AI_ANALYSIS_CACHE_VERSION = 'v31';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS = ['v19', 'v18'];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS = ['v19', 'v17'];
 
@@ -221,6 +221,7 @@ function buildAIAnalysisCacheKey({
           pbs: profile.pbs,
           height: profile.height,
           weight: profile.weight,
+          maxHeartRate: profile.maxHeartRate,
           lthr: profile.lthr,
           updatedAt: profile.updatedAt,
         }

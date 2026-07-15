@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       recentActivities,
       locale,
       physique,
+      maxHeartRate,
       lthr,
       allowThirdPartyAI,
     } = parsed.payload;
@@ -111,11 +112,11 @@ export async function POST(request: NextRequest) {
     
     // Stream analysis: segment HR + pace by km
     const avgPaceSecPerKm = currentActivity.moving_time / currentActivity.distance * 1000;
-    const streamAnalysisRaw = lthr
-      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, classification.isRace)
+    const streamAnalysisRaw = lthr || maxHeartRate
+      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, classification.isRace, maxHeartRate)
       : null;
     const streamAnalysisText = streamAnalysisRaw
-      ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr!, locale)
+      ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr, locale, maxHeartRate)
       : undefined;
 
     let analysisSource: 'claude-mcp' | 'kimi' | 'fallback' = 'kimi';
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
           locale,
           physique,
           lthr,
+          maxHeartRate,
           streamAnalysisText,
           classification
         );

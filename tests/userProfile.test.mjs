@@ -47,6 +47,7 @@ test('getUserProfile normalizes legacy and malformed stored profile fields', () 
         },
         height: 178,
         weight: Number.NaN,
+        maxHeartRate: 182,
         lthr: 172,
       }),
     },
@@ -61,6 +62,7 @@ test('getUserProfile normalizes legacy and malformed stored profile fields', () 
     },
     height: 178,
     weight: null,
+    maxHeartRate: 182,
     lthr: 172,
     updatedAt: '',
   });
@@ -93,6 +95,7 @@ test('saveUserProfile strips invalid numeric fields before persisting', () => {
       },
       height: -178,
       weight: 68,
+      maxHeartRate: Number.NaN,
       lthr: Number.NaN,
     });
 
@@ -105,6 +108,7 @@ test('saveUserProfile strips invalid numeric fields before persisting', () => {
       },
       height: null,
       weight: 68,
+      maxHeartRate: null,
       lthr: null,
       updatedAt: '2026-06-04T08:00:00.000Z',
     });
@@ -115,12 +119,16 @@ test('saveUserProfile strips invalid numeric fields before persisting', () => {
   }
 });
 
-test('isUserProfileRangeValue validates physique and LTHR ranges', () => {
+test('isUserProfileRangeValue validates physique and heart-rate ranges', () => {
   assert.equal(isUserProfileRangeValue('height', 50), true);
   assert.equal(isUserProfileRangeValue('height', 250), true);
   assert.equal(isUserProfileRangeValue('height', 49), false);
   assert.equal(isUserProfileRangeValue('weight', 300), true);
   assert.equal(isUserProfileRangeValue('weight', 301), false);
+  assert.equal(isUserProfileRangeValue('maxHeartRate', 100), true);
+  assert.equal(isUserProfileRangeValue('maxHeartRate', 240), true);
+  assert.equal(isUserProfileRangeValue('maxHeartRate', 182.5), false);
+  assert.equal(isUserProfileRangeValue('maxHeartRate', null), true);
   assert.equal(isUserProfileRangeValue('lthr', 80), true);
   assert.equal(isUserProfileRangeValue('lthr', 240), true);
   assert.equal(isUserProfileRangeValue('lthr', 240.5), false);
@@ -171,6 +179,7 @@ test('getMergedPBsForAnalysis prefers positive profile PB values', () => {
     },
     height: null,
     weight: null,
+    maxHeartRate: null,
     lthr: null,
     updatedAt: '2026-06-04T08:00:00.000Z',
   };

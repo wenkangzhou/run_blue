@@ -1,6 +1,6 @@
 import { StravaActivity } from '@/types';
 import { formatLocalDateKey, getActivityDate, getActivityTimestamp, getISOWeek } from './dates';
-import { getZoneForHR } from './heartRateZones';
+import { getLthrZoneForHR } from './heartRateZones';
 import { calculateSemanticPaceZones } from './trainingZones';
 import { buildActivityWeatherContext } from './weather';
 
@@ -567,8 +567,8 @@ function assessHeartRateForActivity(
   }
 
   return {
-    avgZone: getZoneForHR(avg, lthr),
-    maxZone: max && max > 0 ? getZoneForHR(max, lthr) : getZoneForHR(avg, lthr),
+    avgZone: getLthrZoneForHR(avg, lthr),
+    maxZone: max && max > 0 ? getLthrZoneForHR(max, lthr) : getLthrZoneForHR(avg, lthr),
     average: avg,
     max,
   };

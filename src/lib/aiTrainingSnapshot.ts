@@ -16,7 +16,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '7';
+  schemaVersion: '8';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -37,6 +37,7 @@ export interface AITrainingSnapshot {
   classification: ActivityClassification;
   profile: PromptTrainingProfile;
   physique?: UserPhysique;
+  maxHeartRate?: number | null;
   lthr?: number | null;
   streamSummary?: string;
   hasStreamEvidence: boolean;
@@ -78,16 +79,26 @@ export function buildAITrainingSnapshot(input: {
   trainingProfile: TrainingProfile;
   classification: ActivityClassification;
   physique?: UserPhysique;
+  maxHeartRate?: number | null;
   lthr?: number | null;
   streamSummary?: string;
 }): AITrainingSnapshot {
-  const { activity, streams, trainingProfile, classification, physique, lthr, streamSummary } = input;
+  const {
+    activity,
+    streams,
+    trainingProfile,
+    classification,
+    physique,
+    maxHeartRate,
+    lthr,
+    streamSummary,
+  } = input;
   const weatherContext = buildActivityWeatherContext(activity, streams);
   const personalRecords = getActivityPersonalRecords(activity);
   const bestEfforts = getActivityBestEfforts(activity);
 
   return {
-    schemaVersion: '7',
+    schemaVersion: '8',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -119,6 +130,7 @@ export function buildAITrainingSnapshot(input: {
       totalRunsAnalyzed: trainingProfile.totalRunsAnalyzed,
     },
     physique,
+    maxHeartRate,
     lthr,
     streamSummary,
     hasStreamEvidence: Boolean(streams && Object.keys(streams).length > 0),

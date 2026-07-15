@@ -71,6 +71,7 @@ function makeProfile(overrides = {}) {
     pbs: { '5k': 1500, '10k': 3200, '21k': null, '42k': null },
     height: 178,
     weight: 68,
+    maxHeartRate: 182,
     lthr: 172,
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -112,13 +113,13 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v30 keys for identical AI analysis inputs', () => {
+test('builds stable v31 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v30');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v31');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v30_1_/);
+  assert.match(first, /^ai_analysis_v31_1_/);
 });
 
 test('builds legacy fallback keys for existing cached analysis', () => {
@@ -177,9 +178,11 @@ test('changes key when a middle historical activity changes', () => {
 
 test('changes key when runner profile inputs change', () => {
   const original = key();
+  const changedMaxHeartRate = key({ profile: makeProfile({ maxHeartRate: 190 }) });
   const changedLthr = key({ profile: makeProfile({ lthr: 180 }) });
   const changedWeight = key({ profile: makeProfile({ weight: 70 }) });
 
+  assert.notEqual(changedMaxHeartRate, original);
   assert.notEqual(changedLthr, original);
   assert.notEqual(changedWeight, original);
 });

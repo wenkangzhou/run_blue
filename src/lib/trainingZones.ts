@@ -146,15 +146,15 @@ export function getPaceZoneForSeconds(paceSeconds: number, pb5kSeconds: number):
 function getActivityZoneDefinitions(
   mode: TrainingZoneMode,
   pb5kSeconds?: number | null,
-  lthr?: number | null
+  maxHeartRate?: number | null
 ) {
   if (mode === 'pace') {
     if (!pb5kSeconds) return [];
     return getPaceTrainingZones(pb5kSeconds).map(({ id, min, max }) => ({ id, min, max }));
   }
 
-  if (!lthr) return [];
-  const zones = getHRZones(lthr);
+  if (!maxHeartRate) return [];
+  const zones = getHRZones(maxHeartRate);
   return HR_ZONE_IDS.map((id) => ({ id, min: zones[id].min, max: zones[id].max }));
 }
 
@@ -162,7 +162,7 @@ function getSampleZone(
   value: number,
   mode: TrainingZoneMode,
   pb5kSeconds?: number | null,
-  lthr?: number | null
+  maxHeartRate?: number | null
 ): PaceTrainingZoneId | HeartRateTrainingZoneId | null {
   if (!Number.isFinite(value)) return null;
   if (mode === 'pace') {
@@ -172,8 +172,8 @@ function getSampleZone(
     return getPaceZoneForSeconds(paceSeconds, pb5kSeconds);
   }
 
-  if (!lthr || value < 40 || value > 240) return null;
-  return getZoneForHR(value, lthr);
+  if (!maxHeartRate || value < 40 || value > 240) return null;
+  return getZoneForHR(value, maxHeartRate);
 }
 
 /**
@@ -186,15 +186,15 @@ export function calculateActivityTrainingZoneDistribution({
   streams,
   mode,
   pb5kSeconds,
-  lthr,
+  maxHeartRate,
 }: {
   activity: StravaActivity;
   streams: Record<string, ActivityStream> | null;
   mode: TrainingZoneMode;
   pb5kSeconds?: number | null;
-  lthr?: number | null;
+  maxHeartRate?: number | null;
 }): ActivityTrainingZoneDistribution {
-  const definitions = getActivityZoneDefinitions(mode, pb5kSeconds, lthr);
+  const definitions = getActivityZoneDefinitions(mode, pb5kSeconds, maxHeartRate);
   const zoneIds = mode === 'pace' ? PACE_ZONE_IDS : HR_ZONE_IDS;
   const seconds = Object.fromEntries(zoneIds.map((id) => [id, 0])) as Record<string, number>;
 
@@ -220,7 +220,7 @@ export function calculateActivityTrainingZoneDistribution({
       const duration = timeData[index + 1] - timeData[index];
       if (!Number.isFinite(duration) || duration <= 0 || duration > 180) continue;
       if (mode === 'heartRate' && velocityData?.[index] !== undefined && velocityData[index] <= 0.3) continue;
-      const zone = getSampleZone(valueData[index], mode, pb5kSeconds, lthr);
+      const zone = getSampleZone(valueData[index], mode, pb5kSeconds, maxHeartRate);
       if (!zone) continue;
       seconds[zone] += duration;
     }
@@ -236,7 +236,7 @@ export function calculateActivityTrainingZoneDistribution({
       const value = mode === 'pace'
         ? segment.average_speed
         : segment.average_heartrate ?? 0;
-      const zone = getSampleZone(value, mode, pb5kSeconds, lthr);
+      const zone = getSampleZone(value, mode, pb5kSeconds, maxHeartRate);
       if (!zone) return;
       seconds[zone] += segment.moving_time;
     });
@@ -249,7 +249,7 @@ export function calculateActivityTrainingZoneDistribution({
         ? activity.distance / activity.moving_time
         : 0
       : activity.average_heartrate ?? 0;
-    const zone = getSampleZone(averageValue, mode, pb5kSeconds, lthr);
+    const zone = getSampleZone(averageValue, mode, pb5kSeconds, maxHeartRate);
     if (zone && activity.moving_time > 0) {
       seconds[zone] = activity.moving_time;
       source = 'average';
@@ -340,7 +340,7 @@ function getActivityZone(
   activity: StravaActivity,
   mode: TrainingZoneMode,
   pb5kSeconds?: number | null,
-  lthr?: number | null
+  maxHeartRate?: number | null
 ): PaceTrainingZoneId | HeartRateTrainingZoneId | null {
   if (mode === 'pace') {
     if (!pb5kSeconds || activity.distance <= 0 || activity.moving_time <= 0) return null;
@@ -350,8 +350,8 @@ function getActivityZone(
   }
 
   const heartRate = activity.average_heartrate;
-  if (!lthr || !heartRate || heartRate < 40 || heartRate > 240) return null;
-  return getZoneForHR(heartRate, lthr);
+  if (!maxHeartRate || !heartRate || heartRate < 40 || heartRate > 240) return null;
+  return getZoneForHR(heartRate, maxHeartRate);
 }
 
 function calculateWindowDistribution(
@@ -361,7 +361,7 @@ function calculateWindowDistribution(
   mode: TrainingZoneMode,
   zoneIds: Array<PaceTrainingZoneId | HeartRateTrainingZoneId>,
   pb5kSeconds?: number | null,
-  lthr?: number | null
+  maxHeartRate?: number | null
 ) {
   const seconds = Object.fromEntries(zoneIds.map((id) => [id, 0])) as Record<string, number>;
   let totalActivities = 0;
@@ -375,7 +375,7 @@ function calculateWindowDistribution(
     if (timestamp < start || timestamp >= end) return;
     totalActivities += 1;
     eligibleSeconds += activity.moving_time;
-    const zone = getActivityZone(activity, mode, pb5kSeconds, lthr);
+    const zone = getActivityZone(activity, mode, pb5kSeconds, maxHeartRate);
     if (!zone) return;
     coveredActivities += 1;
     coveredSeconds += activity.moving_time;
@@ -390,14 +390,14 @@ export function calculateTrainingZoneDistribution({
   mode,
   period,
   pb5kSeconds,
-  lthr,
+  maxHeartRate,
   now = new Date(),
 }: {
   activities: StravaActivity[];
   mode: TrainingZoneMode;
   period: TrainingZonePeriod;
   pb5kSeconds?: number | null;
-  lthr?: number | null;
+  maxHeartRate?: number | null;
   now?: Date;
 }): TrainingZoneDistribution {
   const nowTime = now.getTime();
@@ -405,13 +405,13 @@ export function calculateTrainingZoneDistribution({
   const duration = Math.max(DAY_MS, nowTime - currentStart);
   const previousStart = currentStart - duration;
   const paceZones = pb5kSeconds ? getPaceTrainingZones(pb5kSeconds) : [];
-  const hrZones = lthr ? getHRZones(lthr) : null;
+  const hrZones = maxHeartRate ? getHRZones(maxHeartRate) : null;
   const zoneIds = mode === 'pace' ? PACE_ZONE_IDS : HR_ZONE_IDS;
   const current = calculateWindowDistribution(
-    activities, currentStart, nowTime + 1, mode, zoneIds, pb5kSeconds, lthr
+    activities, currentStart, nowTime + 1, mode, zoneIds, pb5kSeconds, maxHeartRate
   );
   const previous = calculateWindowDistribution(
-    activities, previousStart, currentStart, mode, zoneIds, pb5kSeconds, lthr
+    activities, previousStart, currentStart, mode, zoneIds, pb5kSeconds, maxHeartRate
   );
   const currentTotal = Object.values(current.seconds).reduce((sum, value) => sum + value, 0);
   const previousTotal = Object.values(previous.seconds).reduce((sum, value) => sum + value, 0);

@@ -69,6 +69,7 @@ test('parseAIAnalyzeRequest accepts and normalizes a valid payload', () => {
     recentActivities: [makeActivity({ id: 124 }), { id: 1 }],
     locale: 'zh',
     physique: { height: 178, weight: 68 },
+    maxHeartRate: 182,
     lthr: 180,
     allowThirdPartyAI: true,
   });
@@ -78,6 +79,7 @@ test('parseAIAnalyzeRequest accepts and normalizes a valid payload', () => {
   assert.deepEqual(result.payload.userProfilePBs, { '5k': 1500 });
   assert.equal(result.payload.recentActivities.length, 1);
   assert.deepEqual(result.payload.physique, { height: 178, weight: 68 });
+  assert.equal(result.payload.maxHeartRate, 182);
   assert.equal(result.payload.lthr, 180);
   assert.equal(result.payload.allowThirdPartyAI, true);
 });
@@ -101,6 +103,12 @@ test('parseAIAnalyzeRequest rejects invalid LTHR and drops invalid physique valu
 
   assert.equal('payload' in result, true);
   assert.deepEqual(result.payload.physique, { height: null, weight: 68 });
+});
+
+test('parseAIAnalyzeRequest rejects invalid maximum heart rate', () => {
+  assert.deepEqual(parseAIAnalyzeRequest({ activity: makeActivity(), maxHeartRate: 182.5 }), {
+    error: 'Invalid maximum heart rate',
+  });
 });
 
 test('parseAIAnalyzeRequest normalizes optional streams and locale', () => {

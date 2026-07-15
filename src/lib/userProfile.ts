@@ -9,6 +9,7 @@ export interface UserProfile {
   pbs: UserProfilePBs;
   height: number | null; // cm
   weight: number | null; // kg
+  maxHeartRate: number | null; // maximum heart rate (bpm)
   lthr: number | null; // lactate threshold heart rate (bpm)
   updatedAt: string;
 }
@@ -18,6 +19,7 @@ const PB_KEYS: Array<keyof UserProfilePBs> = ['5k', '10k', '21k', '42k'];
 export const USER_PROFILE_LIMITS = {
   height: { min: 50, max: 250 },
   weight: { min: 20, max: 300 },
+  maxHeartRate: { min: 100, max: 240 },
   lthr: { min: 80, max: 240 },
 } as const;
 
@@ -53,6 +55,10 @@ function normalizeUserProfile(value: unknown): UserProfile | null {
     pbs,
     height: normalizeRangeNumber(parsed.height, USER_PROFILE_LIMITS.height),
     weight: normalizeRangeNumber(parsed.weight, USER_PROFILE_LIMITS.weight),
+    maxHeartRate: normalizeRangeNumber(parsed.maxHeartRate, {
+      ...USER_PROFILE_LIMITS.maxHeartRate,
+      integer: true,
+    }),
     lthr: normalizeRangeNumber(parsed.lthr, { ...USER_PROFILE_LIMITS.lthr, integer: true }),
     updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
   };
@@ -64,7 +70,8 @@ export function isUserProfileRangeValue(
 ): boolean {
   if (value === null) return true;
   const { min, max } = USER_PROFILE_LIMITS[field];
-  return Number.isFinite(value) && value >= min && value <= max && (field !== 'lthr' || Number.isInteger(value));
+  const requiresInteger = field === 'lthr' || field === 'maxHeartRate';
+  return Number.isFinite(value) && value >= min && value <= max && (!requiresInteger || Number.isInteger(value));
 }
 
 export function getUserProfile(): UserProfile | null {

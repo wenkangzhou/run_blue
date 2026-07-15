@@ -30,8 +30,15 @@ const zoneColors: Record<string, string> = {
   I: 'text-red-600', R: 'text-purple-600',
 };
 
-// Friel HR zone colors (Z1→Z5)
-const hrZoneDisplay: Record<string, { label: string; color: string; bg: string }> = {
+const maxHrZoneDisplay: Record<string, { label: string; color: string; bg: string }> = {
+  z5: { label: 'Z5 无氧', color: 'text-red-600', bg: 'bg-red-500' },
+  z4: { label: 'Z4 阈值', color: 'text-orange-600', bg: 'bg-orange-500' },
+  z3: { label: 'Z3 节奏', color: 'text-green-600', bg: 'bg-green-500' },
+  z2: { label: 'Z2 耐力', color: 'text-blue-600', bg: 'bg-blue-500' },
+  z1: { label: 'Z1 恢复', color: 'text-slate-500', bg: 'bg-slate-400' },
+};
+
+const lthrZoneDisplay: Record<string, { label: string; color: string; bg: string }> = {
   z5: { label: 'Z5 VO2max', color: 'text-red-600', bg: 'bg-red-500' },
   z4: { label: 'Z4 阈值', color: 'text-orange-600', bg: 'bg-orange-500' },
   z3: { label: 'Z3 马拉松配速', color: 'text-green-600', bg: 'bg-green-500' },
@@ -312,6 +319,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
   // HR zone distribution bars
   const hrDist = streamAnalysis?.hrZoneDistribution;
+  const hrZoneDisplay = streamAnalysis?.heartRateZoneBasis === 'maxHeartRate'
+    ? maxHrZoneDisplay
+    : lthrZoneDisplay;
   const hrZonesOrdered = ['z5', 'z4', 'z3', 'z2', 'z1'] as const;
 
   const structureSummary = formatStructureSummary();

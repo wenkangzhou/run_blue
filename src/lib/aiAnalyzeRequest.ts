@@ -26,6 +26,7 @@ interface AnalyzeRequestBody {
   recentActivities?: unknown;
   locale?: unknown;
   physique?: unknown;
+  maxHeartRate?: unknown;
   lthr?: unknown;
   allowThirdPartyAI?: unknown;
 }
@@ -37,6 +38,7 @@ export interface AIAnalyzeRequestPayload {
   recentActivities?: AnalysisHistoryActivity[];
   locale?: string;
   physique?: { height?: number | null; weight?: number | null };
+  maxHeartRate?: number | null;
   lthr?: number | null;
   allowThirdPartyAI: boolean;
 }
@@ -99,6 +101,18 @@ function normalizeLthr(value: unknown): number | null | undefined {
   return value;
 }
 
+function normalizeMaxHeartRate(value: unknown): number | null | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (
+    typeof value !== 'number'
+    || !Number.isInteger(value)
+    || !isUserProfileRangeValue('maxHeartRate', value)
+  ) {
+    return null;
+  }
+  return value;
+}
+
 function normalizeLocale(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
@@ -116,6 +130,8 @@ export function parseAIAnalyzeRequest(body: unknown): { payload: AIAnalyzeReques
 
   const lthr = normalizeLthr(data.lthr);
   if (lthr === null) return { error: 'Invalid LTHR' };
+  const maxHeartRate = normalizeMaxHeartRate(data.maxHeartRate);
+  if (maxHeartRate === null) return { error: 'Invalid maximum heart rate' };
 
   return {
     payload: {
@@ -125,6 +141,7 @@ export function parseAIAnalyzeRequest(body: unknown): { payload: AIAnalyzeReques
       recentActivities: normalizeRecentActivities(data.recentActivities),
       locale: normalizeLocale(data.locale),
       physique: normalizePhysique(data.physique),
+      maxHeartRate,
       lthr,
       allowThirdPartyAI: data.allowThirdPartyAI === true,
     },

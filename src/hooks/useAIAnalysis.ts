@@ -250,6 +250,7 @@ export function useAIAnalysis(
             recentActivities: analysisHistoryActivities,
             locale: i18n.language,
             physique,
+            maxHeartRate: profile?.maxHeartRate,
             lthr: profile?.lthr,
             allowThirdPartyAI: consentStatus === 'accepted',
           }),

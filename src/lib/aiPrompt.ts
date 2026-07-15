@@ -10,6 +10,7 @@ import {
 import { buildActivityWeatherContext, getThermalContext, getWeatherSourceLabel } from './weather';
 import { getActivityPersonalRecords } from './activityAchievements';
 import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
+import { getHRZones } from './heartRateZones';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -198,6 +199,7 @@ function getDataConfidenceGuidance(
   activity: StravaActivity,
   streams: Record<string, ActivityStream> | null,
   lthr: number | null | undefined,
+  maxHeartRate: number | null | undefined,
   en: boolean
 ): string {
   const facts: string[] = [];
@@ -213,7 +215,15 @@ function getDataConfidenceGuidance(
   else cautions.push(en ? 'no stream data' : '无 stream 数据');
 
   if (activity.has_heartrate && activity.average_heartrate) {
-    facts.push(lthr ? (en ? 'heart-rate data with LTHR profile' : '有心率数据且配置了 LTHR') : (en ? 'heart-rate data without LTHR profile' : '有心率数据但未配置 LTHR'));
+    if (maxHeartRate && lthr) {
+      facts.push(en ? 'heart-rate data with max-HR zones and LTHR profile' : '有心率数据，且配置了最大心率区间与 LTHR');
+    } else if (maxHeartRate) {
+      facts.push(en ? 'heart-rate data with max-HR zones' : '有心率数据且配置了最大心率区间');
+    } else if (lthr) {
+      facts.push(en ? 'heart-rate data with LTHR profile only' : '有心率数据，仅配置了 LTHR');
+    } else {
+      facts.push(en ? 'heart-rate data without a runner-profile reference' : '有心率数据但未配置跑者档案心率基准');
+    }
   } else {
     cautions.push(en ? 'no heart-rate data' : '无心率数据');
   }
@@ -243,6 +253,7 @@ export function buildProfessionalPrompt(
   physique?: UserPhysique,
   lthr?: number | null,
   streamAnalysis?: string,
+  maxHeartRate?: number | null,
 ): string {
   const en = locale.startsWith('en');
   const distanceKm = (activity.distance / 1000).toFixed(2);
@@ -450,32 +461,37 @@ export function buildProfessionalPrompt(
       : `\n- 最大心率: ${Math.round(activity.max_heartrate)} bpm`;
   }
 
-  // LTHR-based heart rate zones (Joe Friel / TrainingPeaks method)
+  if (maxHeartRate && maxHeartRate > 0) {
+    const zones = getHRZones(maxHeartRate);
+    prompt += en
+      ? `\n\n## Heart Rate Zones (Strava-style, based on max HR)`
+      : `\n\n## 心率区间（Strava 同款，基于最大心率）`;
+    prompt += en
+      ? `\n- Profile max heart rate: ${maxHeartRate} bpm`
+      : `\n- 跑者档案最大心率: ${maxHeartRate} bpm`;
+    prompt += en
+      ? `\n- Z1 Recovery: 0-${zones.z1.max} bpm`
+      : `\n- Z1 恢复: 0-${zones.z1.max} bpm`;
+    prompt += en
+      ? `\n- Z2 Endurance: ${zones.z2.min}-${zones.z2.max} bpm`
+      : `\n- Z2 耐力: ${zones.z2.min}-${zones.z2.max} bpm`;
+    prompt += en
+      ? `\n- Z3 Tempo: ${zones.z3.min}-${zones.z3.max} bpm`
+      : `\n- Z3 节奏: ${zones.z3.min}-${zones.z3.max} bpm`;
+    prompt += en
+      ? `\n- Z4 Threshold: ${zones.z4.min}-${zones.z4.max} bpm`
+      : `\n- Z4 阈值: ${zones.z4.min}-${zones.z4.max} bpm`;
+    prompt += en
+      ? `\n- Z5 Anaerobic: ≥ ${zones.z5.min} bpm`
+      : `\n- Z5 无氧: ≥ ${zones.z5.min} bpm`;
+    prompt += en
+      ? `\n- Use these boundaries for Z1-Z5 distribution and aerobic-load descriptions.`
+      : `\n- Z1-Z5 分布及有氧负荷描述必须使用以上边界。`;
+  }
   if (lthr && lthr > 0) {
     prompt += en
-      ? `\n\n## Heart Rate Zones (LTHR-based, Joe Friel method)`
-      : `\n\n## 心率区间（基于 LTHR，Joe Friel 法）`;
-    prompt += en
-      ? `\n- LTHR (lactate threshold heart rate): ${lthr} bpm`
-      : `\n- 乳酸阈值心率(LTHR): ${lthr} bpm`;
-    prompt += en
-      ? `\n- Z1 Recovery: < ${Math.round(lthr * 0.85)} bpm`
-      : `\n- Z1 恢复: < ${Math.round(lthr * 0.85)} bpm`;
-    prompt += en
-      ? `\n- Z2 Aerobic Base: ${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} bpm`
-      : `\n- Z2 有氧基础: ${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} bpm`;
-    prompt += en
-      ? `\n- Z3 Marathon Pace: ${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} bpm`
-      : `\n- Z3 马拉松配速: ${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} bpm`;
-    prompt += en
-      ? `\n- Z4 Threshold: ${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} bpm`
-      : `\n- Z4 阈值: ${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} bpm`;
-    prompt += en
-      ? `\n- Z5 VO2max: ≥ ${lthr} bpm`
-      : `\n- Z5 VO2max: ≥ ${lthr} bpm`;
-    prompt += en
-      ? `\n- CRITICAL: When evaluating heart rate changes, you MUST compare against these LTHR zones, NOT absolute numbers or generic max-heart-rate formulas.`
-      : `\n- 关键：评估心率变化时必须对照以上 LTHR 区间，禁止用绝对数字或通用最大心率公式。`;
+      ? `\n- LTHR reference: ${lthr} bpm; use it specifically for threshold-session interpretation.`
+      : `\n- LTHR 参考值: ${lthr} bpm；仅用于阈值训练及乳酸阈值相关判断。`;
   }
 
   // Stream-based segment analysis (HR + pace per km)
@@ -503,7 +519,7 @@ export function buildProfessionalPrompt(
   }
 
   prompt += getWorkoutSpecificGuidance(classification, en);
-  prompt += getDataConfidenceGuidance(activity, streams, lthr, en);
+  prompt += getDataConfidenceGuidance(activity, streams, lthr, maxHeartRate, en);
   if (classification.workoutTypeConfidence === 'low') {
     prompt += en
       ? `\n- Because workout-type confidence is low, explicitly say this is a best-effort interpretation rather than a definitive judgment.`

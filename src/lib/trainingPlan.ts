@@ -1,4 +1,4 @@
-import { getHRZones } from './heartRateZones';
+import { getLthrHRZones } from './heartRateZones';
 import { calculateSemanticPaceZones } from './trainingZones';
 import { formatPaceSeconds } from './paceFormat';
 import { formatSecondsToTime, getUserProfile } from './userProfile';
@@ -543,7 +543,7 @@ function buildEasyRun(
   day: number,
   minutes: number,
   zones: ReturnType<typeof calculatePaceZones>,
-  hrZones: ReturnType<typeof getHRZones>,
+  hrZones: ReturnType<typeof getLthrHRZones>,
   en: boolean,
   isMonday: boolean = false
 ): TrainingSession {
@@ -565,7 +565,7 @@ function buildEasyRun(
 function buildRecoveryRun(
   day: number,
   zones: ReturnType<typeof calculatePaceZones>,
-  hrZones: ReturnType<typeof getHRZones>,
+  hrZones: ReturnType<typeof getLthrHRZones>,
   en: boolean,
   minutes: number = 40
 ): TrainingSession {
@@ -584,7 +584,7 @@ function buildQualitySession(
   weeks: number,
   distance: RaceDistance,
   zones: ReturnType<typeof calculatePaceZones>,
-  hrZones: ReturnType<typeof getHRZones>,
+  hrZones: ReturnType<typeof getLthrHRZones>,
   mPace: number,
   en: boolean
 ): TrainingSession {
@@ -736,7 +736,7 @@ function buildLSD(
   distance: RaceDistance,
   targetVol: number,
   zones: ReturnType<typeof calculatePaceZones>,
-  hrZones: ReturnType<typeof getHRZones>,
+  hrZones: ReturnType<typeof getLthrHRZones>,
   mPace: number,
   en: boolean
 ): TrainingSession {
@@ -979,7 +979,7 @@ export function generateFallbackTrainingPlan(
 
   // Calculate zones
   const zones = calculatePaceZones(pb5kSec);
-  const hrZones = getHRZones(effectiveLthr);
+  const hrZones = getLthrHRZones(effectiveLthr);
   const abilityGroup = getTrainingAbilityGroup(pb5kSec, weeklyVolume, locale);
 
   // Target M pace

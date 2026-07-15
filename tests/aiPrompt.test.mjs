@@ -28,6 +28,7 @@ function compileLibFile(sourceFile, outputFile) {
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
+compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
 writeFileSync(
@@ -89,6 +90,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
   if (request === './activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
   if (request === './activityHighlights') return require(path.join(tempDir, 'activityHighlights.js'));
+  if (request === './heartRateZones') return require(path.join(tempDir, 'heartRateZones.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -588,4 +590,26 @@ test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions
   assert.match(prompt, /不要给出精确到克数的碳水\/蛋白建议/);
   assert.match(prompt, /不要仅凭心率变化诊断脱水/);
   assert.match(prompt, /补水建议保持定性/);
+});
+
+test('buildProfessionalPrompt uses Strava max-HR zones while keeping LTHR separate', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity(),
+    null,
+    makeProfile(),
+    makeClassification(),
+    'zh',
+    undefined,
+    176,
+    undefined,
+    182
+  );
+
+  assert.match(prompt, /Strava 同款，基于最大心率/);
+  assert.match(prompt, /Z1 恢复: 0-118 bpm/);
+  assert.match(prompt, /Z2 耐力: 119-147 bpm/);
+  assert.match(prompt, /Z3 节奏: 148-162 bpm/);
+  assert.match(prompt, /Z4 阈值: 163-177 bpm/);
+  assert.match(prompt, /Z5 无氧: ≥ 178 bpm/);
+  assert.match(prompt, /LTHR 参考值: 176 bpm/);
 });

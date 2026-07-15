@@ -1,5 +1,10 @@
 import type { ActivityStream } from '@/types';
-import { getZoneForHR } from './heartRateZones';
+import {
+  getHRZones,
+  getLthrHRZones,
+  getLthrZoneForHR,
+  getZoneForHR,
+} from './heartRateZones';
 
 export type PacePattern =
   | 'warmup-cooldown'   // slow start + slow end, fast middle
@@ -21,6 +26,7 @@ export interface SegmentData {
 export interface StreamAnalysis {
   segments: SegmentData[];
   hrZoneDistribution: Record<string, number>;
+  heartRateZoneBasis: 'maxHeartRate' | 'lthr';
   pacePattern: PacePattern;
   patternConfidence: string; // human-readable description
   avgHRDrift: number;
@@ -107,11 +113,13 @@ function detectPacePattern(segments: SegmentData[], isRace: boolean): { pattern:
 
 export function analyzeActivityStreams(
   streams: Record<string, ActivityStream> | null,
-  lthr: number,
+  lthr: number | null | undefined,
   avgPaceSecPerKm: number,
-  isRace: boolean = false
+  isRace: boolean = false,
+  maxHeartRate?: number | null
 ): StreamAnalysis | null {
   if (!streams) return null;
+  if (!lthr && !maxHeartRate) return null;
 
   const hrData = streams.heartrate?.data as number[] | undefined;
   const distData = streams.distance?.data as number[] | undefined;
@@ -148,7 +156,9 @@ export function analyzeActivityStreams(
     const avgVel = velSlice.reduce((a, b) => a + b, 0) / velSlice.length;
     const paceSec = avgVel > 0 ? 1000 / avgVel : 0;
 
-    const zone = getZoneForHR(avgHR, lthr);
+    const zone = maxHeartRate
+      ? getZoneForHR(avgHR, maxHeartRate)
+      : getLthrZoneForHR(avgHR, lthr!);
     const paceDiff = avgPaceSecPerKm > 0
       ? ((avgPaceSecPerKm - paceSec) / avgPaceSecPerKm) * 100
       : 0;
@@ -182,8 +192,9 @@ export function analyzeActivityStreams(
 
   // True HR drift: only if no pattern explains the HR rise
   const { pattern, confidence } = detectPacePattern(segments, isRace);
+  const driftReference = lthr ?? maxHeartRate! * 0.9;
   const hasHRDrift =
-    hrDrift > (lthr * 0.05) &&
+    hrDrift > (driftReference * 0.05) &&
     !hasPaceSurges &&
     pattern !== 'interval' &&
     pattern !== 'progression' &&
@@ -192,6 +203,7 @@ export function analyzeActivityStreams(
   return {
     segments,
     hrZoneDistribution: dist,
+    heartRateZoneBasis: maxHeartRate ? 'maxHeartRate' : 'lthr',
     pacePattern: pattern,
     patternConfidence: confidence,
     avgHRDrift: Math.round(hrDrift),
@@ -204,15 +216,21 @@ export function analyzeActivityStreams(
 
 export function formatStreamAnalysisForPrompt(
   analysis: StreamAnalysis | null,
-  lthr: number,
-  locale: string = 'zh'
+  lthr: number | null | undefined,
+  locale: string = 'zh',
+  maxHeartRate?: number | null
 ): string {
   if (!analysis) return '';
   const en = locale.startsWith('en');
 
-  const zoneLabels: Record<string, string> = en
-    ? { z1: 'Recovery', z2: 'Aerobic Base', z3: 'Marathon Pace', z4: 'Threshold', z5: 'VO2max' }
-    : { z1: '恢复', z2: '有氧基础', z3: '马拉松配速', z4: '阈值', z5: 'VO2max' };
+  const usesMaxHeartRate = analysis.heartRateZoneBasis === 'maxHeartRate';
+  const zoneLabels: Record<string, string> = usesMaxHeartRate
+    ? en
+      ? { z1: 'Recovery', z2: 'Endurance', z3: 'Tempo', z4: 'Threshold', z5: 'Anaerobic' }
+      : { z1: '恢复', z2: '耐力', z3: '节奏', z4: '阈值', z5: '无氧' }
+    : en
+      ? { z1: 'Recovery', z2: 'Aerobic Base', z3: 'Marathon Pace', z4: 'Threshold', z5: 'VO2max' }
+      : { z1: '恢复', z2: '有氧基础', z3: '马拉松配速', z4: '阈值', z5: 'VO2max' };
 
   const patternDesc: Record<PacePattern, string> = en
     ? {
@@ -238,13 +256,23 @@ export function formatStreamAnalysisForPrompt(
     ? `\n\n## Heart Rate & Pace Segment Analysis`
     : `\n\n## 心率与配速分段分析`;
 
-  // LTHR zones
-  text += en
-    ? `\n- LTHR (lactate threshold heart rate): ${lthr} bpm`
-    : `\n- 乳酸阈值心率(LTHR): ${lthr} bpm`;
-  text += en
-    ? `\n- HR Zones: Z1 Recovery <${Math.round(lthr * 0.85)} | Z2 Aerobic ${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} | Z3 Marathon ${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} | Z4 Threshold ${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} | Z5 VO2max ≥${lthr}`
-    : `\n- 心率区间: Z1恢复<${Math.round(lthr * 0.85)} | Z2有氧基础${Math.round(lthr * 0.85)}-${Math.round(lthr * 0.89)} | Z3马拉松配速${Math.round(lthr * 0.90)}-${Math.round(lthr * 0.94)} | Z4阈值${Math.round(lthr * 0.95)}-${Math.round(lthr * 0.99)} | Z5 VO2max≥${lthr}`;
+  if (maxHeartRate) {
+    const zones = getHRZones(maxHeartRate);
+    text += en
+      ? `\n- Max heart rate: ${maxHeartRate} bpm; Strava-style zones`
+      : `\n- 最大心率: ${maxHeartRate} bpm；采用 Strava 同款区间`;
+    text += en
+      ? `\n- HR Zones: Z1 Recovery 0-${zones.z1.max} | Z2 Endurance ${zones.z2.min}-${zones.z2.max} | Z3 Tempo ${zones.z3.min}-${zones.z3.max} | Z4 Threshold ${zones.z4.min}-${zones.z4.max} | Z5 Anaerobic ≥${zones.z5.min}`
+      : `\n- 心率区间: Z1恢复0-${zones.z1.max} | Z2耐力${zones.z2.min}-${zones.z2.max} | Z3节奏${zones.z3.min}-${zones.z3.max} | Z4阈值${zones.z4.min}-${zones.z4.max} | Z5无氧≥${zones.z5.min}`;
+  } else if (lthr) {
+    const zones = getLthrHRZones(lthr);
+    text += en
+      ? `\n- LTHR (lactate threshold heart rate): ${lthr} bpm`
+      : `\n- 乳酸阈值心率(LTHR): ${lthr} bpm`;
+    text += en
+      ? `\n- LTHR Zones: Z1 Recovery 0-${zones.z1.max} | Z2 Aerobic ${zones.z2.min}-${zones.z2.max} | Z3 Marathon ${zones.z3.min}-${zones.z3.max} | Z4 Threshold ${zones.z4.min}-${zones.z4.max} | Z5 VO2max ≥${zones.z5.min}`
+      : `\n- LTHR 区间: Z1恢复0-${zones.z1.max} | Z2有氧基础${zones.z2.min}-${zones.z2.max} | Z3马拉松配速${zones.z3.min}-${zones.z3.max} | Z4阈值${zones.z4.min}-${zones.z4.max} | Z5 VO2max≥${zones.z5.min}`;
+  }
 
   // Zone distribution
   text += en ? `\n- Time in each zone:` : `\n- 各区时间占比:`;

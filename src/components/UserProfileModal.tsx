@@ -36,6 +36,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   });
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
+  const [maxHeartRate, setMaxHeartRate] = useState('');
   const [lthr, setLthr] = useState('');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [showSaved, setShowSaved] = useState(false);
@@ -53,12 +54,14 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       });
       setHeight(profile.height ? String(profile.height) : '');
       setWeight(profile.weight ? String(profile.weight) : '');
+      setMaxHeartRate(profile.maxHeartRate ? String(profile.maxHeartRate) : '');
       setLthr(profile.lthr ? String(profile.lthr) : '');
       setHasProfile(true);
     } else {
       setValues({ '5k': '', '10k': '', '21k': '', '42k': '' });
       setHeight('');
       setWeight('');
+      setMaxHeartRate('');
       setLthr('');
       setHasProfile(false);
     }
@@ -90,6 +93,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
   const heightRange = `${USER_PROFILE_LIMITS.height.min}-${USER_PROFILE_LIMITS.height.max} cm`;
   const weightRange = `${USER_PROFILE_LIMITS.weight.min}-${USER_PROFILE_LIMITS.weight.max} kg`;
+  const maxHeartRateRange = `${USER_PROFILE_LIMITS.maxHeartRate.min}-${USER_PROFILE_LIMITS.maxHeartRate.max} bpm`;
   const lthrRange = `${USER_PROFILE_LIMITS.lthr.min}-${USER_PROFILE_LIMITS.lthr.max} bpm`;
 
   const handleSave = () => {
@@ -116,10 +120,14 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
     const h = getOptionalNumber(height);
     const w = getOptionalNumber(weight);
+    const maxHr = getOptionalNumber(maxHeartRate);
     const lt = getOptionalNumber(lthr);
 
     if (!isUserProfileRangeValue('height', h)) newErrors.height = true;
     if (!isUserProfileRangeValue('weight', w)) newErrors.weight = true;
+    if (!Number.isInteger(maxHr) || !isUserProfileRangeValue('maxHeartRate', maxHr)) {
+      if (maxHr !== null) newErrors.maxHeartRate = true;
+    }
     if (!Number.isInteger(lt) || !isUserProfileRangeValue('lthr', lt)) {
       if (lt !== null) newErrors.lthr = true;
     }
@@ -127,8 +135,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    saveUserProfile({ pbs, height: h, weight: w, lthr: lt });
-    setHasProfile(hasAny || !!h || !!w || !!lt);
+    saveUserProfile({ pbs, height: h, weight: w, maxHeartRate: maxHr, lthr: lt });
+    setHasProfile(hasAny || !!h || !!w || !!maxHr || !!lt);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
   };
@@ -219,8 +227,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
               </div>
             ))}
 
-            {/* Height & Weight & LTHR */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+            {/* Physique and heart-rate references */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
               <div>
                 <label className="block font-mono text-xs font-bold uppercase mb-1.5">
                   {t('profile.height', '身高')}
@@ -276,6 +284,35 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 {errors.weight && (
                   <p className="mt-1 font-mono text-xs text-red-600">
                     {t('common.error')} — {weightRange}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block font-mono text-xs font-bold uppercase mb-1.5">
+                  {t('profile.maxHeartRate')}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="182"
+                    value={maxHeartRate}
+                    onChange={e => {
+                      setMaxHeartRate(e.target.value);
+                      clearFieldError('maxHeartRate');
+                    }}
+                    className={[
+                      'w-full px-3 py-2 font-mono text-base border-4 bg-white dark:bg-zinc-900 outline-none transition-colors',
+                      errors.maxHeartRate
+                        ? 'border-red-500 focus:border-red-600'
+                        : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500 dark:focus:border-blue-400',
+                    ].join(' ')}
+                  />
+                  <HeartPulse size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                </div>
+                {errors.maxHeartRate && (
+                  <p className="mt-1 font-mono text-xs text-red-600">
+                    {t('common.error')} — {maxHeartRateRange}
                   </p>
                 )}
               </div>

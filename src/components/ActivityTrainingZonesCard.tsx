@@ -82,10 +82,10 @@ export function ActivityTrainingZonesCard({
     streams,
     mode,
     pb5kSeconds: fiveKReference?.seconds,
-    lthr: profile?.lthr,
-  }), [activity, fiveKReference?.seconds, mode, profile?.lthr, streams]);
+    maxHeartRate: profile?.maxHeartRate,
+  }), [activity, fiveKReference?.seconds, mode, profile?.maxHeartRate, streams]);
   const dominant = distribution.zones.find((zone) => zone.id === distribution.dominantZone) ?? null;
-  const hasReference = mode === 'pace' ? Boolean(fiveKReference) : Boolean(profile?.lthr);
+  const hasReference = mode === 'pace' ? Boolean(fiveKReference) : Boolean(profile?.maxHeartRate);
   const sourceLabel = t(`activity.zoneSource.${distribution.source}`);
   const referenceLabel = mode === 'pace'
     ? fiveKReference
@@ -93,8 +93,8 @@ export function ActivityTrainingZonesCard({
           value: formatSecondsToTime(fiveKReference.seconds),
         })
       : t('stats.zoneReference.nonePace')
-    : profile?.lthr
-      ? t('stats.zoneReference.lthr', { value: profile.lthr })
+    : profile?.maxHeartRate
+      ? t('stats.zoneReference.maxHeartRate', { value: profile.maxHeartRate })
       : t('stats.zoneReference.noneHeartRate');
 
   return (

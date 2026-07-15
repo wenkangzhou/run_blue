@@ -81,11 +81,11 @@ export function TrainingZonesPanel({ activities }: TrainingZonesPanelProps) {
     mode,
     period,
     pb5kSeconds: fiveKReference?.seconds,
-    lthr: profile?.lthr,
-  }), [activities, fiveKReference?.seconds, mode, period, profile?.lthr]);
+    maxHeartRate: profile?.maxHeartRate,
+  }), [activities, fiveKReference?.seconds, mode, period, profile?.maxHeartRate]);
   const dominant = distribution.zones.find((zone) => zone.id === distribution.dominantZone) ?? null;
   const middlePercent = distribution.zones.find((zone) => zone.id === 'z3')?.percent ?? 0;
-  const hasReference = mode === 'pace' ? Boolean(fiveKReference) : Boolean(profile?.lthr);
+  const hasReference = mode === 'pace' ? Boolean(fiveKReference) : Boolean(profile?.maxHeartRate);
 
   const insightKey = !hasReference
     ? mode === 'pace' ? 'missingPaceReference' : 'missingHeartRateReference'
@@ -106,8 +106,8 @@ export function TrainingZonesPanel({ activities }: TrainingZonesPanelProps) {
           value: formatSecondsToTime(fiveKReference.seconds),
         })
       : t('stats.zoneReference.nonePace')
-    : profile?.lthr
-      ? t('stats.zoneReference.lthr', { value: profile.lthr })
+    : profile?.maxHeartRate
+      ? t('stats.zoneReference.maxHeartRate', { value: profile.maxHeartRate })
       : t('stats.zoneReference.noneHeartRate');
 
   return (

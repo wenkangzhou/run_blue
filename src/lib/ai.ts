@@ -41,6 +41,7 @@ export async function analyzeActivity(
   locale: string = 'zh',
   physique?: UserPhysique,
   lthr?: number | null,
+  maxHeartRate?: number | null,
   streamAnalysis?: string,
   classificationOverride?: ActivityClassification,
 ): Promise<AIAnalysis> {
@@ -67,6 +68,7 @@ export async function analyzeActivity(
     classification,
     physique,
     lthr,
+    maxHeartRate,
     streamSummary: streamAnalysis,
   });
   const promptInputs = getPromptInputsFromSnapshot(snapshot);
@@ -79,6 +81,7 @@ export async function analyzeActivity(
     snapshot.physique,
     snapshot.lthr,
     snapshot.streamSummary,
+    snapshot.maxHeartRate,
   );
 
   // Retry on JSON parse failure (common on cold-start / network hiccup)

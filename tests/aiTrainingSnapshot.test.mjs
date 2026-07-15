@@ -87,6 +87,7 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     },
     trainingProfile: makeProfile(),
     classification: { workoutType: 'easy', workoutTypeConfidence: 'high', workoutTypeEvidence: [], intensity: 'easy', paceZone: 'E', paceZoneConfidence: 'high', paceZoneExactMatch: true, paceZoneGapSeconds: 0, isRace: false, raceType: null, structure: {} },
+    maxHeartRate: 182,
     streamSummary: 'derived summary only',
   });
 
@@ -95,6 +96,8 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     assert.equal(serialized.includes(forbidden), false, `snapshot leaked ${forbidden}`);
   }
   assert.equal(snapshot.profile.recentLoad.length, 4);
+  assert.equal(snapshot.schemaVersion, '8');
+  assert.equal(snapshot.maxHeartRate, 182);
   assert.equal(snapshot.hasStreamEvidence, true);
   assert.equal(snapshot.workout.weatherContext.temperatureC, 27);
   assert.equal(snapshot.workout.weatherContext.feelsLikeC, 35);
