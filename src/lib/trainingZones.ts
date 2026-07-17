@@ -417,8 +417,9 @@ export function calculateTrainingZoneDistribution({
   const previousTotal = Object.values(previous.seconds).reduce((sum, value) => sum + value, 0);
 
   const items = zoneIds.map((id) => {
-    const paceZone = paceZones.find((zone) => zone.id === id);
-    const hrZone = hrZones?.[id as HeartRateTrainingZoneId];
+    const definition = mode === 'pace'
+      ? paceZones.find((zone) => zone.id === id)
+      : hrZones?.[id as HeartRateTrainingZoneId];
     const seconds = current.seconds[id] ?? 0;
     const percent = currentTotal > 0 ? Math.round((seconds / currentTotal) * 100) : 0;
     const previousPercent = previousTotal > 0
@@ -426,8 +427,8 @@ export function calculateTrainingZoneDistribution({
       : 0;
     return {
       id,
-      min: paceZone?.min ?? hrZone?.min ?? 0,
-      max: paceZone?.max ?? hrZone?.max ?? 0,
+      min: definition?.min ?? 0,
+      max: definition?.max ?? 0,
       seconds,
       percent,
       previousPercent,

@@ -130,6 +130,28 @@ test('calculates duration-weighted pace and HR distributions with coverage', () 
   assert.equal(hr.dominantZone, 'z2');
 });
 
+test('keeps heart-rate display boundaries separate from pace boundaries', () => {
+  const distribution = calculateTrainingZoneDistribution({
+    activities: [makeRun(1, { average_heartrate: 140 })],
+    mode: 'heartRate',
+    period: '7d',
+    pb5kSeconds: 1260,
+    maxHeartRate: 182,
+    now: new Date('2026-07-03T12:00:00Z'),
+  });
+
+  assert.deepEqual(
+    distribution.zones.map(({ id, min, max }) => ({ id, min, max })),
+    [
+      { id: 'z5', min: 178, max: 999 },
+      { id: 'z4', min: 163, max: 177 },
+      { id: 'z3', min: 148, max: 162 },
+      { id: 'z2', min: 119, max: 147 },
+      { id: 'z1', min: 0, max: 118 },
+    ]
+  );
+});
+
 test('calculates one activity pace zones from time-weighted stream samples', () => {
   const activity = makeRun(1, { moving_time: 60, distance: 200 });
   const distribution = calculateActivityTrainingZoneDistribution({
