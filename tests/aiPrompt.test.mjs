@@ -496,7 +496,7 @@ test('buildProfessionalPrompt promotes a standout continuous 5K block even witho
   assert.match(prompt, /明显热应激下，应明确提高对表现含金量的评价/);
 });
 
-test('buildProfessionalPrompt makes the deterministic summer-load override non-negotiable', () => {
+test('buildProfessionalPrompt separates current heat cost from cumulative recovery', () => {
   const prompt = buildProfessionalPrompt(
     makeActivity({
       distance: 8000,
@@ -508,12 +508,14 @@ test('buildProfessionalPrompt makes the deterministic summer-load override non-n
     makeClassification({
       workoutType: 'recovery',
       workoutTypeConfidence: 'low',
-      intensity: 'hard',
+      intensity: 'moderate',
       paceZone: 'E',
       loadAdjustment: {
         applied: true,
         baseIntensity: 'easy',
-        adjustedIntensity: 'hard',
+        adjustedIntensity: 'moderate',
+        sessionEffortControlled: false,
+        cumulativeLoadConcern: 'high',
         thermalSeverity: 'heat-stress',
         paceContext: 'upper-easy',
         paceSecondsPerKm: 320,
@@ -526,27 +528,87 @@ test('buildProfessionalPrompt makes the deterministic summer-load override non-n
         previous7DayTrainingLoad: 56,
         averageWeeklyTrainingLoad: 162,
         trainingLoadChangePercent: 298,
+        trainingLoadChangeReliable: false,
         trainingLoadRatio: 1.38,
         trainingLoadState: 'high',
         trainingLoadHeartRateCoverage: 100,
         activityTrainingLoadSharePercent: 18,
-        minimumRecoveryHours: 48,
+        relativeEffort: 42,
+        consecutiveRunDays: 9,
+        minimumRecoveryHours: 36,
       },
     }),
     'zh'
   );
 
-  assert.match(prompt, /系统综合负荷校正/);
+  assert.match(prompt, /本次热环境强度校正/);
   assert.match(prompt, /滚动训练负荷（与统计页同口径）/);
   assert.match(prompt, /本次活动: 40 负荷点（占近 7 天负荷的 18%）/);
   assert.match(prompt, /近 7 天: 223 点；上一个 7 天: 56 点；前 3 周均值: 162 点/);
-  assert.match(prompt, /较上一个 7 天: \+298%；相对前 3 周均值: 1.38 倍/);
+  assert.match(prompt, /上一个 7 天基数过小，环比百分比置信度低；禁止引用或强调这个百分比/);
+  assert.match(prompt, /相对前 3 周均值: 1.38 倍/);
   assert.match(prompt, /负荷状态: 负荷偏高；心率覆盖率: 100%/);
+  assert.match(prompt, /截至本次已连续跑步 9 天/);
+  assert.match(prompt, /本次 Relative Effort: 42/);
   assert.match(prompt, /本次均配: 5'20"\/km；个人配速位置: E 区较快一侧/);
-  assert.match(prompt, /负荷点作为近期负荷的首要信号/);
-  assert.match(prompt, /不得把本次写成“轻松”“低负荷”或“恢复负荷”/);
-  assert.match(prompt, /intensity 不得低于“高强度”/);
-  assert.match(prompt, /建议恢复不得少于 48h/);
+  assert.match(prompt, /本次强度与累计恢复状态是两个不同结论/);
+  assert.match(prompt, /这项校正来自本次数据本身，不来自滚动负荷/);
+  assert.match(prompt, /单次强度校正为至少“适中”/);
+  assert.match(prompt, /建议恢复不得少于 36h/);
+  assert.doesNotMatch(prompt, /\+298%/);
+});
+
+test('buildProfessionalPrompt preserves a controlled easy-session verdict under high cumulative load', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 8010,
+      moving_time: 3053,
+      average_heartrate: 130,
+      suffer_score: 21,
+      description: 'Temperature 30.8°C, Feels like 35.7°C, Humidity 67%',
+    }),
+    null,
+    makeProfile(),
+    makeClassification({
+      workoutType: 'recovery',
+      workoutTypeConfidence: 'high',
+      intensity: 'easy',
+      paceZone: 'E',
+      loadAdjustment: {
+        applied: false,
+        baseIntensity: 'easy',
+        adjustedIntensity: 'easy',
+        sessionEffortControlled: true,
+        cumulativeLoadConcern: 'high',
+        thermalSeverity: 'heat-stress',
+        paceContext: 'relaxed-easy',
+        paceSecondsPerKm: 381,
+        easyFastBoundarySeconds: 331,
+        sameTemperaturePaceDeltaSeconds: null,
+        recentVolumeChangePercent: null,
+        recentVolumeRatio: 1.1,
+        activityTrainingLoad: 21,
+        current7DayTrainingLoad: 223,
+        previous7DayTrainingLoad: 56,
+        averageWeeklyTrainingLoad: 162,
+        trainingLoadChangePercent: 298,
+        trainingLoadChangeReliable: false,
+        trainingLoadRatio: 1.38,
+        trainingLoadState: 'high',
+        trainingLoadHeartRateCoverage: 100,
+        activityTrainingLoadSharePercent: 9,
+        relativeEffort: 21,
+        consecutiveRunDays: 9,
+        minimumRecoveryHours: 24,
+      },
+    }),
+    'zh'
+  );
+
+  assert.match(prompt, /系统判定：本次单次努力受控/);
+  assert.match(prompt, /必须先明确肯定本次执行，再讨论累计恢复压力/);
+  assert.match(prompt, /不得单独把一次受控轻松跑改判为适中或高强度/);
+  assert.doesNotMatch(prompt, /本次热环境强度校正/);
 });
 
 test('buildProfessionalPrompt avoids target-pace and BMI nutrition prescriptions for recovery runs', () => {

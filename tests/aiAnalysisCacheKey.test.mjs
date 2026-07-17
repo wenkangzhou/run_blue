@@ -113,23 +113,19 @@ function makeCacheInput(overrides = {}) {
   };
 }
 
-test('builds stable v31 keys for identical AI analysis inputs', () => {
+test('builds stable v32 keys for identical AI analysis inputs', () => {
   const first = key();
   const second = key();
 
-  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v31');
+  assert.equal(AI_ANALYSIS_CACHE_VERSION, 'v32');
   assert.equal(first, second);
-  assert.match(first, /^ai_analysis_v31_1_/);
+  assert.match(first, /^ai_analysis_v32_1_/);
 });
 
-test('builds legacy fallback keys for existing cached analysis', () => {
-  const current = key();
+test('does not reuse analysis produced before the session and cumulative load split', () => {
   const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput());
 
-  assert.equal(legacy.length, 2);
-  assert.match(legacy[0], /^ai_analysis_v19_1_/);
-  assert.match(legacy[1], /^ai_analysis_v18_1_/);
-  assert.notEqual(legacy[0], current);
+  assert.deepEqual(legacy, []);
 });
 
 test('keeps Kimi and local fallback analysis in separate cache entries', () => {
@@ -139,14 +135,12 @@ test('keeps Kimi and local fallback analysis in separate cache entries', () => {
   );
 });
 
-test('skips the unsafe workout fallback while keeping the latest compatible cache', () => {
+test('does not reuse legacy workout analysis', () => {
   const legacy = getLegacyAIAnalysisCacheKeys(makeCacheInput({
     activity: makeActivity(1, { workout_type: 3 }),
   }));
 
-  assert.equal(legacy.length, 2);
-  assert.match(legacy[0], /^ai_analysis_v19_1_/);
-  assert.match(legacy[1], /^ai_analysis_v17_1_/);
+  assert.deepEqual(legacy, []);
 });
 
 test('does not reuse legacy analysis when split structure affects classification', () => {
@@ -192,6 +186,17 @@ test('changes key when current or historical temperature changes', () => {
   const changedCurrent = key({ activity: makeActivity(1, { average_temp: 32 }) });
   const changedHistory = key({
     historyActivities: [makeActivity(3), makeActivity(2, { average_temp: 31 }), makeActivity(1)],
+  });
+
+  assert.notEqual(changedCurrent, original);
+  assert.notEqual(changedHistory, original);
+});
+
+test('changes key when Strava Relative Effort changes', () => {
+  const original = key();
+  const changedCurrent = key({ activity: makeActivity(1, { suffer_score: 21 }) });
+  const changedHistory = key({
+    historyActivities: [makeActivity(3), makeActivity(2, { suffer_score: 35 }), makeActivity(1)],
   });
 
   assert.notEqual(changedCurrent, original);

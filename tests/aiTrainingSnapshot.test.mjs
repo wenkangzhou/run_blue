@@ -69,6 +69,7 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     has_heartrate: true,
     average_heartrate: 142,
     max_heartrate: 168,
+    suffer_score: 21,
     device_name: 'Secret Watch',
     start_latlng: [31.23, 121.47],
     map: { summary_polyline: 'SECRET_POLYLINE' },
@@ -96,12 +97,13 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     assert.equal(serialized.includes(forbidden), false, `snapshot leaked ${forbidden}`);
   }
   assert.equal(snapshot.profile.recentLoad.length, 4);
-  assert.equal(snapshot.schemaVersion, '8');
+  assert.equal(snapshot.schemaVersion, '9');
   assert.equal(snapshot.maxHeartRate, 182);
   assert.equal(snapshot.hasStreamEvidence, true);
   assert.equal(snapshot.workout.weatherContext.temperatureC, 27);
   assert.equal(snapshot.workout.weatherContext.feelsLikeC, 35);
   assert.equal(snapshot.workout.weatherContext.humidityPercent, 86);
+  assert.equal(snapshot.workout.relativeEffort, 21);
   assert.deepEqual(snapshot.workout.personalRecords, [
     { name: '5K', distanceMeters: 5000, elapsedTimeSeconds: 1260, rank: 1 },
   ]);
@@ -116,6 +118,7 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
   assert.equal(promptInputs.activity.map, undefined);
   assert.equal(promptInputs.activity.start_latlng, undefined);
   assert.equal(promptInputs.activity.weather_context.feelsLikeC, 35);
+  assert.equal(promptInputs.activity.suffer_score, 21);
   assert.deepEqual(promptInputs.activity.best_efforts, [
     { name: '5K', distance: 5000, elapsed_time: 1260, moving_time: undefined, pr_rank: 1 },
     { name: '1K', distance: 1000, elapsed_time: 240, moving_time: undefined, pr_rank: 2 },

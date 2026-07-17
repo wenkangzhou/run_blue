@@ -74,6 +74,7 @@ type AIHistoryActivity = Pick<
       | 'weather_context'
       | 'workout_type'
       | 'calories'
+      | 'suffer_score'
       | 'splits_metric'
       | 'laps'
       | 'best_efforts'
@@ -118,6 +119,7 @@ function toAIHistoryActivity(activity: StravaActivity): AIHistoryActivity {
     weather_context: activity.weather_context,
     workout_type: activity.workout_type,
     calories: activity.calories,
+    suffer_score: activity.suffer_score,
     splits_metric: activity.splits_metric,
     laps: activity.laps,
     best_efforts: activity.best_efforts,

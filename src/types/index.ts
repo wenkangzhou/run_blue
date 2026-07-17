@@ -63,6 +63,8 @@ export interface StravaActivity {
   has_heartrate: boolean;
   average_heartrate?: number;
   max_heartrate?: number;
+  /** Strava Relative Effort, available for supported activities/subscriptions. */
+  suffer_score?: number;
   heartrate_opt_out: boolean;
   display_hide_heartrate_option: boolean;
   elev_high?: number;

@@ -591,63 +591,92 @@ test('parseAIResponse restores a standout sustained 5K block omitted by the mode
   assert.doesNotMatch(result.summary, /个人最佳|PB/);
 });
 
-test('parseAIResponse overrides a light recovery verdict when summer heat and rolling load make the load hard', () => {
+test('parseAIResponse preserves controlled hot recovery effort while making cumulative recovery conservative', () => {
   const result = parseAIResponse(
     JSON.stringify({
-      summary: '本次为恢复跑，综合强度为轻松，建议恢复约18h。',
+      summary: '本次为恢复跑，综合强度为轻松，建议恢复约18h。全程配速稳定在6\'21',
       intensity: 'easy',
       recoveryHours: 18,
       suggestions: ['下一次继续轻松跑。'],
-      warnings: [],
+      warnings: ['近 7 天累计负荷偏高。'],
     }),
     makeActivity({
       distance: 8000,
-      moving_time: 2560,
-      description: 'Temperature 30°C, Feels like 33°C, Humidity 78%',
+      moving_time: 3048,
+      average_heartrate: 130,
+      suffer_score: 21,
+      description: 'Temperature 30.8°C, Feels like 35.7°C, Humidity 67%',
     }),
     makeProfile({ similarStats: null }),
     makeClassification({
       workoutType: 'recovery',
       workoutTypeConfidence: 'low',
-      intensity: 'hard',
+      intensity: 'easy',
       paceZone: 'E',
       loadAdjustment: {
-        applied: true,
+        applied: false,
         baseIntensity: 'easy',
-        adjustedIntensity: 'hard',
+        adjustedIntensity: 'easy',
+        sessionEffortControlled: true,
+        cumulativeLoadConcern: 'high',
         thermalSeverity: 'heat-stress',
-        paceContext: 'upper-easy',
-        paceSecondsPerKm: 320,
+        paceContext: 'relaxed-easy',
+        paceSecondsPerKm: 381,
         easyFastBoundarySeconds: 331,
-        sameTemperaturePaceDeltaSeconds: -18,
-        recentVolumeChangePercent: 269,
-        recentVolumeRatio: 3.69,
-        activityTrainingLoad: 40,
+        sameTemperaturePaceDeltaSeconds: null,
+        recentVolumeChangePercent: null,
+        recentVolumeRatio: 1.1,
+        activityTrainingLoad: 21,
         current7DayTrainingLoad: 223,
         previous7DayTrainingLoad: 56,
         averageWeeklyTrainingLoad: 162,
         trainingLoadChangePercent: 298,
+        trainingLoadChangeReliable: false,
         trainingLoadRatio: 1.38,
         trainingLoadState: 'high',
         trainingLoadHeartRateCoverage: 100,
-        activityTrainingLoadSharePercent: 18,
-        minimumRecoveryHours: 48,
+        activityTrainingLoadSharePercent: 9,
+        relativeEffort: 21,
+        consecutiveRunDays: 9,
+        minimumRecoveryHours: 24,
       },
     }),
     'zh'
   );
 
-  assert.equal(result.intensity, 'hard');
-  assert.equal(result.recoveryHours, 48);
-  assert.match(result.summary, /5'20"\/km已处于个人 E 区较快一侧/);
-  assert.match(result.summary, /体感 33°C、湿度 78%/);
-  assert.match(result.summary, /近 7 天训练负荷 223 点（较上一个 7 天\+298%）/);
-  assert.match(result.summary, /综合负荷应按高强度而非轻松或恢复负荷解读/);
-  assert.doesNotMatch(result.summary, /综合强度为轻松|恢复约18h/);
-  assert.match(result.warnings.join(' '), /近 7 天训练负荷 223 点/);
-  assert.match(result.warnings.join(' '), /恢复成本高于外部配速区间标签/);
+  assert.equal(result.intensity, 'easy');
+  assert.equal(result.recoveryHours, 24);
+  assert.match(result.summary, /本次单次努力保持受控/);
+  assert.match(result.summary, /近 7 天训练负荷 223 点（为前 3 周均值的 1.38 倍）/);
+  assert.match(result.summary, /连续跑步 9 天/);
+  assert.match(result.summary, /累计恢复安排/);
+  assert.match(result.summary, /本次仍按受控轻松跑理解/);
+  assert.match(result.summary, /至少 24h 恢复/);
+  assert.match(result.summary, /6'21"\/km。/);
+  assert.doesNotMatch(result.summary, /综合强度为高|\+298%|恢复约18h/);
+  assert.deepEqual(result.warnings, []);
   assert.match(result.trainingLoadContext, /近 7 天训练负荷 223 点/);
-  assert.match(result.trainingLoadContext, /本次贡献 40 点，占 18%/);
+  assert.match(result.trainingLoadContext, /本次贡献 21 点，占 9%/);
+  assert.match(result.trainingLoadContext, /Relative Effort 21/);
+  assert.match(result.trainingLoadContext, /本次单次努力受控/);
+  assert.match(result.nextWorkoutSuggestion, /下一天优先休息或极轻松活动/);
+  assert.deepEqual(result.suggestions, ['下一天优先休息或极轻松活动；主观疲劳恢复后，再决定是否安排质量课。']);
+});
+
+test('parseAIResponse repairs a cached run-on pace sentence before display', () => {
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: "全程配速稳定在6'21本次单次努力保持受控。",
+      intensity: 'easy',
+      recoveryHours: 24,
+    }),
+    makeActivity(),
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'easy', intensity: 'easy', paceZone: 'E' }),
+    'zh'
+  );
+
+  assert.match(result.summary, /6'21"\/km。本次单次努力保持受控/);
 });
 
 test('parseAIResponse forces race intensity and default race recovery', () => {

@@ -11,6 +11,7 @@ import {
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 import { formatSustainedEffortDistance, getKeySustainedEffort } from '@/lib/activityHighlights';
+import { buildActivityWeatherContext } from '@/lib/weather';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -145,6 +146,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   } = useAIAnalysis(activity, streams, enabled);
   const [expanded, setExpanded] = useState(false);
   const keySustainedEffort = useMemo(() => getKeySustainedEffort(activity), [activity]);
+  const weatherContext = useMemo(() => buildActivityWeatherContext(activity), [activity]);
 
   const intensity = analysis?.intensity
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
@@ -162,6 +164,10 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const isLowIntensityRun = !hasAdjustedInternalLoad && (
     classification?.workoutType === 'easy' || classification?.workoutType === 'recovery'
   );
+  const hasSessionRiskWarnings = Boolean(
+    analysis?.warnings?.length
+    && (!classification?.loadAdjustment?.sessionEffortControlled || hasAdjustedInternalLoad)
+  );
   const comparisonMeta = trainingStats?.similarStats ?? null;
   const comparisonIsReferenceOnly = Boolean(
     isLowIntensityRun ||
@@ -177,6 +183,18 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
     const drift = streamAnalysis?.avgHRDrift ?? 0;
 
+    if (z1 + z2 >= 95 && hardShare < 5) {
+      return {
+        level: 'excellent' as const,
+        title: classification.workoutType === 'recovery'
+          ? t('aiAnalysis.recoveryQuality', '恢复质量')
+          : t('aiAnalysis.aerobicQuality', '有氧质量'),
+        status: t('aiAnalysis.executionExcellent', '到位'),
+        detail: t('aiAnalysis.executionExcellentHint', '心率分布和后程控制都很干净，说明这次低强度训练完成得很到位。'),
+        color: 'text-emerald-600',
+      };
+    }
+
     if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
       return {
         level: 'caution' as const,
@@ -186,18 +204,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
         status: t('aiAnalysis.executionCaution', '略偏顶'),
         detail: t('aiAnalysis.executionCautionHint', '这次低强度训练的负荷略高，下一次更适合把重心放回轻松和恢复。'),
         color: 'text-amber-600',
-      };
-    }
-
-    if (z1 + z2 >= 95 && drift <= 6) {
-      return {
-        level: 'excellent' as const,
-        title: classification.workoutType === 'recovery'
-          ? t('aiAnalysis.recoveryQuality', '恢复质量')
-          : t('aiAnalysis.aerobicQuality', '有氧质量'),
-        status: t('aiAnalysis.executionExcellent', '到位'),
-        detail: t('aiAnalysis.executionExcellentHint', '心率分布和后程控制都很干净，说明这次低强度训练完成得很到位。'),
-        color: 'text-emerald-600',
       };
     }
 
@@ -283,6 +289,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (evidence === 'lap structure has low pace contrast, analyze reps rather than average pace') return '各圈配速对比不强，重点看分段结构而不是全程均配';
     if (evidence === 'heat and recent volume raise internal training load') return '高温高湿、个人配速位置与近期跑量共同抬高了内部训练负荷';
     if (evidence === 'heat, pace, and rolling training load raise internal load') return '高温高湿、个人配速位置与滚动训练负荷共同抬高了内部训练成本';
+    if (evidence === 'heat and pace raise current-session effort') return '高温与本次配速共同抬高了单次训练强度';
 
     let match = evidence.match(/^(\d+) laps with (\d+) short reps$/);
     if (match) return `${match[1]} 圈中包含 ${match[2]} 个短重复段`;
@@ -354,7 +361,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
       const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
       const drift = streamAnalysis?.avgHRDrift ?? 0;
 
-      if (z1 + z2 >= 95 && drift <= 6) {
+      if (z1 + z2 >= 95 && hardShare < 5) {
         effect = 'excellent';
         effectLabel = '执行到位';
       } else if (z1 + z2 >= 85) {
@@ -381,7 +388,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     // Override by warnings
-    if (analysis.warnings && analysis.warnings.length > 0) {
+    if (hasSessionRiskWarnings) {
       effect = 'poor';
       effectLabel = '需要注意';
     }
@@ -440,7 +447,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     return { type, effect, effectLabel, pros, cons, advice };
-  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, lowIntensityLooksControlled, comparisonIsReferenceOnly, pacePatternExplainsHRDrift]);
+  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, lowIntensityLooksControlled, comparisonIsReferenceOnly, pacePatternExplainsHRDrift, hasSessionRiskWarnings]);
 
   const effectStyles: Record<string, { color: string; bg: string; border: string }> = {
     excellent: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-400' },
@@ -493,8 +500,22 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
       defaultValue: '配速区间 {{zone}}，建议恢复约 {{recovery}}h',
     });
     const warningSignals = (analysis.warnings ?? []).map(cleanClause).filter(Boolean);
-    const hasWarnings = warningSignals.length > 0;
-    const mainSignal = warningSignals[0] ?? verdict.cons[0] ?? verdict.pros[0] ?? '';
+    const hasWarnings = hasSessionRiskWarnings;
+    const controlledSessionSignal = isLowIntensityRun && lowIntensityLooksControlled
+      ? activity.average_heartrate && weatherContext.feelsLikeC !== undefined
+        ? t('aiAnalysis.controlledHeatHrSignal', {
+            heartRate: Math.round(activity.average_heartrate),
+            feelsLike: weatherContext.feelsLikeC,
+            defaultValue: `体感 ${weatherContext.feelsLikeC}°C 下平均心率仍为 ${Math.round(activity.average_heartrate)} bpm，低强度执行受控`,
+          })
+        : activity.average_heartrate
+          ? t('aiAnalysis.controlledHrSignal', {
+              heartRate: Math.round(activity.average_heartrate),
+              defaultValue: `平均心率 ${Math.round(activity.average_heartrate)} bpm，低强度执行受控`,
+            })
+          : verdict.pros[0] ?? ''
+      : '';
+    const mainSignal = controlledSessionSignal || warningSignals[0] || verdict.cons[0] || verdict.pros[0] || '';
     const signalText = mainSignal
       ? t('aiAnalysis.conclusionSignal', {
           signal: mainSignal,
@@ -502,9 +523,11 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
         })
       : '';
     const focus = hasWarnings
-      ? t('aiAnalysis.conclusionRisk', '这次优先处理风险信号，训练收益放在第二位。')
+      ? ''
       : isRace
         ? t('aiAnalysis.conclusionRace', '这次主要看比赛输出与赛后恢复，不建议继续叠加强度。')
+        : classification?.loadAdjustment?.cumulativeLoadConcern === 'high'
+          ? t('aiAnalysis.conclusionCumulativeRecovery', '本次执行与累计恢复分开看：这次可以完成得很好，但下一天仍应保守安排。')
         : isLowIntensityRun
           ? t('aiAnalysis.conclusionEasy', '这次主要看低负荷完成度，为后续训练留余量。')
           : classification?.intensity === 'hard'

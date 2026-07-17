@@ -106,14 +106,24 @@ export function generateFallbackAnalysis(
   }
 
   // Normal training fallback
-  const suggestions = [...profile.patterns.trainingDeficiencies];
+  const adjustment = classification.loadAdjustment;
+  const cumulativeRecoveryHigh = adjustment?.cumulativeLoadConcern === 'high';
+  const isLowIntensity = classification.workoutType === 'easy' || classification.workoutType === 'recovery';
+  const suggestions: string[] = [];
   const workoutTypeLabel = classification.loadAdjustment?.applied
     ? (en ? 'heat-load aerobic run' : '高温负荷有氧跑')
     : getWorkoutTypeLabel(classification.workoutType, locale);
-  if (!profile.patterns.hasLongRuns && activity.distance < 15000) {
+  if (cumulativeRecoveryHigh) {
+    suggestions.push(en
+      ? 'Next day: rest or very easy movement; resume quality training only after subjective fatigue has settled.'
+      : '下一天优先休息或极轻松活动；主观疲劳恢复后，再决定是否安排质量课。');
+  } else if (!isLowIntensity) {
+    suggestions.push(...profile.patterns.trainingDeficiencies);
+  }
+  if (!isLowIntensity && !cumulativeRecoveryHigh && !profile.patterns.hasLongRuns && activity.distance < 15000) {
     suggestions.push(en ? 'Try to schedule a 15km+ long run this week.' : '建议本周安排一次15km+的长距离训练');
   }
-  if (!profile.patterns.hasIntervalWorkouts && classification.workoutType !== 'interval' && classification.workoutType !== 'fartlek') {
+  if (!isLowIntensity && !cumulativeRecoveryHigh && !profile.patterns.hasIntervalWorkouts && classification.workoutType !== 'interval' && classification.workoutType !== 'fartlek') {
     suggestions.push(en ? 'Try 400m x 6 interval workout once a week, keep pace in I zone.' : '可尝试每周一次400m×6间歇训练，配速控制在I区');
   }
 
@@ -161,14 +171,24 @@ export function generateFallbackAnalysis(
       ? ` Weather context: ${thermalContext.label}; treat pace and HR with that thermal cost in mind.`
       : ` 天气背景：${thermalContext.label}，配速和心率需要结合这部分热负荷理解。`)
     : '';
-  const weatherWarnings = weather.thermalSeverity === 'heat-stress'
+  const weatherWarnings = weather.thermalSeverity === 'heat-stress' && adjustment?.applied
     ? [en ? 'Clear heat stress detected; reduce expectations, prioritize cooling and hydration.' : '检测到明显热应激，应下调配速预期，优先做好降温和补水。']
     : [];
+  const controlledSessionFact = adjustment?.sessionEffortControlled
+    ? (en
+        ? ` The session itself stayed controlled${activity.average_heartrate ? ` at ${Math.round(activity.average_heartrate)} bpm average HR` : ''}${adjustment.relativeEffort !== null ? ` with Relative Effort ${adjustment.relativeEffort}` : ''}.`
+        : ` 本次单次努力保持受控${activity.average_heartrate ? `，平均心率 ${Math.round(activity.average_heartrate)} bpm` : ''}${adjustment.relativeEffort !== null ? `，Relative Effort ${adjustment.relativeEffort}` : ''}。`)
+    : '';
+  const cumulativeRecoveryFact = cumulativeRecoveryHigh
+    ? (en
+        ? ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `This was running day ${adjustment.consecutiveRunDays} in a row; ` : ''}rolling load is elevated, so cumulative recovery deserves attention even though this session was controlled.`
+        : ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `这是连续第 ${adjustment.consecutiveRunDays} 天跑步；` : ''}近期累计负荷偏高，因此需要关注累计恢复，但不改变本次执行受控的结论。`)
+    : '';
 
   return {
     summary: en
-      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${encouragement}`
-      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${encouragement}`,
+      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`
+      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`,
     intensity: classification.intensity,
     recoveryHours: Math.max(
       activity.distance > 10000 ? 36 : 24,
@@ -183,13 +203,23 @@ export function generateFallbackAnalysis(
       description: zoneDesc,
       appropriateness: 'appropriate',
     },
-    trainingLoadContext: en
-      ? `Avg weekly distance over past 4 weeks: ${(profile.patterns.typicalWeekDistance / 1000).toFixed(1)}km`
-      : `近4周平均周跑量${(profile.patterns.typicalWeekDistance / 1000).toFixed(1)}km`,
+    trainingLoadContext: adjustment?.current7DayTrainingLoad !== null && adjustment?.current7DayTrainingLoad !== undefined
+      ? (en
+          ? `Rolling 7-day load ${adjustment.current7DayTrainingLoad} points${adjustment.trainingLoadRatio !== null ? `, ${adjustment.trainingLoadRatio}x the prior 3-week average` : ''}. Session intensity and cumulative recovery are evaluated separately.`
+          : `近 7 天训练负荷 ${adjustment.current7DayTrainingLoad} 点${adjustment.trainingLoadRatio !== null ? `，为前 3 周均值的 ${adjustment.trainingLoadRatio} 倍` : ''}；本次强度与累计恢复分开判断。`)
+      : (en
+          ? `Avg weekly distance over past 4 weeks: ${(profile.patterns.typicalWeekDistance / 1000).toFixed(1)}km`
+          : `近4周平均周跑量${(profile.patterns.typicalWeekDistance / 1000).toFixed(1)}km`),
     similarActivitiesInsight: fallbackComparison?.similarActivitiesInsight || (en ? 'No similar workout data yet' : '暂无类似训练数据'),
-    nextWorkoutSuggestion: profile.patterns.hasLongRuns
-      ? (en ? 'Next session: easy recovery run.' : '建议下次进行轻松跑恢复')
-      : (en ? 'Next session: schedule a long aerobic run.' : '建议下次安排长距离有氧训练'),
+    nextWorkoutSuggestion: cumulativeRecoveryHigh
+      ? (en
+          ? 'Next day: rest or very easy movement; reassess before the next quality session.'
+          : '下一天优先休息或极轻松活动，恢复后再决定下一次质量课。')
+      : isLowIntensity
+        ? (en ? 'Keep the next session easy unless freshness is clearly back.' : '下一次继续以轻松为主，主观状态恢复后再增加强度。')
+        : profile.patterns.hasLongRuns
+          ? (en ? 'Next session: easy recovery run.' : '建议下次进行轻松跑恢复')
+          : (en ? 'Next session: schedule a long aerobic run.' : '建议下次安排长距离有氧训练'),
     warnings: weatherWarnings,
   };
 }

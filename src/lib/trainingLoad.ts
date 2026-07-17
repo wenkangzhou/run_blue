@@ -1,5 +1,5 @@
 import type { StravaActivity } from '@/types';
-import { getActivityTimestamp } from '@/lib/dates';
+import { formatLocalDateKey, getActivityDateKey, getActivityTimestamp } from '@/lib/dates';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -19,9 +19,11 @@ export interface TrainingLoadSummary {
   averageWeeklyLoad: number;
   loadRatio: number | null;
   changePercent: number | null;
+  changeReliability: 'low' | 'normal';
   state: TrainingLoadState;
   heartRateCoverage: number;
   latestRunDaysAgo: number | null;
+  consecutiveRunDays: number;
   weeks: WeeklyTrainingLoad[];
 }
 
@@ -68,21 +70,45 @@ function getWeekLabel(now: Date, weeksAgo: number): string {
   return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
 }
 
+function getPreviousDateKey(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - 1);
+  return formatLocalDateKey(date);
+}
+
+function calculateConsecutiveRunDays(
+  runs: Array<{ activity: StravaActivity; timestamp: number }>
+): number {
+  if (runs.length === 0) return 0;
+
+  const dateKeys = new Set(runs.map(({ activity }) => getActivityDateKey(activity)));
+  let currentKey = getActivityDateKey(runs[0].activity);
+  let count = 0;
+  while (dateKeys.has(currentKey)) {
+    count += 1;
+    currentKey = getPreviousDateKey(currentKey);
+  }
+  return count;
+}
+
 export function calculateTrainingLoadSummary(
   activities: StravaActivity[],
   lthr?: number | null,
   now = new Date()
 ): TrainingLoadSummary {
   const nowTime = now.getTime();
-  const recentRuns = activities
+  const allRuns = activities
     .filter(isRun)
     .map((activity) => ({
       activity,
       timestamp: getActivityTimestamp(activity),
       load: calculateActivityTrainingLoad(activity, lthr),
     }))
-    .filter((item) => item.timestamp <= nowTime && item.timestamp > nowTime - 28 * DAY_MS)
+    .filter((item) => item.timestamp <= nowTime)
     .sort((a, b) => b.timestamp - a.timestamp);
+  const consecutiveRunDays = calculateConsecutiveRunDays(allRuns);
+  const recentRuns = allRuns.filter((item) => item.timestamp > nowTime - 28 * DAY_MS);
 
   const weekBuckets = Array.from({ length: 4 }, (_, index) => ({
     key: getWeekLabel(now, 3 - index),
@@ -117,6 +143,12 @@ export function calculateTrainingLoadSummary(
   const changePercent = previous7DayLoad > 0
     ? Math.round(((current7DayLoad - previous7DayLoad) / previous7DayLoad) * 100)
     : null;
+  const previousWeek = weekBuckets[2];
+  const minimumReliablePreviousLoad = Math.max(30, averageWeeklyLoad * 0.4);
+  const changeReliability = previousWeek.runs >= 2
+    && previous7DayLoad >= minimumReliablePreviousLoad
+    ? 'normal'
+    : 'low';
   const latestRunDaysAgo = recentRuns.length > 0
     ? Math.max(0, Math.floor((nowTime - recentRuns[0].timestamp) / DAY_MS))
     : null;
@@ -142,9 +174,11 @@ export function calculateTrainingLoadSummary(
     averageWeeklyLoad,
     loadRatio,
     changePercent,
+    changeReliability,
     state,
     heartRateCoverage,
     latestRunDaysAgo,
+    consecutiveRunDays,
     weeks: weekBuckets,
   };
 }

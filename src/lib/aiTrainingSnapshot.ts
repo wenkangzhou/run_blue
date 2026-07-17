@@ -16,7 +16,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '8';
+  schemaVersion: '9';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -29,6 +29,7 @@ export interface AITrainingSnapshot {
     hasHeartRate: boolean;
     averageHeartRate?: number;
     maxHeartRate?: number;
+    relativeEffort?: number;
     personalRecords: ReturnType<typeof getActivityPersonalRecords>;
     bestEfforts: ReturnType<typeof getActivityBestEfforts>;
     laps: Array<Pick<ActivityLap, 'lap_index' | 'distance' | 'moving_time' | 'elapsed_time' | 'average_speed' | 'max_speed' | 'average_heartrate' | 'max_heartrate' | 'total_elevation_gain'>>;
@@ -98,7 +99,7 @@ export function buildAITrainingSnapshot(input: {
   const bestEfforts = getActivityBestEfforts(activity);
 
   return {
-    schemaVersion: '8',
+    schemaVersion: '9',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -111,6 +112,7 @@ export function buildAITrainingSnapshot(input: {
       hasHeartRate: activity.has_heartrate,
       averageHeartRate: finiteNumber(activity.average_heartrate),
       maxHeartRate: finiteNumber(activity.max_heartrate),
+      relativeEffort: finiteNumber(activity.suffer_score),
       personalRecords,
       bestEfforts,
       laps: sanitizeLaps(activity.laps),
@@ -156,6 +158,7 @@ export function getPromptInputsFromSnapshot(snapshot: AITrainingSnapshot): {
     has_heartrate: snapshot.workout.hasHeartRate,
     average_heartrate: snapshot.workout.averageHeartRate,
     max_heartrate: snapshot.workout.maxHeartRate,
+    suffer_score: snapshot.workout.relativeEffort,
     best_efforts: bestEfforts.length > 0
       ? bestEfforts.map((effort) => ({
           name: effort.name,

@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       {
         activityLoad: activityTrainingLoad,
         summary: trainingLoadSummary,
+        maxHeartRate,
       }
     );
     

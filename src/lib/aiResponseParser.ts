@@ -59,10 +59,16 @@ function getTrainingLoadFact(
   const previous = adjustment.previous7DayTrainingLoad;
   const average = adjustment.averageWeeklyTrainingLoad;
   const change = adjustment.trainingLoadChangePercent;
-  const comparison = change !== null && previous !== null
+  const comparison = change !== null
+    && previous !== null
+    && adjustment.trainingLoadChangeReliable !== false
     ? (en
         ? `${change >= 0 ? '+' : ''}${change}% vs the previous 7 days`
         : `较上一个 7 天${change >= 0 ? '+' : ''}${change}%`)
+    : adjustment.trainingLoadRatio !== null
+      ? (en
+          ? `${adjustment.trainingLoadRatio}x the prior 3-week average`
+          : `为前 3 周均值的 ${adjustment.trainingLoadRatio} 倍`)
     : average !== null
       ? (en ? `prior 3-week average ${average}` : `前 3 周均值 ${average} 点`)
       : '';
@@ -83,15 +89,46 @@ function getLoadAdjustedSummary(
   const en = locale.startsWith('en');
   const trainingLoadFact = getTrainingLoadFact(adjustment, locale);
   if (!adjustment.applied) {
-    const isHighLoad = adjustment.trainingLoadState === 'high';
-    const alreadyMentionsLoad = en
-      ? /(?:rolling|7-day|weekly) (?:training )?load|load points/i.test(summary)
-      : /(?:近\s*7\s*天|滚动|近期|本周).{0,8}(?:训练)?负荷|负荷点/.test(summary);
-    if (!isHighLoad || !trainingLoadFact || alreadyMentionsLoad) return summary;
-    const loadConclusion = en
-      ? `${trainingLoadFact} is elevated, so recovery should be more conservative than this single session alone suggests.`
-      : `${trainingLoadFact}处于偏高状态，因此恢复安排应比只看本次训练更保守。`;
-    return [summary, loadConclusion].filter(Boolean).join(en ? ' ' : '');
+    const summaryWithRecoveryFloor = adjustment.minimumRecoveryHours > 0
+      ? en
+        ? summary.replace(
+            /(?:allow|recommend)\s+(?:about\s+)?(\d+)\s*h(?:ours?)?\s+(?:of\s+)?recovery/gi,
+            (match, hours: string) => Number(hours) < adjustment.minimumRecoveryHours
+              ? `allow at least ${adjustment.minimumRecoveryHours}h recovery`
+              : match
+          )
+        : summary.replace(
+            /建议恢复(?:约)?\s*(\d+)\s*(?:h|小时)/g,
+            (match, hours: string) => Number(hours) < adjustment.minimumRecoveryHours
+              ? `建议至少 ${adjustment.minimumRecoveryHours}h 恢复`
+              : match
+          )
+      : summary;
+    const summaryWithCompleteEnding = (() => {
+      let value = summaryWithRecoveryFloor.trim();
+      if (!en) {
+        value = value.replace(/((?:配速|均配)[^。！？!?]{0,24}\d+'\d{2})$/, '$1"/km');
+      }
+      return /[。！？!?.]$/.test(value) ? value : `${value}${en ? '.' : '。'}`;
+    })();
+    const isHighLoad = adjustment.cumulativeLoadConcern === 'high';
+    const alreadySeparatesSession = en
+      ? /single-session effort|session itself/i.test(summaryWithCompleteEnding)
+      : /本次(?:单次|本身).{0,8}(?:努力|强度|负荷)|单次训练/.test(summaryWithCompleteEnding);
+    if (!isHighLoad || !trainingLoadFact || alreadySeparatesSession) return summaryWithCompleteEnding;
+    const streakFact = adjustment.consecutiveRunDays > 1
+      ? (en
+          ? ` after ${adjustment.consecutiveRunDays} consecutive running days`
+          : `，且已连续跑步 ${adjustment.consecutiveRunDays} 天`)
+      : '';
+    const loadConclusion = adjustment.sessionEffortControlled
+      ? (en
+          ? `The session itself stayed controlled; ${trainingLoadFact}${streakFact}, so cumulative recovery should be more conservative while this remains a controlled easy run.`
+          : `本次单次努力保持受控；${trainingLoadFact}${streakFact}，因此累计恢复安排需要更保守，但本次仍按受控轻松跑理解。`)
+      : (en
+          ? `${trainingLoadFact}${streakFact} is elevated, so cumulative recovery should be more conservative than this session alone suggests.`
+          : `${trainingLoadFact}${streakFact}处于偏高状态，因此累计恢复安排应比只看本次训练更保守。`);
+    return [summaryWithCompleteEnding, loadConclusion].filter(Boolean).join(en ? ' ' : '');
   }
 
   const intensityLabel = en
@@ -101,24 +138,15 @@ function getLoadAdjustedSummary(
     ? ''
     : `${formatPace(adjustment.paceSecondsPerKm)}/km`;
   const weatherFact = getWeatherFact(activity, locale);
-  const volumeFact = adjustment.recentVolumeChangePercent !== null
-    ? (en
-        ? `recent 7-day volume ${adjustment.recentVolumeChangePercent >= 0 ? '+' : ''}${adjustment.recentVolumeChangePercent}%`
-        : `近 7 天跑量环比${adjustment.recentVolumeChangePercent >= 0 ? '+' : ''}${adjustment.recentVolumeChangePercent}%`)
-    : adjustment.recentVolumeRatio !== null
-      ? (en
-          ? `recent volume at ${adjustment.recentVolumeRatio}x the prior baseline`
-          : `近 7 天跑量达到此前基线的 ${adjustment.recentVolumeRatio} 倍`)
-      : '';
   const paceFact = adjustment.paceContext === 'upper-easy' && pace
     ? (en ? `${pace} sits on the faster side of the athlete's easy zone` : `${pace}已处于个人 E 区较快一侧`)
     : adjustment.paceContext === 'quality' && pace
       ? (en ? `${pace} is already a quality-zone pace` : `${pace}已进入质量训练配速`)
       : pace;
-  const facts = [paceFact, weatherFact, trainingLoadFact || volumeFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
+  const facts = [paceFact, weatherFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
   const lead = en
-    ? `${facts || 'The combined conditions'} make this a ${intensityLabel} internal-load session rather than an easy or recovery effort; allow at least ${adjustment.minimumRecoveryHours}h recovery.`
-    : `${facts || '当前综合条件'}使本次综合负荷应按${intensityLabel}而非轻松或恢复负荷解读；建议至少 ${adjustment.minimumRecoveryHours}h 恢复。`;
+    ? `${facts || 'The current-session evidence'} makes this session ${intensityLabel}; allow at least ${adjustment.minimumRecoveryHours}h recovery. Rolling load is a separate recovery-context conclusion.`
+    : `${facts || '本次数据'}使本次单次强度应按${intensityLabel}解读；建议至少 ${adjustment.minimumRecoveryHours}h 恢复。滚动负荷只作为另一层累计恢复背景。`;
 
   let cleaned = summary;
   if (en) {
@@ -148,15 +176,21 @@ function getLoadAdjustedWarnings(
   locale: string
 ): string[] {
   const adjustment = classification.loadAdjustment;
-  if (!adjustment?.applied) return warnings;
-  const loadFact = getTrainingLoadFact(adjustment, locale);
+  if (!adjustment) return warnings;
+  const cumulativeOnlyPattern = locale.startsWith('en')
+    ? /(?:rolling|weekly|7-day|cumulative) (?:training )?load|running streak|consecutive running days/i
+    : /(?:滚动|近期|本周|近\s*7\s*天|累计)(?:训练)?负荷|连续跑步|连续训练/;
+  const remainingWarnings = adjustment.sessionEffortControlled && !adjustment.applied
+    ? warnings.filter((item) => !cumulativeOnlyPattern.test(item))
+    : warnings;
+  if (!adjustment.applied) return remainingWarnings;
   const warning = locale.startsWith('en')
-    ? `Heat, pace position, and ${loadFact || 'recent training load'} raise recovery cost beyond what the external pace-zone label suggests.`
-    : `高温、个人配速位置与${loadFact || '近期训练负荷'}叠加，本次恢复成本高于外部配速区间标签所显示的水平。`;
-  const remainingWarnings = warnings.filter(
-    (item) => !/恢复成本高于外部配速区间|recovery cost beyond what the external pace-zone/i.test(item)
+    ? `Heat and the current pace/effort raise this session's cost beyond what the external pace-zone label alone suggests.`
+    : `高温与本次配速/努力程度共同抬高了单次训练成本，不能只按外部配速区间标签解读。`;
+  const dedupedWarnings = remainingWarnings.filter(
+    (item) => !/单次训练成本|session's cost beyond what the external pace-zone/i.test(item)
   );
-  return [warning, ...remainingWarnings];
+  return [warning, ...dedupedWarnings];
 }
 
 function getTrainingLoadContext(
@@ -186,9 +220,22 @@ function getTrainingLoadContext(
     : en
       ? `; this activity contributed ${adjustment.activityTrainingLoad} points${adjustment.activityTrainingLoadSharePercent !== null ? ` (${adjustment.activityTrainingLoadSharePercent}%)` : ''}`
       : `；本次贡献 ${adjustment.activityTrainingLoad} 点${adjustment.activityTrainingLoadSharePercent !== null ? `，占 ${adjustment.activityTrainingLoadSharePercent}%` : ''}`;
+  const streakFact = adjustment.consecutiveRunDays > 1
+    ? (en
+        ? `; ${adjustment.consecutiveRunDays} consecutive running days`
+        : `；已连续跑步 ${adjustment.consecutiveRunDays} 天`)
+    : '';
+  const effortFact = adjustment.relativeEffort !== null
+    ? (en ? `; Relative Effort ${adjustment.relativeEffort}` : `；Relative Effort ${adjustment.relativeEffort}`)
+    : '';
+  const interpretation = adjustment.sessionEffortControlled
+    ? (en
+        ? ' The session itself was controlled; this context affects cumulative recovery, not the session-intensity label.'
+        : ' 本次单次努力受控；这些数据影响的是累计恢复安排，不改写本次强度标签。')
+    : '';
   const deterministic = en
-    ? `${loadFact}; state ${stateLabel}${activityFact}.`
-    : `${loadFact}，状态为${stateLabel}${activityFact}。`;
+    ? `${loadFact}; state ${stateLabel}${activityFact}${streakFact}${effortFact}.${interpretation}`
+    : `${loadFact}，状态为${stateLabel}${activityFact}${streakFact}${effortFact}。${interpretation}`;
   return [deterministic, text].filter(Boolean).join(en ? ' ' : '');
 }
 
@@ -475,10 +522,64 @@ function normalizeUnplannedTargetText(text: string, locale: string): string {
     .replace(/目标区间/g, '训练区间');
 }
 
+function normalizeUnsupportedPhysiologyText(text: string, locale: string): string {
+  if (!text) return text;
+  const en = locale.startsWith('en');
+  const sentences = text.match(/[^。！？!?]+[。！？!?]?/g)?.map((item) => item.trim()).filter(Boolean) ?? [text];
+  const normalized = sentences.map((sentence) => {
+    if (en) {
+      if (/autonomic nervous system|soft[- ]tissue (?:damage|repair)|sleep debt/i.test(sentence)) {
+        return 'Cumulative recovery is elevated, but readiness still needs to be checked against subjective fatigue.';
+      }
+      if (/\bice|icing\b/i.test(sentence)) {
+        return 'Prioritize ordinary rest and mobility, and respond to any actual discomfort rather than assuming tissue damage.';
+      }
+      if (/cancel (?:all|every).{0,20}(?:quality|hard) session/i.test(sentence)) {
+        return 'Make the next day rest or very easy, then decide on the next quality session from actual recovery.';
+      }
+      return sentence;
+    }
+
+    if (/自主神经|软组织(?:损伤|修复滞后)|睡眠债/.test(sentence)) {
+      return '累计恢复压力偏高，但恢复状态仍需结合主观疲劳确认。';
+    }
+    if (/冰敷/.test(sentence)) {
+      return '优先安排常规休息和放松，并根据实际不适决定是否进一步处理。';
+    }
+    if (/取消.{0,12}(?:全部|所有).{0,8}质量课|本周.{0,8}质量课.{0,8}(?:全部取消|取消)/.test(sentence)) {
+      return '下一天先休息或极轻松活动，之后再根据实际恢复决定质量课。';
+    }
+    return sentence;
+  });
+
+  return Array.from(new Set(normalized)).join(en ? ' ' : '');
+}
+
+function getRecoveryFirstSuggestion(
+  classification: ActivityClassification,
+  locale: string
+): string | null {
+  if (classification.loadAdjustment?.cumulativeLoadConcern !== 'high') return null;
+  return locale.startsWith('en')
+    ? 'Next day: rest or very easy movement; resume a quality session only after subjective fatigue has settled.'
+    : '下一天优先休息或极轻松活动；主观疲劳恢复后，再决定是否安排质量课。';
+}
+
+function normalizeSuggestionsForRecoveryContext(
+  suggestions: string[],
+  classification: ActivityClassification,
+  locale: string
+): string[] {
+  const recoveryFirst = getRecoveryFirstSuggestion(classification, locale);
+  if (!recoveryFirst) return suggestions;
+  return [recoveryFirst];
+}
+
 function normalizeFinalTextPolish(text: string, locale: string): string {
   if (!text || locale.startsWith('en')) return text;
 
   return text
+    .replace(/(\d+'\d{2})(?=本次(?:单次|本身)(?:努力|强度|负荷)|单次训练)/g, '$1"/km。')
     .replace(/主动冷身或主动降速或短暂疲劳/g, '主动冷身、结构调整或短暂疲劳')
     .replace(/主动冷身或短暂疲劳/g, '主动冷身或短暂疲劳')
     .replace(/主动降速或短暂疲劳/g, '主动冷身或短暂疲劳');
@@ -501,22 +602,25 @@ function normalizeAnalysisText(
   locale: string
 ): string {
   return normalizeFinalTextPolish(
-    normalizeUnplannedTargetText(
-      normalizeWorkoutSpecificText(
-        normalizeMissingDataText(
-          normalizeLowIntensityText(
-            normalizeHydrationText(
-              normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
-              activity,
+    normalizeUnsupportedPhysiologyText(
+      normalizeUnplannedTargetText(
+        normalizeWorkoutSpecificText(
+          normalizeMissingDataText(
+            normalizeLowIntensityText(
+              normalizeHydrationText(
+                normalizeThermalText(normalizeConfidenceText(text, locale), activity, locale),
+                activity,
+                locale
+              ),
+              classification,
               locale
             ),
-            classification,
+            activity,
             locale
           ),
-          activity,
+          classification,
           locale
         ),
-        classification,
         locale
       ),
       locale
@@ -532,13 +636,14 @@ export function normalizeAIAnalysisForDisplay(
   locale: string = 'zh'
 ): AIAnalysis {
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
-  const suggestions = Array.isArray(analysis.suggestions)
+  const suggestions = normalizeSuggestionsForRecoveryContext(Array.isArray(analysis.suggestions)
     ? analysis.suggestions
         .map((suggestion) => normalizeForDisplay(suggestion))
         .map((suggestion) => normalizeLowIntensitySuggestion(suggestion, activity, classification, locale))
         .map((suggestion) => suggestion ? normalizeWorkoutSpecificText(suggestion, classification, locale) : suggestion)
         .filter((suggestion): suggestion is string => Boolean(suggestion))
-    : [];
+    : [], classification, locale);
+  const recoveryFirstSuggestion = getRecoveryFirstSuggestion(classification, locale);
 
   const summary = getLoadAdjustedSummary(
     ensurePrioritySummary(normalizeForDisplay(analysis.summary || ''), activity, locale),
@@ -565,7 +670,8 @@ export function normalizeAIAnalysisForDisplay(
       locale
     ),
     similarActivitiesInsight: normalizeForDisplay(analysis.similarActivitiesInsight || ''),
-    nextWorkoutSuggestion: normalizeForDisplay(analysis.nextWorkoutSuggestion || ''),
+    nextWorkoutSuggestion: recoveryFirstSuggestion
+      ?? normalizeForDisplay(analysis.nextWorkoutSuggestion || ''),
     suggestions,
     warnings,
     paceZoneAnalysis: analysis.paceZoneAnalysis
@@ -671,16 +777,16 @@ export function parseAIResponse(
     classification,
     locale
   );
-  const normalizedNextWorkoutSuggestion = normalizeForDisplay(
+  const normalizedNextWorkoutSuggestion = getRecoveryFirstSuggestion(classification, locale) ?? normalizeForDisplay(
     result.nextWorkoutSuggestion || (classification.isRace ? '赛后请充分休息恢复' : ''),
   );
-  const normalizedSuggestions = Array.isArray(result.suggestions)
+  const normalizedSuggestions = normalizeSuggestionsForRecoveryContext(Array.isArray(result.suggestions)
     ? result.suggestions
         .map((suggestion: string) => normalizeForDisplay(suggestion))
         .map((suggestion: string) => normalizeLowIntensitySuggestion(suggestion, activity, classification, locale))
         .map((suggestion: string | null) => suggestion ? normalizeWorkoutSpecificText(suggestion, classification, locale) : suggestion)
         .filter((suggestion: string | null): suggestion is string => Boolean(suggestion))
-    : [];
+    : [], classification, locale);
   const normalizedWarnings = getLoadAdjustedWarnings(
     Array.isArray(result.warnings)
       ? result.warnings.map((warning: string) => normalizeForDisplay(warning))

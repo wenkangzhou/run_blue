@@ -20,7 +20,15 @@ const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === '@/lib/dates') {
-    return { getActivityTimestamp: (activity) => new Date(activity.start_date).getTime() };
+    return {
+      getActivityTimestamp: (activity) => new Date(activity.start_date).getTime(),
+      getActivityDateKey: (activity) => activity.start_date.slice(0, 10),
+      formatLocalDateKey: (date) => [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-'),
+    };
   }
   return originalLoad.call(this, request, parent, isMain);
 };
@@ -71,6 +79,8 @@ test('training load summary builds four weeks and flags a sharp recent increase'
     Math.round(summary.weeks.slice(0, 3).reduce((total, week) => total + week.load, 0) / 3)
   );
   assert.equal(summary.heartRateCoverage, 100);
+  assert.equal(summary.changeReliability, 'low');
+  assert.equal(summary.consecutiveRunDays, 1);
 });
 
 test('training load summary reports insufficient evidence conservatively', () => {
@@ -81,4 +91,14 @@ test('training load summary reports insufficient evidence conservatively', () =>
   );
   assert.equal(summary.state, 'insufficient');
   assert.equal(summary.latestRunDaysAgo, 1);
+});
+
+test('training load summary counts consecutive running days ending at the latest run', () => {
+  const summary = calculateTrainingLoadSummary(
+    [makeRun(0), makeRun(1), makeRun(2), makeRun(4)],
+    175,
+    new Date('2026-07-02T12:00:00Z')
+  );
+
+  assert.equal(summary.consecutiveRunDays, 3);
 });

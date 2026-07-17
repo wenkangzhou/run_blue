@@ -61,6 +61,8 @@ export interface ActivityLoadAdjustment {
   applied: boolean;
   baseIntensity: ActivityClassification['intensity'];
   adjustedIntensity: ActivityClassification['intensity'];
+  sessionEffortControlled: boolean;
+  cumulativeLoadConcern: 'none' | 'watch' | 'high';
   thermalSeverity: 'neutral' | 'muggy' | 'heat-load' | 'heat-stress';
   paceContext: 'relaxed-easy' | 'upper-easy' | 'quality' | 'unknown';
   paceSecondsPerKm: number | null;
@@ -73,10 +75,13 @@ export interface ActivityLoadAdjustment {
   previous7DayTrainingLoad: number | null;
   averageWeeklyTrainingLoad: number | null;
   trainingLoadChangePercent: number | null;
+  trainingLoadChangeReliable: boolean | null;
   trainingLoadRatio: number | null;
   trainingLoadState: 'insufficient' | 'recover' | 'balanced' | 'building' | 'high' | null;
   trainingLoadHeartRateCoverage: number | null;
   activityTrainingLoadSharePercent: number | null;
+  relativeEffort: number | null;
+  consecutiveRunDays: number;
   minimumRecoveryHours: number;
 }
 

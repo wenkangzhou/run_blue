@@ -322,6 +322,11 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Raw Seconds: ${activity.moving_time}s (for precise calculation)`
     : `\n- 原始秒数: ${activity.moving_time}秒（用于精确计算）`;
+  if (typeof activity.suffer_score === 'number' && Number.isFinite(activity.suffer_score)) {
+    prompt += en
+      ? `\n- Strava Relative Effort: ${Math.round(activity.suffer_score)}`
+      : `\n- Strava 相对努力程度（Relative Effort）: ${Math.round(activity.suffer_score)}`;
+  }
 
   prompt += en ? `\n\n## Workout Classification` : `\n\n## 训练类型识别`;
   prompt += en
@@ -391,10 +396,17 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- Current 7 days: ${loadAdjustment.current7DayTrainingLoad} points; previous 7 days: ${loadAdjustment.previous7DayTrainingLoad ?? 'n/a'}; prior 3-week average: ${loadAdjustment.averageWeeklyTrainingLoad ?? 'n/a'}`
       : `\n- 近 7 天: ${loadAdjustment.current7DayTrainingLoad} 点；上一个 7 天: ${loadAdjustment.previous7DayTrainingLoad ?? '未知'} 点；前 3 周均值: ${loadAdjustment.averageWeeklyTrainingLoad ?? '未知'} 点`;
-    if (loadAdjustment.trainingLoadChangePercent !== null) {
+    if (
+      loadAdjustment.trainingLoadChangePercent !== null
+      && loadAdjustment.trainingLoadChangeReliable !== false
+    ) {
       prompt += en
         ? `\n- Change vs previous 7 days: ${loadAdjustment.trainingLoadChangePercent >= 0 ? '+' : ''}${loadAdjustment.trainingLoadChangePercent}%`
         : `\n- 较上一个 7 天: ${loadAdjustment.trainingLoadChangePercent >= 0 ? '+' : ''}${loadAdjustment.trainingLoadChangePercent}%`;
+    } else if (loadAdjustment.trainingLoadChangePercent !== null) {
+      prompt += en
+        ? `\n- Week-over-week percentage is low-confidence because the previous 7-day baseline is too small; do not quote or emphasize it.`
+        : `\n- 上一个 7 天基数过小，环比百分比置信度低；禁止引用或强调这个百分比。`;
     }
     if (loadAdjustment.trainingLoadRatio !== null) {
       prompt += en
@@ -404,15 +416,30 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- Load state: ${stateLabel}; heart-rate coverage: ${loadAdjustment.trainingLoadHeartRateCoverage ?? 0}%`
       : `\n- 负荷状态: ${stateLabel}；心率覆盖率: ${loadAdjustment.trainingLoadHeartRateCoverage ?? 0}%`;
+    if (loadAdjustment.consecutiveRunDays > 1) {
+      prompt += en
+        ? `\n- Consecutive running days ending with this activity: ${loadAdjustment.consecutiveRunDays}`
+        : `\n- 截至本次已连续跑步 ${loadAdjustment.consecutiveRunDays} 天`;
+    }
+    if (loadAdjustment.relativeEffort !== null) {
+      prompt += en
+        ? `\n- Relative Effort for this activity: ${loadAdjustment.relativeEffort}`
+        : `\n- 本次 Relative Effort: ${loadAdjustment.relativeEffort}`;
+    }
     prompt += en
-      ? `\n- Use these load points as the primary recent-load signal. Distance-only weekly volume is secondary. Explain what this means for this session's real cost and recovery without merely repeating the numbers.`
-      : `\n- 必须把负荷点作为近期负荷的首要信号，单纯周跑量只作补充。需要解释它对本次真实训练成本与恢复安排的影响，禁止只复述数字。`;
+      ? `\n- HARD SEPARATION RULE: session intensity and cumulative recovery status are different conclusions. Rolling load and a running streak may make recovery more conservative, but must not by themselves relabel a controlled easy session as moderate or hard.`
+      : `\n- 硬性分层规则：本次强度与累计恢复状态是两个不同结论。滚动负荷和连续训练可以让恢复安排更保守，但不得单独把一次受控轻松跑改判为适中或高强度。`;
+    if (loadAdjustment.sessionEffortControlled) {
+      prompt += en
+        ? `\n- Deterministic session reading: current-session effort was controlled. Say that clearly before discussing cumulative load.`
+        : `\n- 系统判定：本次单次努力受控。必须先明确肯定本次执行，再讨论累计恢复压力。`;
+    }
   }
   if (loadAdjustment?.applied) {
     const adjustedIntensityLabel = en
       ? loadAdjustment.adjustedIntensity
       : ({ easy: '轻松', moderate: '适中', hard: '高强度', extreme: '极限' } as const)[loadAdjustment.adjustedIntensity];
-    prompt += en ? `\n\n## Deterministic Internal-load Override` : `\n\n## 系统综合负荷校正`;
+    prompt += en ? `\n\n## Current-session Heat Adjustment` : `\n\n## 本次热环境强度校正`;
     prompt += en
       ? `\n- External pace-zone label: ${classification.paceZone}; adjusted internal intensity: ${adjustedIntensityLabel}`
       : `\n- 外部配速区间仍为 ${classification.paceZone}，但综合内部强度已校正为：${adjustedIntensityLabel}`;
@@ -422,8 +449,8 @@ export function buildProfessionalPrompt(
         : `\n- 本次均配: ${formatPace(loadAdjustment.paceSecondsPerKm)}/km；个人配速位置: ${loadAdjustment.paceContext === 'upper-easy' ? 'E 区较快一侧' : loadAdjustment.paceContext === 'quality' ? '质量训练区间' : 'E 区放松侧'}`;
     }
     prompt += en
-      ? `\n- HARD RULE: Heat/humidity, pace position, and rolling training-load points jointly override a generic easy/recovery label. Do not call this session easy, light, or recovery-load. Output intensity at least ${adjustedIntensityLabel} and recovery at least ${loadAdjustment.minimumRecoveryHours}h.`
-      : `\n- 硬性规则：高温高湿、个人配速位置与滚动训练负荷点共同优先于泛化的轻松/恢复标签。不得把本次写成“轻松”“低负荷”或“恢复负荷”；intensity 不得低于“${adjustedIntensityLabel}”，建议恢复不得少于 ${loadAdjustment.minimumRecoveryHours}h。`;
+      ? `\n- HARD RULE: Current-session heat plus pace/effort evidence raises this session to at least ${adjustedIntensityLabel}. This correction is based on the session itself, not on rolling load. Recovery must be at least ${loadAdjustment.minimumRecoveryHours}h.`
+      : `\n- 硬性规则：本次热环境与配速/努力证据共同把单次强度校正为至少“${adjustedIntensityLabel}”。这项校正来自本次数据本身，不来自滚动负荷；建议恢复不得少于 ${loadAdjustment.minimumRecoveryHours}h。`;
   }
 
   // Athlete physique info
@@ -772,8 +799,8 @@ export function buildProfessionalPrompt(
       ? `\n2b. For progression or warmup/cooldown structures, a slower final segment after a fast segment is usually cooldown or a deliberate structure change. Do NOT write overconfident phrases like "monitoring failure", "poor execution", or "insufficient reserves" solely because pace and heart rate dropped together.`
       : `\n2b. 对渐进跑或热身/冷身结构，快段之后的末段降速通常是主动冷身或结构调整。不要仅因为配速和心率同时下降，就写出“监控不足”“执行失败”“体能储备不足”等过度笃定结论。`;
     prompt += en
-      ? `\n3. Load assessment: Judge based on (a) this workout's intensity and distance ratio to current week volume, (b) week-over-week change. If current week volume jumped >15% vs last week, FLAG it as "volume increase too fast, injury risk". If the workout itself is hard (T/I/R zone) and >15% of weekly volume, FLAG it as "high single-session load". Do NOT mechanically say "volume is too low" when weekly volume is actually rising.`
-      : `\n3. 负荷评估: 基于以下两点判断：(a)本次训练强度及占本周跑量比例，(b)本周 vs 上周跑量环比变化。如果本周跑量环比上周增长>15%，必须标记为"跑量增加过快，注意受伤风险"。如果单次高强度训练（T/I/R区）占本周跑量>15%，标记为"单次负荷较大"。不要在周跑量实际处于上升期时机械地说"跑量偏低"。`;
+      ? `\n3. Load assessment: First judge this workout from its own pace, HR, structure, weather, and Relative Effort. Then assess cumulative recovery using rolling load, the prior 3-week baseline, and consecutive running days. Use week-over-week percentages only when marked reliable. A high cumulative load calls for conservative recovery; it does not mean this workout itself was hard or poorly executed.`
+      : `\n3. 负荷评估：先根据本次配速、心率、结构、天气和 Relative Effort 判断单次训练，再结合滚动负荷、前3周基线和连续跑步天数评估累计恢复。只有标记为可靠时才使用周环比百分比。累计负荷偏高意味着恢复要更保守，不等于本次本身很难或执行失败。`;
     if (similarStats) {
       prompt += en
         ? `\n4. Comparable workout comparison (${similarStats.count} ${distanceLabel}, ${similarStats.comparisonMode === 'strict' ? 'strict same-type' : 'distance-matched fallback'}, confidence ${similarStats.sampleConfidence}): this pace ${paceStr}/km vs historical avg ${formatPace(similarStats.avgPace * 60)}/km and fastest comparable ${formatPace(similarStats.bestPace * 60)}/km. You outpaced ${similarStats.yourPaceRank}% of them.`
@@ -896,6 +923,9 @@ export function buildProfessionalPrompt(
     ? `\n- Separate hard facts from inference. For example: lap structure, split pattern, weather, and heart-rate zones are facts; workout intent is an inference that should match the supplied classification confidence.`
     : `\n- 请区分数据事实与推断。圈结构、分段模式、天气、心率区间属于事实；训练意图属于推断，且应与上面提供的训练类型置信度保持一致。`;
   prompt += en
+    ? `\n- Do not invent physiology or medical claims. Unless directly measured, never claim autonomic-nervous-system suppression, soft-tissue damage, sleep debt, dehydration, or injury. Do not prescribe icing or cancel all quality sessions from load data alone.`
+    : `\n- 禁止臆测生理或医学结论。没有直接数据时，不得声称自主神经受抑制、软组织损伤、睡眠债、脱水或已经受伤；也不得仅凭负荷数据建议冰敷，或取消本周全部质量课。`;
+  prompt += en
     ? `\n- Unless the activity data explicitly contains a planned workout target, say "reference pace" or "estimated zone" instead of "target pace".`
     : `\n- 除非活动数据明确包含计划训练目标，否则不要写“目标配速”，应写“参考配速”或“能力估算区间”。`;
   prompt += en
@@ -915,8 +945,8 @@ export function buildProfessionalPrompt(
     ? `\n- If you mention confidence in Chinese output, localize it naturally as 高/中等/低 confidence instead of copying raw labels like medium or low.`
     : `\n- 如果在中文输出里提到置信度，必须写成“高/中等/低置信度”，不要直接照抄 medium / low 这类内部标签。`;
   prompt += en
-    ? `\n- In "suggestions", do NOT mechanically recommend "increase weekly volume to X km". Instead, focus on: (1) if weekly volume spiked, warn about injury risk and recommend rest; (2) if this was a hard session, recommend recovery; (3) give 1-2 specific, actionable technique or pacing tips relevant to THIS workout.`
-    : `\n- "suggestions" 中不要机械建议"把周跑量提升到XXkm"。应聚焦：(1)如果本周跑量环比大增，提醒受伤风险并建议休息；(2)如果本次是高强度训练，建议恢复；(3)给出1-2条与本次训练直接相关的技术或配速建议。`;
+    ? `\n- In "suggestions", do not mechanically recommend a weekly mileage target. Give one coherent next step: rest/easy movement when cumulative recovery is elevated, or a workout-specific technique/pacing cue when recovery is balanced. Avoid contradictory advice.`
+    : `\n- "suggestions" 中不要机械给周跑量目标。只给一条前后一致的下一步：累计恢复压力高时安排休息/极轻松活动，恢复平衡时再给与本次训练相关的技术或配速提示；禁止互相矛盾的建议。`;
   if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
     prompt += en
       ? `\n- For easy/recovery runs, avoid "target pace" language. If pace is slower than recent runs, frame it as relaxed execution unless HR/load evidence says otherwise.`

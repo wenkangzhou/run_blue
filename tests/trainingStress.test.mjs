@@ -124,26 +124,29 @@ function makeTrainingLoadContext(overrides = {}) {
       loadRatio: 1.38,
       changePercent: 298,
       state: 'high',
+      changeReliability: 'low',
       heartRateCoverage: 100,
       latestRunDaysAgo: 0,
+      consecutiveRunDays: 9,
       weeks: [],
       ...overrides,
     },
   };
 }
 
-test('raises a fast-side easy-zone run to hard when heat stress and acute volume spike combine', () => {
+test('raises a fast-side easy-zone run to moderate while keeping cumulative load separate', () => {
   const adjusted = adjustClassificationForTrainingStress(
     makeActivity(320),
     makeProfile([10000, 10000, 10000, 36900]),
     makeClassification()
   );
 
-  assert.equal(adjusted.intensity, 'hard');
+  assert.equal(adjusted.intensity, 'moderate');
   assert.equal(adjusted.loadAdjustment.applied, true);
   assert.equal(adjusted.loadAdjustment.paceContext, 'upper-easy');
   assert.equal(adjusted.loadAdjustment.recentVolumeChangePercent, 269);
-  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 48);
+  assert.equal(adjusted.loadAdjustment.cumulativeLoadConcern, 'high');
+  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 36);
 });
 
 test('keeps a genuinely relaxed hot-weather pace easy when recent load is stable', () => {
@@ -171,7 +174,7 @@ test('raises a faster hot-weather easy-zone run to moderate even before volume b
   assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 36);
 });
 
-test('uses the stats training-load calculation as the primary acute-load signal', () => {
+test('uses stats training load for cumulative recovery without inflating session intensity', () => {
   const adjusted = adjustClassificationForTrainingStress(
     makeActivity(320),
     makeProfile([40000, 40000, 40000, 40000]),
@@ -179,12 +182,43 @@ test('uses the stats training-load calculation as the primary acute-load signal'
     makeTrainingLoadContext()
   );
 
-  assert.equal(adjusted.intensity, 'hard');
+  assert.equal(adjusted.intensity, 'moderate');
   assert.equal(adjusted.loadAdjustment.activityTrainingLoad, 40);
   assert.equal(adjusted.loadAdjustment.current7DayTrainingLoad, 223);
   assert.equal(adjusted.loadAdjustment.trainingLoadChangePercent, 298);
   assert.equal(adjusted.loadAdjustment.trainingLoadRatio, 1.38);
+  assert.equal(adjusted.loadAdjustment.trainingLoadChangeReliable, false);
   assert.equal(adjusted.loadAdjustment.trainingLoadState, 'high');
   assert.equal(adjusted.loadAdjustment.activityTrainingLoadSharePercent, 18);
-  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 48);
+  assert.equal(adjusted.loadAdjustment.consecutiveRunDays, 9);
+  assert.equal(adjusted.loadAdjustment.cumulativeLoadConcern, 'high');
+  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 36);
+});
+
+test('keeps a controlled hot recovery run easy while raising cumulative recovery concern', () => {
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(381, {
+      average_heartrate: 130,
+      suffer_score: 21,
+      weather_context: {
+        temperatureC: 30.8,
+        feelsLikeC: 35.7,
+        humidityPercent: 67,
+        sources: ['strava'],
+        source: 'strava',
+        hasWeather: true,
+        thermalSeverity: 'heat-stress',
+      },
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    makeTrainingLoadContext({ loadRatio: 1.38 })
+  );
+
+  assert.equal(adjusted.intensity, 'easy');
+  assert.equal(adjusted.loadAdjustment.applied, false);
+  assert.equal(adjusted.loadAdjustment.sessionEffortControlled, true);
+  assert.equal(adjusted.loadAdjustment.cumulativeLoadConcern, 'high');
+  assert.equal(adjusted.loadAdjustment.relativeEffort, 21);
+  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 24);
 });

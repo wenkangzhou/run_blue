@@ -10,6 +10,7 @@ import type {
 export interface TrainingLoadContext {
   activityLoad: number;
   summary: TrainingLoadSummary;
+  maxHeartRate?: number | null;
 }
 
 const INTENSITY_RANK: Record<ActivityClassification['intensity'], number> = {
@@ -33,7 +34,7 @@ function round(value: number, digits = 1): number {
 
 function getRecentVolumeContext(recentLoad: TrainingProfile['recentLoad']) {
   if (recentLoad.length === 0) {
-    return { changePercent: null, ratio: null };
+    return { changePercent: null, changeReliable: false, ratio: null };
   }
 
   const current = recentLoad[recentLoad.length - 1];
@@ -47,6 +48,11 @@ function getRecentVolumeContext(recentLoad: TrainingProfile['recentLoad']) {
     changePercent: previous && previous.totalDistance > 0
       ? Math.round(((current.totalDistance - previous.totalDistance) / previous.totalDistance) * 100)
       : null,
+    changeReliable: Boolean(
+      previous
+      && previous.runs >= 2
+      && previous.totalDistance >= Math.max(5000, baselineAverage * 0.4)
+    ),
     ratio: baselineAverage > 0 ? round(current.totalDistance / baselineAverage, 2) : null,
   };
 }
@@ -88,9 +94,9 @@ export function adjustClassificationForTrainingStress(
     || isFasterThanThermalBaseline;
 
   const volume = getRecentVolumeContext(profile.recentLoad);
-  const highRecentVolume = (volume.changePercent !== null && volume.changePercent >= 50)
+  const highRecentVolume = (volume.changeReliable && volume.changePercent !== null && volume.changePercent >= 50)
     || (volume.ratio !== null && volume.ratio >= 1.35);
-  const veryHighRecentVolume = (volume.changePercent !== null && volume.changePercent >= 100)
+  const veryHighRecentVolume = (volume.changeReliable && volume.changePercent !== null && volume.changePercent >= 100)
     || (volume.ratio !== null && volume.ratio >= 1.7);
 
   const trainingLoad = trainingLoadContext?.summary;
@@ -98,43 +104,68 @@ export function adjustClassificationForTrainingStress(
   const highTrainingLoad = Boolean(hasTrainingLoadBaseline && (
     trainingLoad!.state === 'high'
     || (trainingLoad!.loadRatio !== null && trainingLoad!.loadRatio >= 1.35)
-    || (trainingLoad!.changePercent !== null && trainingLoad!.changePercent >= 50)
+    || (trainingLoad!.changeReliability === 'normal'
+      && trainingLoad!.changePercent !== null
+      && trainingLoad!.changePercent >= 50)
   ));
   const veryHighTrainingLoad = Boolean(hasTrainingLoadBaseline && (
     (trainingLoad!.loadRatio !== null && trainingLoad!.loadRatio >= 1.7)
-    || (trainingLoad!.changePercent !== null && trainingLoad!.changePercent >= 100)
+    || (trainingLoad!.changeReliability === 'normal'
+      && trainingLoad!.changePercent !== null
+      && trainingLoad!.changePercent >= 100)
   ));
   const highRecentLoad = highTrainingLoad || highRecentVolume;
   const veryHighRecentLoad = veryHighTrainingLoad || veryHighRecentVolume;
 
+  const relativeEffort = typeof activity.suffer_score === 'number' && Number.isFinite(activity.suffer_score)
+    ? Math.round(activity.suffer_score)
+    : null;
+  const heartRateRatio = trainingLoadContext?.maxHeartRate
+    && activity.average_heartrate
+    && activity.average_heartrate > 0
+      ? activity.average_heartrate / trainingLoadContext.maxHeartRate
+      : null;
+  const hasControlledEffortSignal = (heartRateRatio !== null && heartRateRatio <= 0.81)
+    || (relativeEffort !== null && relativeEffort <= 35);
+  const sessionEffortControlled = classification.intensity === 'easy'
+    && paceContext === 'relaxed-easy'
+    && (hasControlledEffortSignal || (heartRateRatio === null && relativeEffort === null));
+
   let adjustedIntensity = classification.intensity;
   if (weather.thermalSeverity === 'heat-stress') {
-    if (pacePressure && highRecentLoad) {
-      adjustedIntensity = maxIntensity(adjustedIntensity, 'hard');
-    } else if (pacePressure || veryHighRecentLoad) {
+    if (pacePressure) {
       adjustedIntensity = maxIntensity(adjustedIntensity, 'moderate');
     }
-  } else if (weather.thermalSeverity === 'heat-load' && pacePressure && highRecentLoad) {
+  } else if (weather.thermalSeverity === 'heat-load' && pacePressure && !sessionEffortControlled) {
     adjustedIntensity = maxIntensity(adjustedIntensity, 'moderate');
   }
 
-  const loadOverrideTriggered = weather.thermalSeverity === 'heat-stress'
-    ? pacePressure || veryHighRecentLoad
-    : weather.thermalSeverity === 'heat-load' && pacePressure && highRecentLoad;
-  const applied = loadOverrideTriggered
-    || INTENSITY_RANK[adjustedIntensity] > INTENSITY_RANK[classification.intensity];
-  const minimumRecoveryHours = !applied
-    ? 0
-    : adjustedIntensity === 'hard'
-      ? 48
-      : adjustedIntensity === 'moderate'
-        ? 36
-        : 0;
+  const applied = INTENSITY_RANK[adjustedIntensity] > INTENSITY_RANK[classification.intensity];
+  const consecutiveRunDays = trainingLoad?.consecutiveRunDays ?? 0;
+  const cumulativeLoadConcern: ActivityLoadAdjustment['cumulativeLoadConcern'] =
+    veryHighRecentLoad || consecutiveRunDays >= 7
+      ? 'high'
+      : highRecentLoad || consecutiveRunDays >= 5
+        ? 'watch'
+        : 'none';
+  const sessionRecoveryFloor = adjustedIntensity === 'hard'
+    ? 48
+    : adjustedIntensity === 'moderate'
+      ? 36
+      : 0;
+  const cumulativeRecoveryFloor = cumulativeLoadConcern === 'high'
+    ? 24
+    : cumulativeLoadConcern === 'watch'
+      ? 18
+      : 0;
+  const minimumRecoveryHours = Math.max(sessionRecoveryFloor, cumulativeRecoveryFloor);
 
   const loadAdjustment: ActivityLoadAdjustment = {
     applied,
     baseIntensity: classification.intensity,
     adjustedIntensity,
+    sessionEffortControlled,
+    cumulativeLoadConcern,
     thermalSeverity: weather.thermalSeverity,
     paceContext,
     paceSecondsPerKm: paceSecondsPerKm === null ? null : Math.round(paceSecondsPerKm),
@@ -147,12 +178,15 @@ export function adjustClassificationForTrainingStress(
     previous7DayTrainingLoad: trainingLoad?.previous7DayLoad ?? null,
     averageWeeklyTrainingLoad: trainingLoad?.averageWeeklyLoad ?? null,
     trainingLoadChangePercent: trainingLoad?.changePercent ?? null,
+    trainingLoadChangeReliable: trainingLoad ? trainingLoad.changeReliability === 'normal' : null,
     trainingLoadRatio: trainingLoad?.loadRatio ?? null,
     trainingLoadState: trainingLoad?.state ?? null,
     trainingLoadHeartRateCoverage: trainingLoad?.heartRateCoverage ?? null,
     activityTrainingLoadSharePercent: trainingLoadContext && trainingLoad?.current7DayLoad
       ? round((trainingLoadContext.activityLoad / trainingLoad.current7DayLoad) * 100, 0)
       : null,
+    relativeEffort,
+    consecutiveRunDays,
     minimumRecoveryHours,
   };
 
@@ -160,7 +194,7 @@ export function adjustClassificationForTrainingStress(
     ...classification,
     intensity: adjustedIntensity,
     workoutTypeEvidence: applied
-      ? [...classification.workoutTypeEvidence, 'heat, pace, and rolling training load raise internal load']
+      ? [...classification.workoutTypeEvidence, 'heat and pace raise current-session effort']
       : classification.workoutTypeEvidence,
     loadAdjustment,
   };
