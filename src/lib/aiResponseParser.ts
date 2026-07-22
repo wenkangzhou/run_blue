@@ -1,6 +1,6 @@
 import { StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
-import { formatPace, type ActivityClassification, type TrainingProfile } from './trainingAnalysis';
+import { formatPace, type ActivityClassification, type PaceZones, type TrainingProfile } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext } from './weather';
 import { getPrimaryPersonalRecord } from './activityAchievements';
@@ -81,7 +81,8 @@ function getLoadAdjustedSummary(
   summary: string,
   activity: StravaActivity,
   classification: ActivityClassification,
-  locale: string
+  locale: string,
+  paceZones?: PaceZones | null
 ): string {
   const adjustment = classification.loadAdjustment;
   if (!adjustment) return summary;
@@ -164,7 +165,10 @@ function getLoadAdjustedSummary(
   }
 
   if (cleaned.includes(lead) || /综合负荷应按|internal-load session/i.test(cleaned)) return cleaned;
-  const hasPrimaryAchievement = Boolean(getPrimaryPersonalRecord(activity) || getKeySustainedEffort(activity));
+  const hasPrimaryAchievement = Boolean(
+    getPrimaryPersonalRecord(activity) ||
+    getKeySustainedEffort(activity, paceZones?.marathon.max)
+  );
   return hasPrimaryAchievement
     ? [cleaned, lead].filter(Boolean).join(en ? ' ' : '')
     : [lead, cleaned].filter(Boolean).join(en ? ' ' : '');
@@ -239,10 +243,15 @@ function getTrainingLoadContext(
   return [deterministic, text].filter(Boolean).join(en ? ' ' : '');
 }
 
-function ensurePrioritySummary(summary: string, activity: StravaActivity, locale: string): string {
+function ensurePrioritySummary(
+  summary: string,
+  activity: StravaActivity,
+  locale: string,
+  paceZones?: PaceZones | null
+): string {
   const en = locale.startsWith('en');
   const record = getPrimaryPersonalRecord(activity);
-  const keySustainedEffort = getKeySustainedEffort(activity);
+  const keySustainedEffort = getKeySustainedEffort(activity, paceZones?.marathon.max);
   const weather = buildActivityWeatherContext(activity);
   const hasMeaningfulHeat = weather.thermalSeverity === 'heat-load' || weather.thermalSeverity === 'heat-stress';
   const mentionsRecord = en
@@ -331,6 +340,51 @@ function ensurePrioritySummary(summary: string, activity: StravaActivity, locale
     keptEffortSentence = true;
     return true;
   }).join(en ? ' ' : '');
+}
+
+function normalizeUnsupportedQualitySegmentSummary(
+  summary: string,
+  activity: StravaActivity,
+  classification: ActivityClassification,
+  locale: string,
+  paceZones?: PaceZones | null
+): string {
+  if (getKeySustainedEffort(activity, paceZones?.marathon.max)) return summary;
+
+  const en = locale.startsWith('en');
+  const unsupportedQualityClaim = en
+    ? /(?:standout|key|main|core).{0,24}(?:quality|performance) (?:block|segment|achievement)|strong speed endurance/i
+    : /(?:最值得肯定|核心亮点|核心质量段|核心质量成果|速度耐力.{0,16}(?:出色|优秀)|质量课执行.{0,16}(?:出色|优秀))/;
+  const unsupportedProgressionClaim = classification.workoutType !== 'progression'
+    ? (en
+        ? /(?:classified|identified|recognized).{0,16}(?:progression run|progressive run)/i
+        : /(?:识别|判定|分类|本次训练为|更接近|接近|可能(?:是|为)|属于).{0,16}渐进跑|渐进(?:加速)?结构/)
+    : null;
+  if (
+    !unsupportedQualityClaim.test(summary) &&
+    !unsupportedProgressionClaim?.test(summary)
+  ) return summary;
+
+  const sentences = summary.match(/[^。！？!?；;]+[。！？!?；;]?/g)
+    ?.map((sentence) => sentence.trim())
+    .filter(Boolean) ?? [summary];
+  const retained = sentences.filter((sentence) => (
+    !unsupportedQualityClaim.test(sentence) &&
+    !unsupportedProgressionClaim?.test(sentence)
+  ));
+  const distanceKm = Math.round(activity.distance / 100) / 10;
+  const pace = activity.distance > 0 && activity.moving_time > 0
+    ? formatPace(activity.moving_time / activity.distance * 1000)
+    : '';
+  const heartRate = activity.average_heartrate
+    ? Math.round(activity.average_heartrate)
+    : null;
+  const weatherFact = getWeatherFact(activity, locale);
+  const neutralSummary = en
+    ? `This ${distanceKm} km run averaged ${pace || 'an aerobic pace'}${heartRate ? ` at ${heartRate} bpm` : ''}${weatherFact ? ` in ${weatherFact}` : ''}; its value came from the overall aerobic completion and effort control, while the faster splits remained easy-pace variation.`
+    : `本次 ${distanceKm} 公里平均配速 ${pace || '以有氧配速完成'}${heartRate ? `、平均心率 ${heartRate} bpm` : ''}${weatherFact ? `，处于${weatherFact}` : ''}；训练价值主要在整体有氧完成与强度控制，分段提速仍属于轻松配速内的节奏变化。`;
+
+  return [neutralSummary, ...retained].filter(Boolean).join(en ? ' ' : '');
 }
 
 function getThermalSeverity(activity: StravaActivity): 'neutral' | 'muggy' | 'heat-load' | 'heat-stress' {
@@ -633,7 +687,8 @@ export function normalizeAIAnalysisForDisplay(
   analysis: AIAnalysis,
   activity: StravaActivity,
   classification: ActivityClassification,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  paceZones?: PaceZones | null
 ): AIAnalysis {
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
   const suggestions = normalizeSuggestionsForRecoveryContext(Array.isArray(analysis.suggestions)
@@ -646,10 +701,22 @@ export function normalizeAIAnalysisForDisplay(
   const recoveryFirstSuggestion = getRecoveryFirstSuggestion(classification, locale);
 
   const summary = getLoadAdjustedSummary(
-    ensurePrioritySummary(normalizeForDisplay(analysis.summary || ''), activity, locale),
+    ensurePrioritySummary(
+      normalizeUnsupportedQualitySegmentSummary(
+        normalizeForDisplay(analysis.summary || ''),
+        activity,
+        classification,
+        locale,
+        paceZones
+      ),
+      activity,
+      locale,
+      paceZones
+    ),
     activity,
     classification,
-    locale
+    locale,
+    paceZones
   );
   const warnings = getLoadAdjustedWarnings(
     Array.isArray(analysis.warnings)
@@ -764,13 +831,21 @@ export function parseAIResponse(
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
   const normalizedSummary = getLoadAdjustedSummary(
     ensurePrioritySummary(
-      normalizeForDisplay(result.summary || '训练分析完成'),
+      normalizeUnsupportedQualitySegmentSummary(
+        normalizeForDisplay(result.summary || '训练分析完成'),
+        activity,
+        classification,
+        locale,
+        trainingProfile.paceZones
+      ),
       activity,
-      locale
+      locale,
+      trainingProfile.paceZones
     ),
     activity,
     classification,
-    locale
+    locale,
+    trainingProfile.paceZones
   );
   const normalizedTrainingLoadContext = getTrainingLoadContext(
     normalizeForDisplay(result.trainingLoadContext || ''),

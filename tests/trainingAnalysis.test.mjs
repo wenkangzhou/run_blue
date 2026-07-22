@@ -226,20 +226,20 @@ test('classifyActivity treats repeated lap workouts as interval candidates befor
   );
 });
 
-test('classifyActivity recognizes progression runs from splits', () => {
+test('classifyActivity recognizes progression runs when the late block reaches marathon pace', () => {
   const activity = makeActivity(2, {
     name: 'Evening run',
     distance: 8000,
     moving_time: 2560,
     splits_metric: [
       makeSplit(0, 360),
-      makeSplit(1, 350),
-      makeSplit(2, 340),
-      makeSplit(3, 330),
-      makeSplit(4, 320),
-      makeSplit(5, 315),
-      makeSplit(6, 310),
-      makeSplit(7, 305),
+      makeSplit(1, 340),
+      makeSplit(2, 320),
+      makeSplit(3, 300),
+      makeSplit(4, 285),
+      makeSplit(5, 275),
+      makeSplit(6, 268),
+      makeSplit(7, 265),
     ],
   });
 
@@ -247,6 +247,23 @@ test('classifyActivity recognizes progression runs from splits', () => {
 
   assert.equal(classification.workoutType, 'progression');
   assert.equal(classification.structure.splitPattern, 'progression');
+});
+
+test('classifyActivity does not call an easy-zone 3K uplift a progression run', () => {
+  const activity = makeActivity(27, {
+    name: 'Morning run',
+    distance: 9000,
+    moving_time: 3465,
+    average_heartrate: 135,
+    splits_metric: [410, 405, 400, 395, 390, 350, 350, 350, 415]
+      .map((pace, index) => makeSplit(index, pace)),
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1260), 'high', 176);
+
+  assert.notEqual(classification.workoutType, 'progression');
+  assert.notEqual(classification.structure.splitPattern, 'progression');
+  assert.equal(classification.paceZone, 'E');
 });
 
 test('classifyActivity recognizes progression runs with a cooldown split', () => {

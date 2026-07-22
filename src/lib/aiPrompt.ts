@@ -263,7 +263,8 @@ export function buildProfessionalPrompt(
 
   const { estimatedPBs, recentLoad, similarStats, thermalStats, patterns } = trainingProfile;
   const personalRecords = getActivityPersonalRecords(activity);
-  const keySustainedEffort = getKeySustainedEffort(activity);
+  const marathonPaceCeiling = trainingProfile.paceZones.marathon.max;
+  const keySustainedEffort = getKeySustainedEffort(activity, marathonPaceCeiling);
   const weatherInfo = buildActivityWeatherContext(activity, streams);
   const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
   const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
@@ -929,6 +930,9 @@ export function buildProfessionalPrompt(
     ? `\n- Unless the activity data explicitly contains a planned workout target, say "reference pace" or "estimated zone" instead of "target pace".`
     : `\n- 除非活动数据明确包含计划训练目标，否则不要写“目标配速”，应写“参考配速”或“能力估算区间”。`;
   prompt += en
+    ? `\n- Do not call a segment a key quality block merely because it is faster than the whole-run average. A sustained block slower than the athlete's marathon-zone ceiling (${formatPace(marathonPaceCeiling)}/km) is easy-pace variation, not evidence of speed endurance or a quality workout. PBs remain a separate highest-priority fact.`
+    : `\n- 禁止仅因某一段比全程均配快，就称其为核心质量段。连续段若仍慢于个人 M 区慢端（${formatPace(marathonPaceCeiling)}/km），只能视为轻松配速内的节奏变化，不能据此表扬速度耐力或质量课执行；明确 PB 仍是独立的最高优先级事实。`;
+  prompt += en
     ? `\n- If confidence is low or evidence is missing, you MUST say so directly in the summary instead of writing overconfident prose.`
     : `\n- 如果识别置信度较低或关键证据缺失，必须在 summary 中直接说明，不要用很笃定的口吻掩盖不确定性。`;
   if (personalRecords.length > 0) {
@@ -949,8 +953,8 @@ export function buildProfessionalPrompt(
     : `\n- "suggestions" 中不要机械给周跑量目标。只给一条前后一致的下一步：累计恢复压力高时安排休息/极轻松活动，恢复平衡时再给与本次训练相关的技术或配速提示；禁止互相矛盾的建议。`;
   if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
     prompt += en
-      ? `\n- For easy/recovery runs, avoid "target pace" language. If pace is slower than recent runs, frame it as relaxed execution unless HR/load evidence says otherwise.`
-      : `\n- 对轻松/恢复跑，避免使用“目标配速”话术。如果配速比近期慢，除非心率或负荷证据显示异常，否则应表述为更放松的执行。`;
+      ? `\n- For easy/recovery runs, avoid "target pace" language. If there is no PB or qualified M-or-faster sustained block, summarize the whole session through heart-rate control, thermal cost, Relative Effort, consistency, and rolling-load context. Do not manufacture a segment highlight from ordinary easy-zone acceleration.`
+      : `\n- 对轻松/恢复跑，避免使用“目标配速”话术。若没有 PB 或达到 M 区及以上的连续质量段，应围绕全程心率控制、热环境成本、Relative Effort、训练连续性与滚动负荷概括本次训练；不要把轻松区间内的普通提速硬造成本次亮点。`;
   }
   prompt += en
     ? `\n- Each field must be substantive. Keep summary concise (2-3 complete sentences), and keep trainingLoadContext/similarActivitiesInsight/nextWorkoutSuggestion at least 20 words. Empty, cut-off, or one-clause responses are NOT acceptable.`

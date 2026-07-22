@@ -146,7 +146,13 @@ function makeProfile(overrides = {}) {
   return {
     totalRunsAnalyzed: 30,
     estimatedPBs: {},
-    paceZones: {},
+    paceZones: {
+      easy: { min: 320, max: 360, description: 'easy' },
+      marathon: { min: 285, max: 310, description: 'marathon' },
+      threshold: { min: 255, max: 270, description: 'threshold' },
+      interval: { min: 240, max: 252, description: 'interval' },
+      repetition: { min: 225, max: 238, description: 'repetition' },
+    },
     patterns: {
       typicalEasyRunDistance: 8000,
       typicalLongRunDistance: 16000,
@@ -591,6 +597,58 @@ test('parseAIResponse restores a standout sustained 5K block omitted by the mode
   assert.doesNotMatch(result.summary, /个人最佳|PB/);
 });
 
+test('parseAIResponse removes an easy-zone 3K falsely promoted as the main quality block', () => {
+  const splitPaces = [410, 405, 400, 395, 390, 350, 350, 350, 415];
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '配速区间E-轻松，建议恢复约18h；本次最值得肯定的是第6-8公里连续3公里以5\'50"/km完成；这段持续输出说明速度耐力和质量课执行都很出色，是本次训练的核心质量成果。实际结构更接近渐进跑或热身-加速-冷身组合；这次主要看低负荷完成度。',
+      intensity: 'easy',
+      recoveryHours: 18,
+      suggestions: ['下一次继续轻松跑。'],
+    }),
+    makeActivity({
+      distance: 9000,
+      moving_time: 3465,
+      average_heartrate: 135,
+      description: 'Temperature 29°C, Feels like 33.7°C, Humidity 94%',
+      splits_metric: splitPaces.map((movingTime, index) => ({
+        split: index + 1,
+        distance: 1000,
+        moving_time: movingTime,
+        elapsed_time: movingTime,
+        average_speed: 1000 / movingTime,
+        elevation_difference: 0,
+      })),
+    }),
+    makeProfile({ similarStats: null }),
+    makeClassification({
+      workoutType: 'easy',
+      paceZone: 'E',
+      intensity: 'easy',
+      structure: {
+        source: 'splits',
+        lapCount: 0,
+        medianLapDistance: 1000,
+        shortRepCount: 9,
+        fastRepCount: 0,
+        recoveryRepCount: 0,
+        hasWarmup: false,
+        hasCooldown: false,
+        splitPattern: 'mixed',
+        paceVariability: 0.07,
+      },
+    }),
+    'zh'
+  );
+
+  assert.doesNotMatch(result.summary, /核心质量|速度耐力|质量课执行|渐进跑/);
+  assert.match(result.summary, /整体有氧完成与强度控制/);
+  assert.match(result.summary, /轻松配速内的节奏变化/);
+  assert.match(result.summary, /体感 33\.7°C、湿度 94%/);
+  assert.match(result.summary, /配速区间E-轻松，建议恢复约18h/);
+  assert.match(result.summary, /这次主要看低负荷完成度/);
+});
+
 test('parseAIResponse preserves controlled hot recovery effort while making cumulative recovery conservative', () => {
   const result = parseAIResponse(
     JSON.stringify({
@@ -740,4 +798,35 @@ test('generateFallbackAnalysis uses classification pace zone instead of absolute
   assert.equal(result.paceZoneAnalysis.zone, 'E');
   assert.match(result.paceZoneAnalysis.description, /轻松跑/);
   assert.doesNotMatch(result.summary, /乳酸阈值区间|间歇跑区间|重复跑区间/);
+});
+
+test('generateFallbackAnalysis describes an easy hot run as a whole session instead of promoting one split', () => {
+  const result = generateFallbackAnalysis(
+    makeActivity({
+      name: 'Morning Run',
+      distance: 9020,
+      moving_time: 3467,
+      average_heartrate: 136,
+      description: 'Cloudy · 26.9°C · Feels like 33.7°C · Humidity 94%',
+    }),
+    makeProfile(),
+    makeClassification({
+      intensity: 'easy',
+      paceZone: 'E',
+      workoutType: 'recovery',
+      loadAdjustment: {
+        relativeEffort: 72,
+        consecutiveRunDays: 9,
+        cumulativeLoadConcern: 'high',
+      },
+    }),
+    'zh'
+  );
+
+  assert.match(result.summary, /9\.0 公里平均配速/);
+  assert.match(result.summary, /平均心率 136 bpm/);
+  assert.match(result.summary, /体感 33\.7°C、湿度 94%/);
+  assert.match(result.summary, /连续第 9 天跑步/);
+  assert.match(result.summary, /稳定积累耐力/);
+  assert.doesNotMatch(result.summary, /核心质量|速度耐力|渐进跑/);
 });

@@ -184,11 +184,30 @@ export function generateFallbackAnalysis(
         ? ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `This was running day ${adjustment.consecutiveRunDays} in a row; ` : ''}rolling load is elevated, so cumulative recovery deserves attention even though this session was controlled.`
         : ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `这是连续第 ${adjustment.consecutiveRunDays} 天跑步；` : ''}近期累计负荷偏高，因此需要关注累计恢复，但不改变本次执行受控的结论。`)
     : '';
+  const distanceKm = (activity.distance / 1000).toFixed(1);
+  const relativeEffort = adjustment?.relativeEffort;
+  const weatherDetails = [
+    weather.feelsLikeC !== undefined
+      ? (en ? `feels like ${weather.feelsLikeC}°C` : `体感 ${weather.feelsLikeC}°C`)
+      : weather.temperatureC !== undefined
+        ? (en ? `${weather.temperatureC}°C` : `${weather.temperatureC}°C`)
+        : '',
+    weather.humidityPercent !== undefined
+      ? (en ? `${weather.humidityPercent}% humidity` : `湿度 ${weather.humidityPercent}%`)
+      : '',
+  ].filter(Boolean).join(en ? ' with ' : '、');
+  const consecutiveRunDays = adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1
+    ? adjustment.consecutiveRunDays
+    : null;
+  const lowIntensitySummary = en
+    ? `This ${distanceKm} km run averaged ${paceStr}/km${activity.average_heartrate ? ` at ${Math.round(activity.average_heartrate)} bpm` : ''}${relativeEffort !== null && relativeEffort !== undefined ? ` with Relative Effort ${relativeEffort}` : ''}. ${weatherDetails ? `In ${weatherDetails}, ` : ''}it remained a low-intensity aerobic session${consecutiveRunDays ? ` on running day ${consecutiveRunDays} in a row` : ''}; its value came from steady endurance work, not an isolated faster split.`
+    : `本次 ${distanceKm} 公里平均配速 ${paceStr}/km${activity.average_heartrate ? `、平均心率 ${Math.round(activity.average_heartrate)} bpm` : ''}${relativeEffort !== null && relativeEffort !== undefined ? `、Relative Effort ${relativeEffort}` : ''}。${weatherDetails ? `在${weatherDetails}下，` : ''}整体仍是一堂低强度有氧训练${consecutiveRunDays ? `，也是连续第 ${consecutiveRunDays} 天跑步` : ''}；训练价值在稳定积累耐力，而不是局部分段提速。`;
+  const standardSummary = en
+    ? `${workoutTypeLabel} completed: ${distanceKm}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`
+    : `本次完成${workoutTypeLabel}，距离${distanceKm}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`;
 
   return {
-    summary: en
-      ? `${workoutTypeLabel} completed: ${(activity.distance / 1000).toFixed(1)}km at ${paceStr}/km, broadly in the ${zoneDesc}.${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`
-      : `本次完成${workoutTypeLabel}，距离${(activity.distance / 1000).toFixed(1)}km，配速${paceStr}/km，整体落在${zoneDesc}。${weatherNote}${controlledSessionFact}${cumulativeRecoveryFact}${encouragement}`,
+    summary: isLowIntensity ? lowIntensitySummary : standardSummary,
     intensity: classification.intensity,
     recoveryHours: Math.max(
       activity.distance > 10000 ? 36 : 24,

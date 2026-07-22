@@ -375,8 +375,15 @@ function getLapPaceSecPerKm(distance: number, movingTime: number): number {
   return movingTime / distance * 1000;
 }
 
-function hasSustainedProgression(paces: number[]): boolean {
-  if (paces.length < 5) return false;
+function hasSustainedProgression(
+  paces: number[],
+  qualityPaceCeilingSecondsPerKm?: number | null
+): boolean {
+  if (
+    paces.length < 5 ||
+    !qualityPaceCeilingSecondsPerKm ||
+    !Number.isFinite(qualityPaceCeilingSecondsPerKm)
+  ) return false;
 
   const firstEnd = Math.ceil(paces.length / 3);
   const lastStart = Math.floor((paces.length * 2) / 3);
@@ -391,6 +398,10 @@ function hasSustainedProgression(paces: number[]): boolean {
   const improvement = (firstAvg - lastAvg) / firstAvg;
   if (improvement < 0.06) return false;
 
+  // A late block that remains entirely in easy pace is just pace variation,
+  // even when it is much faster than a deliberately relaxed opening.
+  if (lastAvg > qualityPaceCeilingSecondsPerKm) return false;
+
   const orderedThirds = middleAvg <= firstAvg * 0.985 && lastAvg <= middleAvg * 0.992;
   if (!orderedThirds) return false;
 
@@ -399,7 +410,10 @@ function hasSustainedProgression(paces: number[]): boolean {
   return sustainedFasterCount >= Math.max(2, Math.ceil(latePaces.length * 0.6));
 }
 
-function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary['splitPattern'] {
+function detectSplitPatternFromPaces(
+  paces: number[],
+  qualityPaceCeilingSecondsPerKm?: number | null
+): ActivityStructureSummary['splitPattern'] {
   if (paces.length < 3) return 'unknown';
 
   const avgPace = average(paces);
@@ -425,7 +439,7 @@ function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary[
     paces.length >= 5 && paces[paces.length - 1] > avgPace * 1.08
       ? paces.slice(0, -1)
       : paces;
-  if (hasSustainedProgression(progressionPaces)) return 'progression';
+  if (hasSustainedProgression(progressionPaces, qualityPaceCeilingSecondsPerKm)) return 'progression';
 
   const steadyCount = paces.filter((pace) => pace >= avgPace * 0.94 && pace <= avgPace * 1.06).length;
   if (steadyCount / paces.length >= 0.7) return 'steady';
@@ -433,7 +447,10 @@ function detectSplitPatternFromPaces(paces: number[]): ActivityStructureSummary[
   return 'mixed';
 }
 
-function summarizeActivityStructure(activity: StravaActivity): ActivityStructureSummary {
+function summarizeActivityStructure(
+  activity: StravaActivity,
+  qualityPaceCeilingSecondsPerKm?: number | null
+): ActivityStructureSummary {
   const lapCandidates = activity.laps?.filter(
     (lap) => lap.distance >= 120 && lap.distance <= 5000 && lap.moving_time >= 25
   ) ?? [];
@@ -469,7 +486,7 @@ function summarizeActivityStructure(activity: StravaActivity): ActivityStructure
       recoveryRepCount,
       hasWarmup: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[0].distance, lapCandidates[0].moving_time) > medianPace * 1.08,
       hasCooldown: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[lapCandidates.length - 1].distance, lapCandidates[lapCandidates.length - 1].moving_time) > medianPace * 1.08,
-      splitPattern: detectSplitPatternFromPaces(patternPaces),
+      splitPattern: detectSplitPatternFromPaces(patternPaces, qualityPaceCeilingSecondsPerKm),
       paceVariability,
     };
   }
@@ -497,7 +514,7 @@ function summarizeActivityStructure(activity: StravaActivity): ActivityStructure
       recoveryRepCount: 0,
       hasWarmup: false,
       hasCooldown: false,
-      splitPattern: detectSplitPatternFromPaces(patternPaces),
+      splitPattern: detectSplitPatternFromPaces(patternPaces, qualityPaceCeilingSecondsPerKm),
       paceVariability: varianceRatio(paces),
     };
   }
@@ -1019,7 +1036,7 @@ export function classifyActivity(
     else raceType = '比赛';
   }
 
-  const structure = summarizeActivityStructure(activity);
+  const structure = summarizeActivityStructure(activity, paceZones?.marathon.max);
   const paceAssessment: PaceZoneAssessment = assessPaceZoneForActivity(activity, paceZones, paceZoneModelReliability);
   const paceZone = paceAssessment.zone;
 

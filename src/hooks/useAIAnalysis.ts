@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { AIAnalysis } from '@/lib/ai';
-import type { ActivityClassification, SimilarActivityStats } from '@/lib/trainingAnalysis';
+import type { ActivityClassification, SimilarActivityStats, TrainingProfile } from '@/lib/trainingAnalysis';
 import type { StreamAnalysis } from '@/lib/streamAnalysis';
 import { getMergedPBsForAnalysis, getUserProfile } from '@/lib/userProfile';
 import { clearCachedAIAnalysis, getCachedAIAnalysis, setCachedAIAnalysis } from '@/lib/aiAnalysisCache';
@@ -20,7 +20,7 @@ import {
 interface AITrainingStats {
   totalRunsAnalyzed: number;
   estimatedPBs?: unknown;
-  paceZones?: unknown;
+  paceZones?: TrainingProfile['paceZones'];
   patterns?: unknown;
   physiologyMetrics?: unknown;
   recentLoad?: unknown;
@@ -83,7 +83,9 @@ type AIHistoryActivity = Pick<
 
 const AI_ANALYSIS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 const AI_ANALYSIS_QUOTA_TTL = 60 * 60 * 1000;
+const AI_ANALYSIS_FALLBACK_TTL = 30 * 60 * 1000;
 const AI_HISTORY_LIMIT = 1000;
+const AI_ANALYSIS_REQUEST_TIMEOUT_MS = 60_000;
 const aiAnalysisRequestsInFlight = new Map<string, Promise<AIAnalyzeResponse>>();
 
 interface RefreshAnalysisOptions {
@@ -196,7 +198,8 @@ export function useAIAnalysis(
         payload.analysis,
         activity,
         payload.classification,
-        i18n.language
+        i18n.language,
+        payload.trainingStats?.paceZones
       ),
     };
   }, [activity, i18n.language]);
@@ -241,9 +244,15 @@ export function useAIAnalysis(
         request = aiAnalysisRequestsInFlight.get(cacheKey);
       }
       if (!request) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(
+          () => controller.abort(),
+          AI_ANALYSIS_REQUEST_TIMEOUT_MS
+        );
         request = fetch('/api/ai/analyze', {
           method: 'POST',
           cache: 'no-store',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             activity,
@@ -261,9 +270,8 @@ export function useAIAnalysis(
             const err = await response.json();
             throw new Error(err.error || t('errors.aiAnalysisFailed', 'AI analysis failed'));
           }
-
           return response.json() as Promise<AIAnalyzeResponse>;
-        });
+        }).finally(() => window.clearTimeout(timeoutId));
         aiAnalysisRequestsInFlight.set(cacheKey, request);
       }
 
@@ -286,11 +294,13 @@ export function useAIAnalysis(
         analysisError: data.analysisError,
       };
 
-      if (!isTransientFallback(payload, consentStatus)) {
-        await setCachedAIAnalysis(cacheKey, payload);
-      }
+      await setCachedAIAnalysis(cacheKey, payload);
     } catch (err) {
-      const message = err instanceof Error ? err.message : '';
+      const message = err instanceof Error && err.name === 'AbortError'
+        ? t('errors.aiAnalysisTimeout', 'AI 分析响应超时，请稍后重试')
+        : err instanceof Error
+          ? err.message
+          : '';
       setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
     } finally {
       if (request && aiAnalysisRequestsInFlight.get(cacheKey) === request) {
@@ -317,7 +327,7 @@ export function useAIAnalysis(
         const maxAge = parsed.isQuotaExceeded
           ? AI_ANALYSIS_QUOTA_TTL
           : isTransientFallback(parsed, consentStatus)
-            ? 0
+            ? AI_ANALYSIS_FALLBACK_TTL
             : AI_ANALYSIS_CACHE_TTL;
         const generatedAt = parsed.analysis?.generatedAt ?? 0;
         if (generatedAt && Date.now() - generatedAt < maxAge) {

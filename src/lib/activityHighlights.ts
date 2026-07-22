@@ -59,7 +59,8 @@ function buildCandidate(
   splits: ActivitySplit[],
   targetDistance: number,
   startIndex: number,
-  endIndex: number
+  endIndex: number,
+  qualityPaceCeilingSecondsPerKm: number
 ): SustainedEffortHighlight | null {
   const window = splits.slice(startIndex, endIndex + 1);
   const hasMissingSplit = window.some((split, index) =>
@@ -74,6 +75,8 @@ function buildCandidate(
   const movingTimeSeconds = window.reduce((sum, split) => sum + split.moving_time, 0);
   const elapsedTimeSeconds = window.reduce((sum, split) => sum + split.elapsed_time, 0);
   const averagePaceSecondsPerKm = movingTimeSeconds / distanceMeters * 1000;
+  if (averagePaceSecondsPerKm > qualityPaceCeilingSecondsPerKm) return null;
+
   const activityPaceSecondsPerKm = activity.moving_time / activity.distance * 1000;
   const paceGainVsActivitySeconds = activityPaceSecondsPerKm - averagePaceSecondsPerKm;
   const paceGainVsActivityRatio = paceGainVsActivitySeconds / activityPaceSecondsPerKm;
@@ -108,13 +111,20 @@ function buildCandidate(
 }
 
 /**
- * Finds the longest clearly faster continuous 3K/5K/10K block. This captures
- * the main quality segment of mixed workouts without promoting one fast split.
+ * Finds the longest clearly faster continuous 3K/5K/10K block that also
+ * reaches the athlete's marathon zone or faster. Relative improvement against
+ * a deliberately easy whole-run average is not enough to make a quality block.
  */
 export function getKeySustainedEffort(
-  activity: Pick<StravaActivity, 'distance' | 'moving_time' | 'splits_metric' | 'best_efforts'>
+  activity: Pick<StravaActivity, 'distance' | 'moving_time' | 'splits_metric' | 'best_efforts'>,
+  qualityPaceCeilingSecondsPerKm?: number | null
 ): SustainedEffortHighlight | null {
-  if (!isPositiveFinite(activity.distance) || !isPositiveFinite(activity.moving_time)) return null;
+  const qualityPaceCeiling = qualityPaceCeilingSecondsPerKm ?? undefined;
+  if (
+    !isPositiveFinite(activity.distance) ||
+    !isPositiveFinite(activity.moving_time) ||
+    !isPositiveFinite(qualityPaceCeiling)
+  ) return null;
 
   const splits = getValidSplits(activity.splits_metric);
   if (splits.length < 3) return null;
@@ -135,7 +145,8 @@ export function getKeySustainedEffort(
           splits,
           targetDistance,
           startIndex,
-          endIndex
+          endIndex,
+          qualityPaceCeiling
         );
         if (candidate) candidates.push(candidate);
       }

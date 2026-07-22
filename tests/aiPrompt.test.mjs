@@ -496,6 +496,34 @@ test('buildProfessionalPrompt promotes a standout continuous 5K block even witho
   assert.match(prompt, /明显热应激下，应明确提高对表现含金量的评价/);
 });
 
+test('buildProfessionalPrompt does not promote a relatively faster 3K that remains slower than M pace', () => {
+  const splitPaces = [410, 405, 400, 395, 390, 350, 350, 350, 415];
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 9000,
+      moving_time: 3465,
+      description: 'Temperature 29°C, Feels like 33.7°C, Humidity 94%',
+      splits_metric: splitPaces.map((movingTime, index) => ({
+        split: index + 1,
+        distance: 1000,
+        moving_time: movingTime,
+        elapsed_time: movingTime,
+        average_speed: 1000 / movingTime,
+        elevation_difference: 0,
+      })),
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'easy', paceZone: 'E', intensity: 'easy' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(prompt, /## 本次核心连续质量段/);
+  assert.doesNotMatch(prompt, /第6-8公里: 连续 3 km/);
+  assert.match(prompt, /个人 M 区慢端（5'10"\/km）/);
+  assert.match(prompt, /轻松区间内的普通提速硬造成本次亮点/);
+});
+
 test('buildProfessionalPrompt separates current heat cost from cumulative recovery', () => {
   const prompt = buildProfessionalPrompt(
     makeActivity({

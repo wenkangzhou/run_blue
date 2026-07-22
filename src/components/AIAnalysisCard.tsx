@@ -145,7 +145,14 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     refreshAnalysis,
   } = useAIAnalysis(activity, streams, enabled);
   const [expanded, setExpanded] = useState(false);
-  const keySustainedEffort = useMemo(() => getKeySustainedEffort(activity), [activity]);
+  const fallbackReasonLabel = /timed out|timeout/i.test(fallbackReason)
+    ? t('aiAnalysis.fallbackTimeout', 'Kimi 响应超时，已切换到本地分析')
+    : fallbackReason;
+  const marathonPaceCeiling = trainingStats?.paceZones?.marathon.max;
+  const keySustainedEffort = useMemo(
+    () => getKeySustainedEffort(activity, marathonPaceCeiling),
+    [activity, marathonPaceCeiling]
+  );
   const weatherContext = useMemo(() => buildActivityWeatherContext(activity), [activity]);
 
   const intensity = analysis?.intensity
@@ -538,7 +545,8 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     return {
       headline,
-      detail: closeSentence([base, signalText, focus].map(cleanClause).filter(Boolean).join('；')),
+      detail: compactNaturalSentence(analysis.summary, 2, 148) ||
+        closeSentence([base, signalText, focus].map(cleanClause).filter(Boolean).join('；')),
     };
   })();
 
@@ -649,7 +657,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                   {consentStatus !== 'declined' && fallbackReason && (
                     <span className="mt-1 block break-words opacity-80 [overflow-wrap:anywhere]">
                       {t('aiAnalysis.fallbackReason', {
-                        reason: fallbackReason,
+                        reason: fallbackReasonLabel,
                         defaultValue: '失败原因：{{reason}}',
                       })}
                     </span>

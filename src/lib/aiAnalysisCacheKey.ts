@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v32';
+export const AI_ANALYSIS_CACHE_VERSION = 'v34';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS: string[] = [];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS: string[] = [];
 
