@@ -273,6 +273,7 @@ License: MIT
 ## TODO / Roadmap
 
 - 🤖 **Strava Auto Bot**: Automatically modify title and description after uploading an activity, supporting conditional triggers (e.g., distance / heart rate thresholds), weather info injection, and template variable replacement. Inspired by Kaze.run's bot mechanism.
+- 🍎 **Apple Health / HealthKit Data Bridge (under evaluation)**: Evaluate a separate lightweight SwiftUI companion instead of wrapping the existing web app. With explicit permission, it could read HRV (SDNN), sleep, resting heart rate, post-workout heart rate recovery, respiratory rate, sleeping wrist temperature, and Cardio Fitness (VO2 Max), establish personal baselines on-device, and sync only the minimum daily summary needed by Run Blue. These signals would be combined with recent training load and weather to improve readiness, workout-effect analysis, and future plan adjustments. First validate the analytical value through an Apple Health XML export, then decide whether automatic sync, backend storage, and App Store distribution justify their implementation, privacy, and review costs.
 
 ---
 
