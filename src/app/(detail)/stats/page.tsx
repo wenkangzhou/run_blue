@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +10,7 @@ import { VolumeDashboard } from '@/components/VolumeDashboard';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import { BarChart3, ChevronLeft, Loader2, Route } from 'lucide-react';
+import { AppBackButton } from '@/components/AppBackButton';
 
 const MAX_LOAD_PAGES = 10; // Safety limit for one automatic catch-up pass.
 
@@ -92,13 +92,13 @@ export default function StatsPage() {
     <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/85">
         <div className="container mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link
-            href="/activities"
+          <AppBackButton
+            fallback="/activities"
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </AppBackButton>
           <h1 className="font-mono text-base font-bold">{t('nav.stats', '统计')}</h1>
           <div className="w-16" />
         </div>

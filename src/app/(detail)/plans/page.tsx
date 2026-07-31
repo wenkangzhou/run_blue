@@ -23,6 +23,7 @@ import {
 } from '@/lib/guestMode';
 import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
+import { AppBackButton } from '@/components/AppBackButton';
 import {
   getDistanceLabel,
   getDistanceLabelEn,
@@ -282,13 +283,13 @@ export default function TrainingPlansListPage() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
         <div className="container mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <Link
-            href="/activities"
+          <AppBackButton
+            fallback="/activities"
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </AppBackButton>
           <h1 className="font-pixel text-base font-bold">{t('trainingPlan.title')}</h1>
           <button
             type="button"

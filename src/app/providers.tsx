@@ -7,6 +7,7 @@ import i18n from '@/i18n';
 import { ScrollRestoration } from '@/components/ScrollRestoration';
 import { ConfirmDialogProvider } from '@/components/ConfirmDialogProvider';
 import { NavigationProgress } from '@/components/NavigationProgress';
+import { NavigationHistory } from '@/components/NavigationHistory';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -20,6 +21,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ConfirmDialogProvider>
           <Suspense fallback={null}>
             <ScrollRestoration />
+            <NavigationHistory />
             <NavigationProgress />
           </Suspense>
           {children}

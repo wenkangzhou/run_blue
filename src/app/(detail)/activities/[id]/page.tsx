@@ -21,6 +21,7 @@ import { getGuestActivities, getGuestActivity, getGuestActivityStreams, getGuest
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { ActivityTrainingZonesCard } from '@/components/ActivityTrainingZonesCard';
+import { ActivityMemoriesSection } from '@/components/ActivityMemoriesSection';
 import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
 import { ActivityStats } from '@/components/ActivityStats';
@@ -47,6 +48,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 import { getClientSession } from '@/lib/clientSession';
+import { useAppBack } from '@/hooks/useAppBack';
 
 // 20km threshold for collapsing
 const SPLIT_DISTANCE_THRESHOLD = 20; // km
@@ -101,26 +103,7 @@ export default function ActivityDetailPage() {
   const [hasShownContent, setHasShownContent] = useState(() => Boolean(selectedSeedActivity));
   const [isShareOpen, setIsShareOpen] = useState(false);
 
-  const handleBack = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const currentPath = window.location.pathname;
-      const historyIndex = typeof window.history.state?.idx === 'number'
-        ? window.history.state.idx
-        : 0;
-
-      if (historyIndex > 0) {
-        router.back();
-        window.setTimeout(() => {
-          if (window.location.pathname === currentPath) {
-            router.push('/activities');
-          }
-        }, 450);
-        return;
-      }
-    }
-
-    router.push('/activities');
-  }, [router]);
+  const handleBack = useAppBack('/activities');
 
   // Pace trend data
   const paceTrend = useMemo(() => {
@@ -873,6 +856,8 @@ export default function ActivityDetailPage() {
               )}
             </section>
           </div>
+
+          <ActivityMemoriesSection activity={activity} activities={allActivities} />
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
             <main className="min-w-0 space-y-5">

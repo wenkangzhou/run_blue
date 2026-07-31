@@ -11,6 +11,7 @@ import type { RouteSyncStats } from '@/lib/routeSync';
 import { RouteCard } from '@/components/RouteCard';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { RouteConfirmSheet, type RouteConfirmAction } from '@/components/RouteConfirmSheet';
+import { AppBackButton } from '@/components/AppBackButton';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
 import { getActivityTimestamp } from '@/lib/dates';
 import { areActivitiesSameRoute, createActivityFromRouteReference } from '@/lib/routeClustering';
@@ -284,13 +285,13 @@ export default function RoutesPage() {
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
-          <Link
-            href="/activities"
+          <AppBackButton
+            fallback="/activities"
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </AppBackButton>
           <h1 className="font-pixel text-base font-bold">{t('routes.title', '收藏路线')}</h1>
           {sourceSavedRoutes.length > 0 && !shouldShowSyncPanel && !isGuest && (
             <button

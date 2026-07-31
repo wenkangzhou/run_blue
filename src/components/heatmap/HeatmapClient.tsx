@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
@@ -14,6 +13,7 @@ import { useLocalActivities } from '@/hooks/useLocalActivities';
 import { getActivityDate, getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, isGuestUser } from '@/lib/guestMode';
 import { readSessionState, writeSessionState } from '@/lib/navigationState';
+import { useAppBack } from '@/hooks/useAppBack';
 import {
   Activity,
   ArrowUpRight,
@@ -117,7 +117,7 @@ function isHeatmapPageState(value: unknown): value is HeatmapPageState {
 
 export function HeatmapClient() {
   const { t } = useTranslation();
-  const router = useRouter();
+  const handleBack = useAppBack('/activities');
   const { activities, hasMore } = useActivitiesStore();
   const {
     activities: localActivities,
@@ -357,27 +357,6 @@ export function HeatmapClient() {
       setSidebarOpen(false);
     }
   }, []);
-
-  const handleBack = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const currentPath = window.location.pathname;
-      const historyIndex = typeof window.history.state?.idx === 'number'
-        ? window.history.state.idx
-        : 0;
-
-      if (historyIndex > 0) {
-        router.back();
-        window.setTimeout(() => {
-          if (window.location.pathname === currentPath) {
-            router.push('/activities');
-          }
-        }, 450);
-        return;
-      }
-    }
-
-    router.push('/activities');
-  }, [router]);
 
   const toggleYear = useCallback((year: number) => {
     setFilters(prev => ({

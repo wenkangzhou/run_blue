@@ -18,10 +18,11 @@ import {
 } from '@/lib/guestMode';
 import type { TrainingPlan } from '@/lib/trainingPlan';
 import { ChevronLeft, Trash2 } from 'lucide-react';
-import Link from 'next/link';
+import { useAppBack } from '@/hooks/useAppBack';
 
 export default function TrainingPlanDetailPage() {
   const router = useRouter();
+  const handleBack = useAppBack('/plans');
   const params = useParams();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const isGuest = isGuestUser(user);
@@ -85,7 +86,7 @@ export default function TrainingPlanDetailPage() {
   }, [authLoading, isAuthenticated, isGuest, router, params.id, i18n.language]);
 
   if (authLoading || !isAuthenticated) {
-    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
+    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} backHref="/plans" maxWidth="3xl" variant="plans" />;
   }
 
   if (notFound) {
@@ -93,13 +94,14 @@ export default function TrainingPlanDetailPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-3xl">
-            <Link
-              href="/plans"
+            <button
+              type="button"
+              onClick={handleBack}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
-            </Link>
+            </button>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
@@ -110,7 +112,7 @@ export default function TrainingPlanDetailPage() {
   }
 
   if (!plan) {
-    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} maxWidth="3xl" variant="plans" />;
+    return <PageLoadingShell title={t('trainingPlan.title', '训练计划')} backHref="/plans" maxWidth="3xl" variant="plans" />;
   }
 
   const handleDelete = async () => {
@@ -144,13 +146,14 @@ export default function TrainingPlanDetailPage() {
       {/* Minimal Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 max-w-3xl flex items-center justify-between">
-          <Link
-            href="/plans"
+          <button
+            type="button"
+            onClick={handleBack}
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </button>
 
           <button
             onClick={handleDelete}

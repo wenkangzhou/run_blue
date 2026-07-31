@@ -18,6 +18,7 @@ import { areActivitiesSameRoute, createActivityFromRouteReference, getBestPaceAc
 import { getActivityTimestamp } from '@/lib/dates';
 import { getGuestActivities, getGuestSavedRoutes, isGuestUser } from '@/lib/guestMode';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
+import { useAppBack } from '@/hooks/useAppBack';
 import {
   ChevronLeft,
   MapPin,
@@ -91,6 +92,7 @@ export default function RouteDetailPage() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const router = useRouter();
+  const handleBack = useAppBack('/routes');
   const params = useParams();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const isGuest = isGuestUser(user);
@@ -184,7 +186,7 @@ export default function RouteDetailPage() {
   );
 
   if (authLoading || !isAuthenticated) {
-    return <PageLoadingShell title={t('routes.title', '收藏路线')} maxWidth="2xl" variant="detail" />;
+    return <PageLoadingShell title={t('routes.title', '收藏路线')} backHref="/routes" maxWidth="2xl" variant="detail" />;
   }
 
   if (!route) {
@@ -192,20 +194,21 @@ export default function RouteDetailPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="container mx-auto px-4 py-4 max-w-2xl">
-            <Link
-              href="/routes"
+            <button
+              type="button"
+              onClick={handleBack}
               className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ChevronLeft size={16} />
               {t('common.back')}
-            </Link>
+            </button>
           </div>
         </div>
         <div className="container mx-auto px-3 py-4 max-w-2xl">
           <div className="text-center py-16">
             <p className="font-mono text-zinc-500">{t('routes.notFound', '路线不存在')}</p>
-            <PixelButton variant="outline" size="sm" className="mt-4">
-              <Link href="/routes">{t('common.back')}</Link>
+            <PixelButton variant="outline" size="sm" className="mt-4" onClick={handleBack}>
+              {t('common.back')}
             </PixelButton>
           </div>
         </div>
@@ -389,7 +392,7 @@ export default function RouteDetailPage() {
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 max-w-2xl flex items-center justify-between">
           <button
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="inline-flex items-center gap-1 font-mono text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <ChevronLeft size={16} />

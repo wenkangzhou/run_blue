@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
+import { AppBackButton } from '@/components/AppBackButton';
 
 type MaxWidth = '2xl' | '3xl' | '4xl' | '6xl';
 type LoadingVariant = 'dashboard' | 'list' | 'plans' | 'detail' | 'gear';
@@ -14,11 +15,13 @@ const maxWidthClass: Record<MaxWidth, string> = {
 export function PageLoadingShell({
   title = '加载中',
   backLabel = '返回',
+  backHref = '/activities',
   maxWidth = '3xl',
   variant = 'list',
 }: {
   title?: string;
   backLabel?: string;
+  backHref?: string;
   maxWidth?: MaxWidth;
   variant?: LoadingVariant;
 }) {
@@ -28,10 +31,13 @@ export function PageLoadingShell({
     <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50" aria-busy="true">
       <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
         <div className={`container mx-auto flex ${width} items-center justify-between px-4 py-4`}>
-          <div className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-sm text-zinc-400">
+          <AppBackButton
+            fallback={backHref}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-sm text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
             <ChevronLeft size={16} />
             {backLabel}
-          </div>
+          </AppBackButton>
           <h1 className="font-mono text-base font-bold">{title}</h1>
           <div className="w-16" />
         </div>

@@ -41,6 +41,7 @@ import { formatDistance, formatDuration } from '@/lib/strava';
 import { formatPaceFromSeconds } from '@/lib/stats';
 import { PageLoadingShell } from '@/components/PageLoadingShell';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
+import { AppBackButton } from '@/components/AppBackButton';
 
 const GEAR_DETAILS_TTL = 1000 * 60 * 60 * 24;
 const GEAR_SEARCH_STATE_KEY = 'run_blue_page:gear:search';
@@ -279,13 +280,13 @@ export default function GearPage() {
       {/* Sticky Header */}
       <div className="bg-white dark:bg-zinc-900 border-b-2 border-zinc-200 dark:border-zinc-700 px-4 py-3 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link
-            href="/activities"
+          <AppBackButton
+            fallback="/activities"
             className="inline-flex items-center gap-1 font-mono text-sm font-bold uppercase text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
             <ChevronLeft size={16} />
             {t('common.back')}
-          </Link>
+          </AppBackButton>
           <h1 className="font-pixel text-base font-bold">{t('gear.title', '跑鞋统计')}</h1>
           <div className="w-16" />
         </div>
