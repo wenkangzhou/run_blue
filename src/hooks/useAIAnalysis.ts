@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ActivityStream, StravaActivity } from '@/types';
 import type { AIAnalysis } from '@/lib/ai';
@@ -47,6 +47,26 @@ interface AIAnalyzeResponse {
   analysisSource: 'claude-mcp' | 'kimi' | 'fallback';
   analysisError?: string;
 }
+
+interface AIAnalysisViewState {
+  inputKey: string | null;
+  analysis: AIAnalysis | null;
+  streamAnalysis: StreamAnalysis | null;
+  trainingStats: AITrainingStats | null;
+  classification: ActivityClassification | null;
+  analysisSource?: CachedAIAnalysis['analysisSource'];
+  fallbackReason: string;
+}
+
+const EMPTY_AI_ANALYSIS_STATE: AIAnalysisViewState = {
+  inputKey: null,
+  analysis: null,
+  streamAnalysis: null,
+  trainingStats: null,
+  classification: null,
+  analysisSource: undefined,
+  fallbackReason: '',
+};
 
 type AIHistoryActivity = Pick<
   StravaActivity,
@@ -174,15 +194,21 @@ export function useAIAnalysis(
     [activity, streams, analysisHistoryActivities, i18n.language, consentStatus]
   );
 
-  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
-  const [streamAnalysis, setStreamAnalysis] = useState<StreamAnalysis | null>(null);
-  const [trainingStats, setTrainingStats] = useState<AITrainingStats | null>(null);
-  const [classification, setClassification] = useState<ActivityClassification | null>(null);
+  const [viewState, setViewState] = useState<AIAnalysisViewState>(EMPTY_AI_ANALYSIS_STATE);
+  const analysisGenerationRef = useRef(0);
+  const loadedInputKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
-  const [fallbackReason, setFallbackReason] = useState('');
-  const [analysisSource, setAnalysisSource] = useState<CachedAIAnalysis['analysisSource']>();
+
+  const {
+    analysis,
+    streamAnalysis,
+    trainingStats,
+    classification,
+    analysisSource,
+    fallbackReason,
+  } = viewState;
 
   useEffect(() => {
     setConsentStatus(getAIDataConsent());
@@ -204,14 +230,17 @@ export function useAIAnalysis(
     };
   }, [activity, i18n.language]);
 
-  const applyAnalysisPayload = useCallback((payload: CachedAIAnalysis) => {
+  const applyAnalysisPayload = useCallback((payload: CachedAIAnalysis, inputKey: string) => {
     const normalizedPayload = normalizeCachedPayload(payload);
-    setAnalysis(normalizedPayload.analysis);
-    setStreamAnalysis(normalizedPayload.streamAnalysis);
-    setTrainingStats(normalizedPayload.trainingStats);
-    setClassification(normalizedPayload.classification);
-    setAnalysisSource(normalizedPayload.analysisSource);
-    setFallbackReason(normalizedPayload.analysisError || '');
+    setViewState({
+      inputKey,
+      analysis: normalizedPayload.analysis,
+      streamAnalysis: normalizedPayload.streamAnalysis,
+      trainingStats: normalizedPayload.trainingStats,
+      classification: normalizedPayload.classification,
+      analysisSource: normalizedPayload.analysisSource,
+      fallbackReason: normalizedPayload.analysisError || '',
+    });
   }, [normalizeCachedPayload]);
 
   const refreshAnalysis = useCallback(async (options: RefreshAnalysisOptions = {}) => {
@@ -227,10 +256,11 @@ export function useAIAnalysis(
       return;
     }
 
+    const requestGeneration = ++analysisGenerationRef.current;
     setLoading(true);
     setRetrying(force);
     setError('');
-    setFallbackReason('');
+    setViewState(EMPTY_AI_ANALYSIS_STATE);
 
     const profile = getUserProfile();
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
@@ -276,6 +306,7 @@ export function useAIAnalysis(
       }
 
       const data = await request;
+      if (analysisGenerationRef.current !== requestGeneration) return;
       applyAnalysisPayload({
         analysis: data.analysis,
         streamAnalysis: data.streamAnalysis,
@@ -283,7 +314,7 @@ export function useAIAnalysis(
         classification: data.classification,
         analysisSource: data.analysisSource,
         analysisError: data.analysisError,
-      });
+      }, cacheKey);
 
       const payload = {
         analysis: data.analysis,
@@ -296,6 +327,7 @@ export function useAIAnalysis(
 
       await setCachedAIAnalysis(cacheKey, payload);
     } catch (err) {
+      if (analysisGenerationRef.current !== requestGeneration) return;
       const message = err instanceof Error && err.name === 'AbortError'
         ? t('errors.aiAnalysisTimeout', 'AI 分析响应超时，请稍后重试')
         : err instanceof Error
@@ -306,8 +338,10 @@ export function useAIAnalysis(
       if (request && aiAnalysisRequestsInFlight.get(cacheKey) === request) {
         aiAnalysisRequestsInFlight.delete(cacheKey);
       }
-      setLoading(false);
-      setRetrying(false);
+      if (analysisGenerationRef.current === requestGeneration) {
+        setLoading(false);
+        setRetrying(false);
+      }
     }
   }, [enabled, consentReady, consentStatus, activity, streams, analysisHistoryActivities, i18n.language, cacheKey, t, applyAnalysisPayload]);
 
@@ -316,6 +350,14 @@ export function useAIAnalysis(
 
     async function loadCachedAnalysis() {
       if (!consentReady || consentStatus === 'unknown') return;
+
+      if (loadedInputKeyRef.current !== cacheKey) {
+        loadedInputKeyRef.current = cacheKey;
+        analysisGenerationRef.current += 1;
+      }
+      setError('');
+      setRetrying(false);
+      setViewState((current) => current.inputKey === cacheKey ? current : EMPTY_AI_ANALYSIS_STATE);
 
       const keys = [cacheKey, ...legacyCacheKeys];
       for (const key of keys) {
@@ -331,7 +373,8 @@ export function useAIAnalysis(
             : AI_ANALYSIS_CACHE_TTL;
         const generatedAt = parsed.analysis?.generatedAt ?? 0;
         if (generatedAt && Date.now() - generatedAt < maxAge) {
-          applyAnalysisPayload(parsed);
+          applyAnalysisPayload(parsed, cacheKey);
+          setLoading(false);
           if (parsed.isQuotaExceeded) {
             setError('AI 分析配额已用完，请稍后再试。已显示系统生成的基础分析。');
           }
@@ -364,41 +407,45 @@ export function useAIAnalysis(
   }, [enabled, consentReady, consentStatus, cacheKey, legacyCacheKeys, refreshAnalysis, applyAnalysisPayload]);
 
   const acceptAIConsent = useCallback(() => {
+    analysisGenerationRef.current += 1;
     setAIDataConsent('accepted');
     setConsentStatus('accepted');
-    setAnalysis(null);
+    setViewState(EMPTY_AI_ANALYSIS_STATE);
     setError('');
-    setFallbackReason('');
   }, []);
 
   const declineAIConsent = useCallback(() => {
+    analysisGenerationRef.current += 1;
     setAIDataConsent('declined');
     setConsentStatus('declined');
-    setAnalysis(null);
+    setViewState(EMPTY_AI_ANALYSIS_STATE);
     setError('');
-    setFallbackReason('');
   }, []);
 
-  const isQuotaError = error?.includes('配额') || error?.includes('quota');
+  const errorMessage = typeof error === 'string' ? error : '';
+  const isQuotaError = errorMessage.includes('配额') || errorMessage.includes('quota');
   const isAuthError =
-    error?.includes('Unauthorized') ||
-    error?.includes('AUTH_REQUIRED') ||
-    error?.includes('401') ||
-    error?.includes('登录') ||
-    error?.toLowerCase().includes('auth');
+    errorMessage.includes('Unauthorized') ||
+    errorMessage.includes('AUTH_REQUIRED') ||
+    errorMessage.includes('401') ||
+    errorMessage.includes('登录') ||
+    errorMessage.toLowerCase().includes('auth');
+
+  const hasSettledAnalysis = viewState.inputKey === cacheKey && Boolean(viewState.analysis);
+  const isSettling = !hasSettledAnalysis && !errorMessage && !(!consentReady || consentStatus === 'unknown');
 
   return {
-    analysis,
-    streamAnalysis,
-    trainingStats,
-    classification,
-    loading,
+    analysis: hasSettledAnalysis ? analysis : null,
+    streamAnalysis: hasSettledAnalysis ? streamAnalysis : null,
+    trainingStats: hasSettledAnalysis ? trainingStats : null,
+    classification: hasSettledAnalysis ? classification : null,
+    loading: loading || isSettling,
     retrying,
-    error,
+    error: errorMessage,
     isQuotaError,
     isAuthError,
     analysisSource,
-    fallbackReason,
+    fallbackReason: hasSettledAnalysis ? fallbackReason : '',
     consentStatus,
     consentReady,
     consentRequired: consentReady && consentStatus === 'unknown',
