@@ -60,6 +60,70 @@ const WORKOUT_TYPE_BADGE_STYLES: Record<ActivityWorkoutCategory, string> = {
   workout: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/50 dark:text-orange-300',
 };
 
+type ActivitySectionId =
+  | 'activity-summary'
+  | 'activity-route-comparison'
+  | 'activity-ai'
+  | 'activity-charts'
+  | 'activity-splits';
+
+interface ActivitySectionNavItem {
+  id: ActivitySectionId;
+  label: string;
+}
+
+function ActivitySectionNav({ items }: { items: ActivitySectionNavItem[] }) {
+  const { t } = useTranslation();
+  const [activeId, setActiveId] = useState<ActivitySectionId>(items[0]?.id ?? 'activity-summary');
+  const itemIds = items.map((item) => item.id).join(',');
+
+  useEffect(() => {
+    const ids = itemIds.split(',') as ActivitySectionId[];
+    const updateActiveSection = () => {
+      const closestSection = ids
+        .map((id) => ({ id, element: document.getElementById(id) }))
+        .filter((entry): entry is { id: ActivitySectionId; element: HTMLElement } => Boolean(entry.element))
+        .map((entry) => ({ id: entry.id, top: entry.element.getBoundingClientRect().top }))
+        .filter((entry) => entry.top <= 132)
+        .sort((a, b) => b.top - a.top)[0];
+
+      setActiveId(closestSection?.id ?? ids[0] ?? 'activity-summary');
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    return () => window.removeEventListener('scroll', updateActiveSection);
+  }, [itemIds]);
+
+  const scrollToSection = (id: ActivitySectionId) => {
+    setActiveId(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    <nav className="sticky top-[53px] z-[9] border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95" aria-label={t('activity.sectionNavigation', '活动详情导航')}>
+      <div className="container mx-auto max-w-6xl overflow-x-auto px-4 py-2">
+        <div className="flex min-w-max items-center gap-1.5">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id)}
+              aria-current={activeId === item.id ? 'location' : undefined}
+              className={`rounded-md px-3 py-1.5 font-mono text-xs font-bold transition-colors ${activeId === item.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
 export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -516,6 +580,17 @@ export default function ActivityDetailPage() {
   const routePolyline = activity?.map?.polyline || activity?.map?.summary_polyline || null;
   const activityDescription = activity?.description?.trim() ?? '';
   const workoutCategory = activity ? getActivityWorkoutCategory(activity) : null;
+  const detailNavigationItems: ActivitySectionNavItem[] = [
+    { id: 'activity-summary', label: t('activity.navSummary', '总览') },
+    ...(routeAchievement
+      ? [{ id: 'activity-route-comparison' as const, label: t('activity.navRouteComparison', '路线对比') }]
+      : []),
+    { id: 'activity-ai', label: t('activity.navAI', 'AI 结论') },
+    ...(streams ? [{ id: 'activity-charts' as const, label: t('activity.navCharts', '运动曲线') }] : []),
+    ...(shouldShowSplits || shouldShowLaps
+      ? [{ id: 'activity-splits' as const, label: t('activity.navSplits', '分段') }]
+      : []),
+  ];
   const renderPrimarySideSections = (currentActivity: StravaActivity) => (
     <>
       <ActivityStats activity={currentActivity} streams={streams} />
@@ -697,12 +772,14 @@ export default function ActivityDetailPage() {
         </div>
       )}
 
+      {isPageReady && activity && <ActivitySectionNav items={detailNavigationItems} />}
+
       {/* Page content or full-page loading - only show once */}
       {!isPageReady ? (
         <ActivityDetailSkeleton />
       ) : activity && (
         <div className="container mx-auto max-w-6xl px-4 py-5 sm:py-6 relative">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.92fr)] lg:items-stretch">
+          <div id="activity-summary" className="scroll-mt-28 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.92fr)] lg:items-stretch">
             <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -788,7 +865,7 @@ export default function ActivityDetailPage() {
               </div>
 
               {routeAchievement && (
-                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+                <div id="activity-route-comparison" className="scroll-mt-28 mt-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1.5 flex items-center gap-1.5">
@@ -871,7 +948,7 @@ export default function ActivityDetailPage() {
                 streams={streams}
               />
 
-              <div className="min-w-0">
+              <div id="activity-ai" className="min-w-0 scroll-mt-28">
                 {isGuest ? (
                   <GuestAIAnalysisPreview activity={activity} />
                 ) : (
@@ -884,12 +961,13 @@ export default function ActivityDetailPage() {
               </div>
 
               {streams && (
-                <SectionCard
-                  title={t('activity.charts', '运动曲线')}
-                  icon={<BarChart3 size={15} />}
-                  aside={formatDistance(activity.distance, 'km')}
-                >
-                  <div className="space-y-4">
+                <div id="activity-charts" className="scroll-mt-28">
+                  <SectionCard
+                    title={t('activity.charts', '运动曲线')}
+                    icon={<BarChart3 size={15} />}
+                    aside={formatDistance(activity.distance, 'km')}
+                  >
+                    <div className="space-y-4">
                     {streams.heartrate && (
                       <ChartSection
                         title={t('activity.heartRate')}
@@ -990,12 +1068,13 @@ export default function ActivityDetailPage() {
                         />
                       </ChartSection>
                     )}
-                  </div>
-                </SectionCard>
+                    </div>
+                  </SectionCard>
+                </div>
               )}
 
               {(shouldShowSplits || shouldShowLaps) && (
-                <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+                <div id="activity-splits" className="scroll-mt-28 grid min-w-0 gap-5 lg:grid-cols-2">
                   {shouldShowSplits && (
                     <SectionCard title={`${t('activity.splits')} (${activity.splits_metric!.length})`}>
                       <div className="overflow-x-auto">
@@ -1037,7 +1116,7 @@ export default function ActivityDetailPage() {
               </div>
             </main>
 
-            <aside className="hidden min-w-0 space-y-5 xl:sticky xl:top-[88px] xl:block">
+            <aside className="hidden min-w-0 space-y-5 xl:sticky xl:top-[112px] xl:block">
               {renderPrimarySideSections(activity)}
               {renderSecondarySideSections(activity)}
             </aside>
@@ -1075,6 +1154,27 @@ function GuestAIAnalysisPreview({ activity }: { activity: StravaActivity }) {
       aside={t('guest.demo', '示例')}
     >
       <div className="space-y-3">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <GuestTakeawayRow
+            label={t('aiAnalysis.quickTrainingType', '这是什么训练')}
+            value={isInterval
+              ? t('guest.aiQuickIntervalType', '间歇训练 · 快慢段交替')
+              : t('guest.aiQuickAerobicType', '有氧跑 · 稳态输出')}
+          />
+          <GuestTakeawayRow
+            label={t('aiAnalysis.quickExecution', '完成得怎么样')}
+            value={isInterval
+              ? t('guest.aiQuickIntervalExecution', '快段和恢复段结构清晰，整体完成度良好。')
+              : t('guest.aiQuickAerobicExecution', '配速 {{pace}}，强度适中，节奏稳定。', { pace })}
+          />
+          <GuestTakeawayRow
+            label={t('aiAnalysis.quickNextStep', '接下来做什么')}
+            value={isInterval
+              ? t('guest.aiQuickIntervalNext', '下一次安排轻松跑，先完成恢复。')
+              : t('guest.aiQuickAerobicNext', '下一次继续低强度补量，关注疲劳反馈。')}
+            isLast
+          />
+        </div>
         <div className="grid grid-cols-3 gap-2">
           <BriefGuestMetric label={t('aiAnalysis.paceZone', '配速区间')} value={isInterval ? 'I-间歇' : 'E-有氧'} />
           <BriefGuestMetric label={t('aiAnalysis.intensity', '强度')} value={isInterval ? '偏高' : '适中'} />
@@ -1097,6 +1197,23 @@ function GuestAIAnalysisPreview({ activity }: { activity: StravaActivity }) {
         </div>
       </div>
     </SectionCard>
+  );
+}
+
+function GuestTakeawayRow({
+  label,
+  value,
+  isLast = false,
+}: {
+  label: string;
+  value: string;
+  isLast?: boolean;
+}) {
+  return (
+    <div className={`grid gap-1 px-3 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] ${isLast ? '' : 'border-b border-zinc-200 dark:border-zinc-800'}`}>
+      <p className="font-mono text-[10px] font-bold text-zinc-500">{label}</p>
+      <p className="font-mono text-xs font-bold leading-relaxed text-zinc-900 dark:text-zinc-100">{value}</p>
+    </div>
   );
 }
 

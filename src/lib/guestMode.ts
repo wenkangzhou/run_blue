@@ -5,6 +5,12 @@ import {
   type RaceDistance,
   type TrainingPlan,
 } from '@/lib/trainingPlan';
+import {
+  getGuestDemoDateKey,
+  getGuestDemoDateOffsetDays,
+  getGuestPlanCreatedAt,
+  shiftGuestDemoDate,
+} from '@/lib/guestDemoDates';
 
 export const GUEST_ACCESS_TOKEN = 'runblue_guest_demo_token';
 
@@ -290,27 +296,30 @@ const SPECS: GuestActivitySpec[] = [
 
 const ROUTE_BY_ID = new Map(ROUTES.map((route) => [route.id, route]));
 const POLYLINE_BY_ROUTE = new Map(ROUTES.map((route) => [route.id, encodePolyline(route.points)]));
+const LATEST_GUEST_ACTIVITY_DATE = SPECS[0].date;
 
-const GUEST_ACTIVITIES = SPECS
-  .map(createGuestActivity)
-  .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+interface GuestDemoSnapshot {
+  dateKey: string;
+  activities: StravaActivity[];
+  routes: SavedRoute[];
+}
 
-const GUEST_ROUTES = buildGuestRoutes();
+let guestDemoSnapshot: GuestDemoSnapshot | null = null;
 
 export function isGuestUser(user: Pick<User, 'id' | 'isGuest'> | null | undefined): boolean {
   return Boolean(user?.isGuest || user?.id === GUEST_USER.id);
 }
 
-export function getGuestActivities(): StravaActivity[] {
-  return GUEST_ACTIVITIES;
+export function getGuestActivities(now = new Date()): StravaActivity[] {
+  return getGuestDemoSnapshot(now).activities;
 }
 
-export function getGuestActivity(activityId: number): StravaActivity | null {
-  return GUEST_ACTIVITIES.find((activity) => activity.id === activityId) ?? null;
+export function getGuestActivity(activityId: number, now = new Date()): StravaActivity | null {
+  return getGuestActivities(now).find((activity) => activity.id === activityId) ?? null;
 }
 
-export function getGuestActivityStreams(activityId: number): Record<string, ActivityStream> | null {
-  const activity = getGuestActivity(activityId);
+export function getGuestActivityStreams(activityId: number, now = new Date()): Record<string, ActivityStream> | null {
+  const activity = getGuestActivity(activityId, now);
   if (!activity) return null;
 
   const route = ROUTE_BY_ID.get(getRouteIdForActivity(activity.id));
@@ -319,15 +328,24 @@ export function getGuestActivityStreams(activityId: number): Record<string, Acti
   return buildStreams(activity, route.points);
 }
 
-export function getGuestSavedRoutes(): SavedRoute[] {
-  return GUEST_ROUTES;
+export function getGuestSavedRoutes(now = new Date()): SavedRoute[] {
+  return getGuestDemoSnapshot(now).routes;
 }
 
-export function getGuestTrainingPlans(locale = 'zh'): TrainingPlan[] {
+export function getGuestTrainingPlans(locale = 'zh', now = new Date()): TrainingPlan[] {
   const stored = readGuestPlans();
-  if (stored.length > 0) return stored;
+  if (stored.length > 0) {
+    const normalized = stored.map((plan) => plan.id === 'guest_plan_10k'
+      ? {
+          ...createGuestTrainingPlan(locale, now),
+          executionOverrides: plan.executionOverrides,
+        }
+      : plan);
+    writeGuestPlans(normalized);
+    return normalized;
+  }
 
-  const seeded = [createGuestTrainingPlan(locale)];
+  const seeded = [createGuestTrainingPlan(locale, now)];
   writeGuestPlans(seeded);
   return seeded;
 }
@@ -351,12 +369,12 @@ export function deleteGuestTrainingPlan(id: string): void {
   writeGuestPlans(readGuestPlans().filter((plan) => plan.id !== id));
 }
 
-function createGuestTrainingPlan(locale: string): TrainingPlan {
+function createGuestTrainingPlan(locale: string, now = new Date()): TrainingPlan {
   const plan = generateFallbackTrainingPlan('10k', 3000, 8, 1500, 38, locale, 172);
   return {
     ...plan,
     id: 'guest_plan_10k',
-    createdAt: '2026-06-01T00:00:00.000Z',
+    createdAt: getGuestPlanCreatedAt(now),
   };
 }
 
@@ -488,9 +506,29 @@ function createGuestActivity(spec: GuestActivitySpec): StravaActivity {
   };
 }
 
-function buildGuestRoutes(): SavedRoute[] {
+function getGuestDemoSnapshot(now: Date): GuestDemoSnapshot {
+  const dateKey = getGuestDemoDateKey(now);
+  if (guestDemoSnapshot?.dateKey === dateKey) return guestDemoSnapshot;
+
+  const offsetDays = getGuestDemoDateOffsetDays(LATEST_GUEST_ACTIVITY_DATE, now);
+  const activities = SPECS
+    .map((spec) => createGuestActivity({
+      ...spec,
+      date: shiftGuestDemoDate(spec.date, offsetDays),
+    }))
+    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+
+  guestDemoSnapshot = {
+    dateKey,
+    activities,
+    routes: buildGuestRoutes(activities),
+  };
+  return guestDemoSnapshot;
+}
+
+function buildGuestRoutes(activities: StravaActivity[]): SavedRoute[] {
   return ROUTES.map((route) => {
-    const routeActivities = GUEST_ACTIVITIES.filter((activity) => getRouteIdForActivity(activity.id) === route.id);
+    const routeActivities = activities.filter((activity) => getRouteIdForActivity(activity.id) === route.id);
     const reference = routeActivities[0];
     const activityIds = routeActivities.map((activity) => activity.id);
     const avgDistance = Math.round(
@@ -501,7 +539,7 @@ function buildGuestRoutes(): SavedRoute[] {
       key: `guest-${route.id}`,
       name: route.name,
       activityIds,
-      createdAt: new Date(reference?.start_date ?? '2026-06-01T00:00:00Z').getTime(),
+      createdAt: new Date(reference?.start_date ?? Date.now()).getTime(),
       referenceActivityId: reference?.id ?? 0,
       polyline: POLYLINE_BY_ROUTE.get(route.id),
       distance: avgDistance,

@@ -1,9 +1,13 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
+import { ChevronRight, X } from 'lucide-react';
 import { StravaActivity } from '@/types';
 import { MetricType, getDailyAggregates, formatMetricValue, getMetricUnit } from '@/lib/stats';
+import { getCalendarHeatmapLevelMap } from '@/lib/calendarHeatmap';
+import { formatDistance, formatPace } from '@/lib/strava';
 
 interface ActivityCalendarHeatmapProps {
   activities: StravaActivity[];
@@ -38,21 +42,18 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
   const locale = i18n.language;
   const isZh = locale.startsWith('zh');
   const [hovered, setHovered] = useState<{ date: string; value: number; x: number; y: number } | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const dailyData = useMemo(() => {
     return getDailyAggregates(activities, year, metric);
   }, [activities, year, metric]);
 
-  const { weeks, maxValue, totalRuns, valueMap } = useMemo(() => {
-    // Build date → value map
-    const byDate = new Map<string, number>();
-    dailyData.forEach((d) => byDate.set(d.date, d.value));
+  const { weeks, totalRuns, activeDays, levelMap, aggregateMap } = useMemo(() => {
+    const byDate = new Map(dailyData.map((day) => [day.date, day]));
 
-    // Find max value for color scaling
-    const max = Math.max(...dailyData.map((d) => d.value), 1);
-
-    // Count runs in this year
-    const runs = dailyData.filter((d) => d.value > 0).length;
+    const runs = dailyData.reduce((sum, day) => sum + day.activities.length, 0);
+    const days = dailyData.filter((day) => day.activities.length > 0).length;
+    const values = dailyData.map((day) => day.value).filter((value) => value > 0);
 
     // Find calendar start date (first Monday before or on Jan 1)
     const jan1 = new Date(year, 0, 1);
@@ -74,28 +75,17 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
       w.push(week);
     }
 
-    return { weeks: w, maxValue: max, totalRuns: runs, valueMap: byDate };
-  }, [dailyData, year]);
+    return {
+      weeks: w,
+      totalRuns: runs,
+      activeDays: days,
+      levelMap: getCalendarHeatmapLevelMap(values, metric === 'pace'),
+      aggregateMap: byDate,
+    };
+  }, [dailyData, metric, year]);
 
   const isReverseMetric = metric === 'pace';
   const COLOR_CLASSES = colorClasses || (isReverseMetric ? REVERSE_COLOR_CLASSES : DEFAULT_COLOR_CLASSES);
-
-  const getLevel = (value: number) => {
-    if (value <= 0) return 0;
-    if (isReverseMetric) {
-      // For pace: lower = better (faster), so invert ratio
-      const ratio = value / maxValue;
-      if (ratio > 0.75) return 1;
-      if (ratio > 0.5) return 2;
-      if (ratio > 0.25) return 3;
-      return 4;
-    }
-    const ratio = value / maxValue;
-    if (ratio < 0.25) return 1;
-    if (ratio < 0.5) return 2;
-    if (ratio < 0.75) return 3;
-    return 4;
-  };
 
   const formatDateLabel = (date: Date) => {
     return isZh
@@ -104,7 +94,7 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
   };
 
   const handleMouseEnter = (date: Date, value: number, e: React.MouseEvent) => {
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     setHovered({
       date: formatDateLabel(date),
       value,
@@ -113,11 +103,23 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
     });
   };
 
+  const selectedDay = selectedDate ? aggregateMap.get(selectedDate) : undefined;
+  const selectedDateValue = selectedDate
+    ? (() => {
+        const [selectedYear, month, day] = selectedDate.split('-').map(Number);
+        return new Date(selectedYear, month - 1, day);
+      })()
+    : null;
+
   return (
     <div className="relative">
       <div className="flex items-center justify-between mb-3">
         <span className="font-mono text-sm font-bold text-zinc-700 dark:text-zinc-300">
-          {t('stats.yearRunCount', '{{year}} · {{count}} 次跑步', { year, count: totalRuns })}
+          {t('stats.yearRunSummary', '{{year}} · {{count}} 次跑步 · {{days}} 个训练日', {
+            year,
+            count: totalRuns,
+            days: activeDays,
+          })}
         </span>
       </div>
 
@@ -155,19 +157,30 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
             <div key={wi} className="flex flex-col gap-[3px] flex-shrink-0">
               {week.map((date, di) => {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                const value = valueMap.get(key) || 0;
-                const level = getLevel(value);
+                const aggregate = aggregateMap.get(key);
+                const value = aggregate?.value || 0;
+                const level = levelMap.get(value) ?? 0;
                 const isInYear = date.getFullYear() === year;
+                const hasActivities = Boolean(aggregate?.activities.length);
+                const isSelected = selectedDate === key;
                 const title = value > 0
                   ? `${formatDateLabel(date)} · ${formatMetricValue(value, metric)} ${getMetricUnit(metric)}`
                   : formatDateLabel(date);
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={di}
                     title={isInYear ? title : undefined}
-                    className={`h-[11px] w-[11px] rounded-[3px] ${isInYear ? COLOR_CLASSES[level] : 'bg-transparent'} cursor-pointer ring-1 ring-transparent transition-transform hover:scale-125 hover:ring-white dark:hover:ring-zinc-950`}
+                    aria-label={isInYear ? title : undefined}
+                    aria-pressed={isSelected}
+                    disabled={!isInYear}
+                    className={`h-[11px] w-[11px] rounded-[3px] p-0 ${isInYear ? COLOR_CLASSES[level] : 'bg-transparent'} ${hasActivities ? 'cursor-pointer' : 'cursor-default'} ring-1 transition-transform hover:scale-125 hover:ring-white dark:hover:ring-zinc-950 ${isSelected ? 'ring-2 ring-blue-600 dark:ring-blue-300' : 'ring-transparent'}`}
                     onMouseEnter={(e) => isInYear && handleMouseEnter(date, value, e)}
                     onMouseLeave={() => setHovered(null)}
+                    onClick={() => {
+                      if (!hasActivities) return;
+                      setSelectedDate((current) => current === key ? null : key);
+                    }}
                   />
                 );
               })}
@@ -191,6 +204,53 @@ export function ActivityCalendarHeatmap({ activities, year, metric, colorClasses
               · {formatMetricValue(hovered.value, metric)} {getMetricUnit(metric)}
             </span>
           )}
+        </div>
+      )}
+
+      {selectedDay && selectedDay.activities.length > 0 && selectedDateValue && (
+        <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/50">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {formatDateLabel(selectedDateValue)}
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-zinc-500">
+                {t('stats.dayRunSummary', '{{count}} 次跑步 · {{value}} {{unit}}', {
+                  count: selectedDay.activities.length,
+                  value: formatMetricValue(selectedDay.value, metric),
+                  unit: getMetricUnit(metric),
+                })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedDate(null)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              aria-label={t('common.close', '关闭')}
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="mt-2 space-y-1.5">
+            {selectedDay.activities.map((activity) => (
+              <Link
+                key={activity.id}
+                href={`/activities/${activity.id}`}
+                className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2 transition-colors hover:border-blue-300 hover:bg-blue-50/50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                    {activity.name}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[10px] text-zinc-500">
+                    {formatDistance(activity.distance, 'km')} · {formatPace(activity.distance, activity.moving_time, 'min/km')}
+                  </p>
+                </div>
+                <ChevronRight size={14} className="shrink-0 text-zinc-400" />
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

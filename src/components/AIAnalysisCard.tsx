@@ -549,6 +549,17 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
         closeSentence([base, signalText, focus].map(cleanClause).filter(Boolean).join('；')),
     };
   })();
+  const quickTrainingType = [
+    verdict?.type || workoutTypeLabel || t('aiAnalysis.workoutRead', '训练识别'),
+    structureSummary,
+  ].filter(Boolean).join(' · ');
+  const quickExecution = [
+    keySustainedEffort ? coachConclusion?.headline : verdict?.effectLabel,
+    coachConclusion?.detail ? compactSummary(coachConclusion.detail, 1, 82) : '',
+  ].filter(Boolean).join(' · ') || t('aiAnalysis.waitingForConclusion', '正在整理本次训练完成情况');
+  const quickNextStep = briefAdvice[0]
+    || compactSummary(analysis?.nextWorkoutSuggestion || '', 1, 64)
+    || t('aiAnalysis.recoverByFeel', '根据疲劳反馈安排恢复，再进入下一次训练。');
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -676,69 +687,35 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
             )}
 
             <div className={`rounded-lg border p-4 ${verdict ? `${effectStyles[verdict.effect].border} ${effectStyles[verdict.effect].bg}` : 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60'}`}>
-              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="break-words font-mono text-base font-black text-zinc-950 [overflow-wrap:anywhere] dark:text-zinc-50">
-                      {verdict?.type || workoutTypeLabel || t('aiAnalysis.workoutRead', '训练识别')}
-                    </span>
-                    {verdict && (
-                      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold ${effectStyles[verdict.effect].color} ${effectStyles[verdict.effect].border}`}>
-                        {verdict.effectLabel}
-                      </span>
-                    )}
-                    {confidenceLabel && (
-                      <span className="inline-flex items-center rounded-md bg-white/70 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-500 dark:bg-zinc-900/60 dark:text-zinc-400">
-                        {confidenceLabel}
-                      </span>
-                    )}
-                  </div>
-                  {structureSummary && (
-                    <p className="mt-1 break-words font-mono text-[11px] text-zinc-500 [overflow-wrap:anywhere]">
-                      {structureSummary}
-                    </p>
-                  )}
-                </div>
-                <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:min-w-[220px]">
-                  <BriefMetric label={t('aiAnalysis.paceZone', '配速区间')} value={zone.label} valueClassName={zone.color} />
-                  <BriefMetric
-                    label={t('aiAnalysis.intensity', '强度')}
-                    value={intensity ? (isRace ? t('aiAnalysis.extremeRace') : intensity.label) : '--'}
-                  />
-                  <BriefMetric label={t('aiAnalysis.recovery', '恢复')} value={`${analysis.recoveryHours}h`} valueClassName={isRace ? 'text-red-600' : ''} />
-                </div>
+              <div className="overflow-hidden rounded-md border border-white/70 bg-white/70 dark:border-zinc-800 dark:bg-zinc-950/30">
+                <AIKeyTakeawayRow
+                  label={t('aiAnalysis.quickTrainingType', '这是什么训练')}
+                  value={quickTrainingType}
+                />
+                <AIKeyTakeawayRow
+                  label={t('aiAnalysis.quickExecution', '完成得怎么样')}
+                  value={quickExecution}
+                />
+                <AIKeyTakeawayRow
+                  label={t('aiAnalysis.quickNextStep', '接下来做什么')}
+                  value={quickNextStep}
+                  isLast
+                />
               </div>
 
-              {coachConclusion && (
-                <div className="rounded-md border border-white/70 bg-white/70 p-3 dark:border-zinc-800 dark:bg-zinc-950/30">
-                  <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-                    {t('aiAnalysis.trainingConclusion', '训练结论')}
-                  </p>
-                  <p className="break-words font-mono text-sm font-black text-zinc-950 [overflow-wrap:anywhere] dark:text-zinc-50">
-                    {coachConclusion.headline}
-                  </p>
-                  <p className="mt-1 break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-                    {coachConclusion.detail}
-                  </p>
-                </div>
-              )}
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
+                <BriefMetric label={t('aiAnalysis.paceZone', '配速区间')} value={zone.label} valueClassName={zone.color} />
+                <BriefMetric
+                  label={t('aiAnalysis.intensity', '强度')}
+                  value={intensity ? (isRace ? t('aiAnalysis.extremeRace') : intensity.label) : '--'}
+                />
+                <BriefMetric label={t('aiAnalysis.recovery', '恢复')} value={`${analysis.recoveryHours}h`} valueClassName={isRace ? 'text-red-600' : ''} />
+              </div>
 
-              {briefAdvice.length > 0 && (
-                <div className="mt-3 rounded-md border border-white/70 bg-white/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/30">
-                  <p className="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-                    {isRace ? t('aiAnalysis.postRaceRecovery') : t('aiAnalysis.nextWorkout')}
-                  </p>
-                  <div className="space-y-1">
-                    {briefAdvice.map((item, index) => (
-                      <div key={index} className="flex items-start gap-1.5">
-                        <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-blue-500" />
-                        <p className="break-words font-mono text-xs leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-                          {item}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {confidenceLabel && (
+                <p className="mt-2 text-right font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                  {confidenceLabel}
+                </p>
               )}
             </div>
 
@@ -924,6 +901,25 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AIKeyTakeawayRow({
+  label,
+  value,
+  isLast = false,
+}: {
+  label: string;
+  value: string;
+  isLast?: boolean;
+}) {
+  return (
+    <div className={`grid gap-1 px-3 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:items-start ${isLast ? '' : 'border-b border-zinc-200/80 dark:border-zinc-800'}`}>
+      <p className="font-mono text-[10px] font-bold text-zinc-500">{label}</p>
+      <p className="break-words font-mono text-xs font-bold leading-relaxed text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
+        {value}
+      </p>
     </div>
   );
 }
