@@ -48,3 +48,6 @@ Thumbs.db
 public/sw.js
 public/swe-worker*
 .history
+
+# HyperFrames 生成视频
+/videos
