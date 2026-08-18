@@ -10,6 +10,7 @@ import { getActivity, getActivityStreams, formatDateTime, formatDistance, format
 import { formatPaceSeconds } from '@/lib/paceFormat';
 import { getCachedActivity, setCachedActivity, shouldRefreshCachedActivity } from '@/lib/cache';
 import { getActivityDateKey } from '@/lib/dates';
+import { calculatePerformanceTrend, getActivityPerformanceImpact } from '@/lib/performanceTrend';
 import {
   ACTIVITY_WORKOUT_TRANSLATION_KEYS,
   getActivityWorkoutCategory,
@@ -32,6 +33,7 @@ import { calculatePaceTrend } from '@/lib/paceTrend';
 import {
   BarChart3,
   CalendarDays,
+  ChartNoAxesCombined,
   ChevronDown,
   ChevronLeft,
   Gauge,
@@ -174,6 +176,14 @@ export default function ActivityDetailPage() {
     if (!activity) return null;
     return calculatePaceTrend(allActivities, activity.id);
   }, [allActivities, activity]);
+  const performanceImpact = useMemo(() => {
+    if (!activity) return null;
+    const activitiesWithDetail = allActivities.some((candidate) => candidate.id === activity.id)
+      ? allActivities.map((candidate) => candidate.id === activity.id ? activity : candidate)
+      : [...allActivities, activity];
+    const trend = calculatePerformanceTrend({ activities: activitiesWithDetail });
+    return getActivityPerformanceImpact(trend, activity.id);
+  }, [activity, allActivities]);
 
   // Route achievement data
   const { savedRoutes: storedSavedRoutes } = useRoutesStore();
@@ -627,6 +637,45 @@ export default function ActivityDetailPage() {
   );
   const renderSecondarySideSections = (currentActivity: StravaActivity) => (
     <>
+      {performanceImpact && (
+        <SectionCard
+          title={t('activity.performanceImpact', '能力记录')}
+          icon={<ChartNoAxesCombined size={15} />}
+          aside={(
+            <Link href="/stats#performance-trend" className="font-mono text-[10px] text-blue-600 hover:underline dark:text-blue-400">
+              {t('activity.viewPerformanceTrend', '查看趋势')}
+            </Link>
+          )}
+        >
+          <div className={`rounded-md border px-3 py-3 ${performanceImpact.kind === 'pb'
+            ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/25'
+            : 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/25'
+          }`}>
+            <div className="flex items-start gap-2.5">
+              <Trophy size={17} className={performanceImpact.kind === 'pb' ? 'mt-0.5 shrink-0 text-amber-500' : 'mt-0.5 shrink-0 text-blue-500'} />
+              <div className="min-w-0">
+                <p className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  {performanceImpact.kind === 'pb'
+                    ? t('activity.performancePB', '本次刷新 {{distance}} PB · {{time}}', {
+                        distance: performanceImpact.distance.toUpperCase().replace('21K', t('stats.performanceDistance.21k')).replace('42K', t('stats.performanceDistance.42k')),
+                        time: formatDurationDetail(performanceImpact.durationSeconds),
+                      })
+                    : t('activity.performanceAbilityGain', '本次推动 5K 能力估算提升约 {{time}}', {
+                        time: formatDurationDetail(performanceImpact.predictedImprovementSeconds),
+                      })}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  {performanceImpact.kind === 'pb'
+                    ? t('activity.performancePBHint', '真实成绩已记录到成绩趋势，能力曲线会将它作为高可信度证据。')
+                    : t('activity.performanceAbilityHint', '这次连续质量输出达到个人 M 区以上，已纳入近期能力模型。')}
+                  {performanceImpact.heatAdjusted && ` · ${t('activity.performanceHeatAdjusted', '能力估算已考虑热环境成本')}`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
       {currentActivity.best_efforts && currentActivity.best_efforts.length > 0 && (
         <SectionCard title={t('activity.bestEfforts', '本次最佳成绩')} icon={<Trophy size={15} />}>
           <div className="flex flex-wrap gap-2">
@@ -641,6 +690,11 @@ export default function ActivityDetailPage() {
                 <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
                   {formatDurationDetail(effort.elapsed_time)}
                 </span>
+                {effort.pr_rank === 1 && (
+                  <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-700 dark:bg-amber-900/35 dark:text-amber-300">
+                    PB
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -1499,6 +1553,7 @@ function formatPaceValue(pace: number): string {
 interface StravaBestEffort {
   name: string;
   elapsed_time: number;
+  pr_rank?: number | null;
 }
 
 /**

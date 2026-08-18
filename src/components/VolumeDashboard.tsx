@@ -42,6 +42,7 @@ import { useSessionPageState } from '@/hooks/useSessionPageState';
 import type { LucideIcon } from 'lucide-react';
 import { TrainingLoadPanel } from './TrainingLoadPanel';
 import { TrainingZonesPanel } from './TrainingZonesPanel';
+import { PerformanceTrendPanel } from './PerformanceTrendPanel';
 
 interface VolumeDashboardProps {
   activities: StravaActivity[];
@@ -847,6 +848,8 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
       </section>
 
       <TrainingLoadPanel activities={runs} />
+
+      <PerformanceTrendPanel activities={runs} />
 
       <TrainingZonesPanel activities={runs} />
 
