@@ -54,6 +54,16 @@ const STATS_PERIOD_STATE_KEY = 'run_blue_page:stats:period';
 const STATS_YEAR_STATE_KEY = 'run_blue_page:stats:year';
 const STATS_METRIC_STATE_KEY = 'run_blue_page:stats:metric';
 const STATS_SELECTED_PERIOD_STATE_KEY = 'run_blue_page:stats:selected-period';
+const STATS_SECTION_IDS = [
+  'stats-overview',
+  'stats-load',
+  'performance-trend',
+  'training-zones',
+  'stats-trends',
+  'stats-calendar',
+  'stats-metrics',
+] as const;
+type StatsSectionId = typeof STATS_SECTION_IDS[number];
 const METRIC_OPTIONS: Array<{ value: MetricType; icon: LucideIcon }> = [
   { value: 'distance', icon: Route },
   { value: 'duration', icon: Clock },
@@ -510,6 +520,8 @@ function PeriodInspector({
 export function VolumeDashboard({ activities }: VolumeDashboardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const [activeSection, setActiveSection] = React.useState<StatsSectionId>('stats-overview');
+  const sectionNavRef = React.useRef<HTMLDivElement>(null);
 
   const runs = useMemo(
     () => activities.filter((activity) => activity.type === 'Run' || activity.sport_type === 'Run'),
@@ -547,6 +559,47 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
     if (availableYears.length === 0) return;
     setSelectedYear((prev) => availableYears.includes(prev) ? prev : defaultYear);
   }, [availableYears, defaultYear, selectedYearHydrated, setSelectedYear]);
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const updateActiveSection = () => {
+      frame = null;
+      let nextSection: StatsSectionId = STATS_SECTION_IDS[0];
+      const isAtPageEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8;
+      if (isAtPageEnd) {
+        nextSection = STATS_SECTION_IDS[STATS_SECTION_IDS.length - 1];
+      } else {
+        for (const id of STATS_SECTION_IDS) {
+          const section = document.getElementById(id);
+          if (section && section.getBoundingClientRect().top <= 122) {
+            nextSection = id;
+          }
+        }
+      }
+      setActiveSection((current) => current === nextSection ? current : nextSection);
+    };
+    const handleScroll = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nav = sectionNavRef.current;
+    const activeButton = nav?.querySelector<HTMLElement>(`[data-stats-section="${activeSection}"]`);
+    if (!nav || !activeButton) return;
+    const targetLeft = activeButton.offsetLeft - (nav.clientWidth - activeButton.clientWidth) / 2;
+    nav.scrollTo({ left: Math.max(targetLeft, 0), behavior: 'smooth' });
+  }, [activeSection]);
 
   const chartData = useMemo(
     () => aggregateActivities(activities, periodType, selectedYear, metric, locale),
@@ -745,10 +798,56 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
       </button>
     </div>
   ) : null;
+  const sectionNavItems: Array<{ id: StatsSectionId; label: string; icon: LucideIcon }> = [
+    { id: 'stats-overview', label: t('stats.navOverview', '概览'), icon: Activity },
+    { id: 'stats-load', label: t('stats.navLoad', '负荷'), icon: HeartPulse },
+    { id: 'performance-trend', label: t('stats.navAbility', '能力'), icon: TrendingUp },
+    { id: 'training-zones', label: t('stats.navZones', '区间'), icon: Gauge },
+    { id: 'stats-trends', label: t('stats.navTrend', '趋势'), icon: BarChart3 },
+    { id: 'stats-calendar', label: t('stats.navCalendar', '日历'), icon: CalendarDays },
+    { id: 'stats-metrics', label: t('stats.navMetrics', '指标'), icon: CalendarCheck },
+  ];
+  const jumpToSection = (id: StatsSectionId) => {
+    const section = document.getElementById(id);
+    if (!section) return;
+    setActiveSection(id);
+    section.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    });
+    window.history.replaceState(null, '', `#${id}`);
+  };
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(290px,0.65fr)]">
+      <nav
+        aria-label={t('stats.sectionNav', '统计页导航')}
+        className="sticky top-[53px] z-[9] -mx-3 bg-zinc-50/95 px-3 py-2 backdrop-blur md:-mx-4 md:px-4 dark:bg-zinc-950/95"
+      >
+        <div ref={sectionNavRef} className="flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-sm shadow-zinc-200/50 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+          {sectionNavItems.map(({ id, label, icon: Icon }) => {
+            const isActive = activeSection === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => jumpToSection(id)}
+                aria-current={isActive ? 'location' : undefined}
+                data-stats-section={id}
+                className={`inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 font-mono text-[11px] transition-colors sm:flex-1 ${isActive
+                  ? 'bg-blue-600 font-bold text-white shadow-sm dark:bg-blue-400 dark:text-zinc-950'
+                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <section id="stats-overview" className="scroll-mt-28 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(290px,0.65fr)]">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 sm:p-5 lg:p-6 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -853,7 +952,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
 
       <TrainingZonesPanel activities={runs} />
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 sm:p-4 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+      <section id="stats-trends" className="scroll-mt-28 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-200/60 sm:p-4 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="grid grid-cols-4 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-950">
             {PERIOD_TYPES.map((type) => (
@@ -989,7 +1088,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         </div>
       </div>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+      <section id="stats-calendar" className="scroll-mt-28 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <SectionHeader
           icon={CalendarDays}
           title={t('stats.trainingCalendar', '训练日历')}
@@ -998,7 +1097,7 @@ export function VolumeDashboard({ activities }: VolumeDashboardProps) {
         <ActivityCalendarHeatmap activities={activities} year={selectedYear} metric={metric} colorClasses={tone.calendar} />
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+      <section id="stats-metrics" className="scroll-mt-28 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
         <SectionHeader
           icon={CalendarCheck}
           title={t('stats.keyMetrics', '关键指标')}

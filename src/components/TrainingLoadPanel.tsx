@@ -79,7 +79,7 @@ export function TrainingLoadPanel({ activities }: TrainingLoadPanelProps) {
   const stateHint = t(`stats.loadStateHint.${summary.state}`);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+    <section id="stats-load" className="scroll-mt-28 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
       <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)] lg:items-center">
         <div>
           <div className="flex items-center justify-between gap-3">

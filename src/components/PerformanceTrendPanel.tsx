@@ -157,7 +157,7 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
   const currentEvidence = current?.evidence ?? [];
 
   return (
-    <section id="performance-trend" className="scroll-mt-24 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
+    <section id="performance-trend" className="scroll-mt-28 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
       <div className="border-b border-zinc-100 p-4 sm:p-5 dark:border-zinc-800">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
