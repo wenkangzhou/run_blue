@@ -36,6 +36,7 @@ import {
 } from '@/lib/trainingPlan';
 import {
   Calendar,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Flag,
@@ -87,6 +88,10 @@ function getPlanPhasePreview(plan: TrainingPlan) {
     .map((phase) => ({ phase, count: counts[phase] }));
 }
 
+function getFirstDescriptionLine(description: string) {
+  return description.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+}
+
 export default function TrainingPlansListPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -114,6 +119,17 @@ export default function TrainingPlansListPage() {
   const planExecutions = React.useMemo(
     () => new Map(plans.map((plan) => [plan.id, calculateTrainingPlanExecution(plan, sourceActivities)])),
     [plans, sourceActivities]
+  );
+  const nextPlanSession = React.useMemo(
+    () => plans
+      .flatMap((plan) => {
+        const execution = planExecutions.get(plan.id);
+        return execution?.sessions
+          .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
+          .map((session) => ({ plan, execution, session })) ?? [];
+      })
+      .sort((left, right) => left.session.date.getTime() - right.session.date.getTime())[0],
+    [planExecutions, plans]
   );
 
   useEffect(() => {
@@ -303,6 +319,51 @@ export default function TrainingPlansListPage() {
       </div>
 
       <main className="container mx-auto max-w-3xl px-3 py-5">
+        {nextPlanSession && (
+          <Link
+            href={`/plans/${nextPlanSession.plan.id}#plan-session-${nextPlanSession.session.key}`}
+            className="group mb-5 block overflow-hidden border-2 border-blue-500 bg-blue-50/80 transition-colors hover:bg-blue-50 dark:border-blue-500 dark:bg-blue-950/20 dark:hover:bg-blue-950/30"
+          >
+            <div className="flex items-start justify-between gap-4 px-4 py-4 sm:items-center">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center bg-blue-600 text-white">
+                  <CalendarClock size={19} />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
+                      {t('trainingPlan.nextWorkoutEntry', '下一次训练')}
+                    </p>
+                    <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                      {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short',
+                      }).format(nextPlanSession.session.date)}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 font-pixel text-lg font-bold text-zinc-950 dark:text-zinc-50">
+                    {nextPlanSession.session.session.title}
+                  </h2>
+                  <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+                    {nextPlanSession.session.session.distance}km
+                    {nextPlanSession.session.session.paceZone ? ` · ${nextPlanSession.session.session.paceZone}` : ''}
+                    {' · '}{t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: nextPlanSession.session.week })}
+                  </p>
+                  {getFirstDescriptionLine(nextPlanSession.session.session.description) && (
+                    <p className="mt-2 line-clamp-2 font-mono text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      {getFirstDescriptionLine(nextPlanSession.session.session.description)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-blue-200 bg-white text-blue-600 transition-transform group-hover:translate-x-0.5 dark:border-blue-800 dark:bg-zinc-900 dark:text-blue-300">
+                <ChevronRight size={17} />
+              </span>
+            </div>
+          </Link>
+        )}
+
         <section className="mb-5 border-4 border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-950">
           <div className="border-b-2 border-zinc-100 px-4 py-4 dark:border-zinc-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -490,7 +551,7 @@ export default function TrainingPlansListPage() {
                     )}
                     {nextSession && (
                       <Link
-                        href={`/plans/${plan.id}`}
+                        href={`/plans/${plan.id}#plan-session-${nextSession.key}`}
                         className="mt-3 flex items-center justify-between gap-3 border border-blue-200 bg-blue-50 px-3 py-2.5 transition-colors hover:border-blue-400 dark:border-blue-900/60 dark:bg-blue-950/20"
                       >
                         <div className="min-w-0">

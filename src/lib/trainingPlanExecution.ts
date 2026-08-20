@@ -54,6 +54,17 @@ export interface TrainingPlanExecution {
   completionRate: number;
 }
 
+export interface TrainingPlanSessionReference {
+  plan: TrainingPlan;
+  execution: TrainingPlanExecution;
+  session: SessionExecution;
+}
+
+export interface ActivityTrainingPlanContext {
+  matched?: TrainingPlanSessionReference;
+  next?: TrainingPlanSessionReference;
+}
+
 export interface NextWeekAdjustment {
   type: 'not_started' | 'maintain' | 'reduce' | 'recover';
   multiplier: number;
@@ -333,6 +344,69 @@ export function calculateTrainingPlanExecution(
       ? Math.round(((completedCount + partialCount * 0.5) / dueSessions.length) * 100)
       : 0,
   };
+}
+
+function compareSessionReferences(
+  left: TrainingPlanSessionReference,
+  right: TrainingPlanSessionReference
+) {
+  return left.session.date.getTime() - right.session.date.getTime()
+    || right.plan.createdAt.localeCompare(left.plan.createdAt);
+}
+
+function getUpcomingSessionReferences(
+  plans: TrainingPlan[],
+  activities: StravaActivity[],
+  now: Date
+): TrainingPlanSessionReference[] {
+  return plans.flatMap((plan) => {
+    const execution = calculateTrainingPlanExecution(plan, activities, now);
+    return execution.sessions
+      .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
+      .map((session) => ({ plan, execution, session }));
+  }).sort(compareSessionReferences);
+}
+
+export function getNextTrainingPlanSession(
+  plans: TrainingPlan[],
+  activities: StravaActivity[],
+  now = new Date()
+): TrainingPlanSessionReference | undefined {
+  return getUpcomingSessionReferences(plans, activities, now)[0];
+}
+
+export function getActivityTrainingPlanContext(
+  plans: TrainingPlan[],
+  activities: StravaActivity[],
+  activity: StravaActivity,
+  now = new Date()
+): ActivityTrainingPlanContext {
+  const executions = plans.map((plan) => ({
+    plan,
+    execution: calculateTrainingPlanExecution(plan, activities, now),
+  }));
+  const matched = executions
+    .flatMap(({ plan, execution }) => execution.sessions
+      .filter((session) => session.activity?.id === activity.id)
+      .map((session) => ({ plan, execution, session })))
+    .sort((left, right) => {
+      if (left.session.matchSource !== right.session.matchSource) {
+        return left.session.matchSource === 'manual' ? -1 : 1;
+      }
+      return Math.abs(left.session.dateDelta ?? 0) - Math.abs(right.session.dateDelta ?? 0)
+        || right.plan.createdAt.localeCompare(left.plan.createdAt);
+    })[0];
+
+  const upcoming = executions
+    .flatMap(({ plan, execution }) => execution.sessions
+      .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
+      .map((session) => ({ plan, execution, session })))
+    .sort(compareSessionReferences);
+  const next = matched
+    ? upcoming.find((reference) => reference.plan.id === matched.plan.id) ?? upcoming[0]
+    : upcoming[0];
+
+  return { matched, next };
 }
 
 export function getNextWeekAdjustment(

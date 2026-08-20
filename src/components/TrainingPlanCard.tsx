@@ -57,6 +57,7 @@ interface TrainingPlanCardProps {
   execution?: WeekExecution;
   isCurrent?: boolean;
   defaultExpanded?: boolean;
+  focusedSessionKey?: string;
   onAdjustSession?: (execution: SessionExecution) => void;
 }
 
@@ -126,6 +127,7 @@ export function TrainingPlanCard({
   execution,
   isCurrent,
   defaultExpanded,
+  focusedSessionKey,
   onAdjustSession,
 }: TrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
@@ -133,8 +135,8 @@ export function TrainingPlanCard({
   const [expanded, setExpanded] = React.useState(Boolean(defaultExpanded || isCurrent));
 
   React.useEffect(() => {
-    if (isCurrent) setExpanded(true);
-  }, [isCurrent]);
+    if (isCurrent || defaultExpanded) setExpanded(true);
+  }, [defaultExpanded, isCurrent]);
 
   const nonRestSessions = week.sessions.filter((session) => session.type !== 'rest');
   const keySessions = nonRestSessions.filter((session) =>
@@ -184,8 +186,9 @@ export function TrainingPlanCard({
 
   return (
     <section
+      id={`plan-week-${week.week}`}
       className={[
-        'border-2 bg-white dark:bg-zinc-950 transition-colors',
+        'scroll-mt-24 border-2 bg-white dark:bg-zinc-950 transition-colors',
         isCurrent
           ? 'border-blue-500 dark:border-blue-400 shadow-[4px_4px_0px_0px_rgba(37,99,235,0.16)]'
           : 'border-zinc-200 dark:border-zinc-800',
@@ -287,7 +290,14 @@ export function TrainingPlanCard({
               return (
                 <div
                   key={day}
-                  className={['border px-3 py-2', TYPE_STYLES[session.type]].join(' ')}
+                  id={sessionExecution ? `plan-session-${sessionExecution.key}` : undefined}
+                  className={[
+                    'scroll-mt-28 border px-3 py-2',
+                    TYPE_STYLES[session.type],
+                    sessionExecution?.key === focusedSessionKey
+                      ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-950'
+                      : '',
+                  ].join(' ')}
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-10 shrink-0 font-mono text-[11px] font-bold text-zinc-500 dark:text-zinc-400">

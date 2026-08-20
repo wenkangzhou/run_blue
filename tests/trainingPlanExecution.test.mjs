@@ -38,6 +38,8 @@ test.after(() => {
 
 const {
   calculateTrainingPlanExecution,
+  getActivityTrainingPlanContext,
+  getNextTrainingPlanSession,
   getNextWeekAdjustment,
   getTrainingPlanStartDate,
 } = require(path.join(tempDir, 'trainingPlanExecution.cjs'));
@@ -215,4 +217,43 @@ test('does not count an unmatched workout scheduled for today as due', () => {
   assert.equal(todaySession.status, 'upcoming');
   assert.equal(currentWeek.dueCount, 0);
   assert.equal(adjustment.type, 'not_started');
+});
+
+test('finds the next workout across plans and links an activity to its planned session', () => {
+  const plan = makePlan();
+  const activity = makeActivity(8, '2026-06-02', 5000);
+  const now = new Date('2026-06-03T08:00:00');
+
+  const next = getNextTrainingPlanSession([plan], [activity], now);
+  const context = getActivityTrainingPlanContext([plan], [activity], activity, now);
+
+  assert.equal(context.matched.session.key, '1-1');
+  assert.equal(context.matched.plan.id, plan.id);
+  assert.equal(context.next.session.key, '1-6');
+  assert.equal(next.session.key, '1-6');
+});
+
+test('prefers a manual activity match when multiple plans can claim the same run', () => {
+  const activity = makeActivity(9, '2026-06-02', 5000);
+  const automaticPlan = makePlan({ id: 'automatic-plan' });
+  const manualPlan = makePlan({
+    id: 'manual-plan',
+    executionOverrides: {
+      '1-1': {
+        matchMode: 'manual',
+        activityId: activity.id,
+        updatedAt: '2026-06-02T12:00:00.000Z',
+      },
+    },
+  });
+
+  const context = getActivityTrainingPlanContext(
+    [automaticPlan, manualPlan],
+    [activity],
+    activity,
+    new Date('2026-06-03T08:00:00')
+  );
+
+  assert.equal(context.matched.plan.id, 'manual-plan');
+  assert.equal(context.matched.session.matchSource, 'manual');
 });

@@ -22,6 +22,7 @@ import { getGuestActivities, getGuestActivity, getGuestActivityStreams, getGuest
 import { ActivityMap } from '@/components/map/ActivityMap';
 import { AIAnalysisCard } from '@/components/AIAnalysisCard';
 import { ActivityTrainingZonesCard } from '@/components/ActivityTrainingZonesCard';
+import { ActivityTrainingPlanCard } from '@/components/ActivityTrainingPlanCard';
 import { ActivityMemoriesSection } from '@/components/ActivityMemoriesSection';
 import { SplitsTable } from '@/components/SplitsTable';
 import { LapsTable } from '@/components/LapsTable';
@@ -989,6 +990,12 @@ export default function ActivityDetailPage() {
           </div>
 
           <ActivityMemoriesSection activity={activity} activities={allActivities} />
+
+          <ActivityTrainingPlanCard
+            activity={activity}
+            activities={allActivities}
+            isGuest={isGuest}
+          />
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
             <main className="min-w-0 space-y-5">

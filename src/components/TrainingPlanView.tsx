@@ -29,6 +29,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDashed,
+  ChevronRight,
   Flag,
   Gauge,
   LineChart,
@@ -158,6 +159,10 @@ function getSessionShort(session: TrainingSession, isZh: boolean) {
   return isZh ? '轻' : 'Easy';
 }
 
+function getSessionDescriptionLead(description: string) {
+  return description.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+}
+
 function getSessionTone(type: TrainingSession['type']) {
   const tones: Record<TrainingSession['type'], string> = {
     easy: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300',
@@ -259,12 +264,20 @@ export function TrainingPlanView({
     [plan, activities]
   );
   const [editingSession, setEditingSession] = React.useState<SessionExecution | null>(null);
+  const [linkedSessionKey, setLinkedSessionKey] = React.useState<string | null>(null);
   const today = new Date();
-  const todaySession = execution.sessions.find((session) => (
-    session.session.type !== 'rest' && isSameLocalDay(session.date, today)
+  const pendingTodaySession = execution.sessions.find((session) => (
+    session.session.type !== 'rest'
+    && session.status === 'upcoming'
+    && isSameLocalDay(session.date, today)
+  ));
+  const completedTodaySession = execution.sessions.find((session) => (
+    session.session.type !== 'rest'
+    && (session.status === 'completed' || session.status === 'partial')
+    && isSameLocalDay(session.date, today)
   ));
   const nextSession = execution.sessions.find((session) => session.status === 'upcoming');
-  const focusSession = todaySession ?? nextSession;
+  const focusSession = pendingTodaySession ?? nextSession ?? completedTodaySession;
   const timing = getPlanTiming(plan);
   const currentWeek = execution.currentWeek ?? timing.currentWeek;
   const daysToRace = timing.daysToRace;
@@ -286,6 +299,16 @@ export function TrainingPlanView({
       .filter((override) => override.matchMode === 'manual' && override.activityId)
       .map((override) => override.activityId as number)
   ), [plan.executionOverrides]);
+
+  React.useEffect(() => {
+    const hash = window.location.hash.replace(/^#plan-session-/, '');
+    if (!hash || !execution.sessions.some((session) => session.key === hash)) return;
+    setLinkedSessionKey(hash);
+    const timer = window.setTimeout(() => {
+      document.getElementById(`plan-session-${hash}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [execution.sessions, plan.id]);
 
   const handleExecutionOverride = async (
     session: SessionExecution,
@@ -314,8 +337,71 @@ export function TrainingPlanView({
     recovery: t('trainingPlan.phaseRecovery', '恢复期'),
   };
 
+  const focusSessionCard = focusSession ? (
+    <section className="border-2 border-blue-500 bg-blue-50/80 p-4 dark:border-blue-500 dark:bg-blue-950/20">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
+            <CalendarClock size={14} />
+            {pendingTodaySession
+              ? t('trainingPlan.todayWorkout')
+              : t('trainingPlan.nextWorkoutEntry')}
+          </div>
+          <h2 className="mt-2 font-pixel text-lg font-bold text-zinc-950 dark:text-zinc-50">
+            {focusSession.session.title}
+          </h2>
+          <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+            {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+              month: 'short',
+              day: 'numeric',
+              weekday: 'short',
+            }).format(focusSession.date)}
+            {' · '}
+            {focusSession.session.distance}km
+            {focusSession.session.paceZone ? ` · ${focusSession.session.paceZone}` : ''}
+            {' · '}{t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: focusSession.week })}
+          </p>
+          {getSessionDescriptionLead(focusSession.session.description) && (
+            <p className="mt-2 max-w-xl font-mono text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {getSessionDescriptionLead(focusSession.session.description)}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {focusSession.activity && (
+            <Link
+              href={`/activities/${focusSession.activity.id}`}
+              className="inline-flex items-center border-2 border-blue-600 bg-blue-600 px-3 py-2 font-mono text-[10px] font-bold text-white"
+            >
+              {t('trainingPlan.viewMatchedActivity')}
+            </Link>
+          )}
+          <a
+            href={`#plan-session-${focusSession.key}`}
+            className="inline-flex items-center gap-1 border-2 border-blue-200 bg-white px-3 py-2 font-mono text-[10px] font-bold text-blue-700 dark:border-blue-800 dark:bg-zinc-950 dark:text-blue-300"
+          >
+            {t('trainingPlan.viewInSchedule', '在周计划中查看')}
+            <ChevronRight size={12} />
+          </a>
+          {onPlanChange && (
+            <button
+              type="button"
+              onClick={() => setEditingSession(focusSession)}
+              className="inline-flex items-center gap-1 border-2 border-zinc-300 bg-white px-3 py-2 font-mono text-[10px] font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+            >
+              <Settings2 size={12} />
+              {t('trainingPlan.adjustSession')}
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  ) : null;
+
   return (
     <div className="space-y-5">
+      {focusSessionCard}
+
       <section className="border-4 border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-950">
         <div className="border-b-2 border-zinc-100 px-4 py-4 dark:border-zinc-800">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -418,54 +504,6 @@ export function TrainingPlanView({
           </div>
         </div>
       </section>
-
-      {focusSession && (
-        <section className="border-2 border-blue-500 bg-blue-50/80 p-4 dark:border-blue-500 dark:bg-blue-950/20">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
-                <CalendarClock size={14} />
-                {todaySession
-                  ? t('trainingPlan.todayWorkout')
-                  : t('trainingPlan.nextWorkoutEntry')}
-              </div>
-              <h3 className="mt-2 font-pixel text-base font-bold text-zinc-950 dark:text-zinc-50">
-                {focusSession.session.title}
-              </h3>
-              <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
-                {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  weekday: 'short',
-                }).format(focusSession.date)}
-                {' · '}
-                {focusSession.session.distance}km
-                {focusSession.session.paceZone ? ` · ${focusSession.session.paceZone}` : ''}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              {focusSession.activity && (
-                <Link
-                  href={`/activities/${focusSession.activity.id}`}
-                  className="inline-flex items-center border-2 border-blue-600 bg-blue-600 px-3 py-2 font-mono text-[10px] font-bold text-white"
-                >
-                  {t('trainingPlan.viewMatchedActivity')}
-                </Link>
-              )}
-              {onPlanChange && (
-                <button
-                  type="button"
-                  onClick={() => setEditingSession(focusSession)}
-                  className="inline-flex items-center gap-1 border-2 border-zinc-300 bg-white px-3 py-2 font-mono text-[10px] font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
-                >
-                  <Settings2 size={12} />
-                  {t('trainingPlan.adjustSession')}
-                </button>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
 
       <section className="border-2 border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -732,7 +770,11 @@ export function TrainingPlanView({
             week={week}
             execution={execution.weeks.find((item) => item.week === week.week)}
             isCurrent={currentWeek === week.week}
-            defaultExpanded={week.week === 1 && !currentWeek}
+            defaultExpanded={
+              (week.week === 1 && !currentWeek)
+              || week.sessions.some((session) => `${week.week}-${session.day}` === (linkedSessionKey ?? focusSession?.key))
+            }
+            focusedSessionKey={linkedSessionKey ?? focusSession?.key}
             onAdjustSession={onPlanChange ? setEditingSession : undefined}
           />
         ))}
