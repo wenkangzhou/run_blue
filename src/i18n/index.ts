@@ -1326,7 +1326,7 @@ const resources = {
         },
         routeListKicker: '活动',
         routeListTitle: '活动路线',
-        routeRunsWithTrack: '{{count}} 条带轨迹跑步',
+        routeRunsWithTrack: '{{count}} 条带跑步轨迹',
         routeMatches: '{{matched}} / {{total}} 条路线匹配',
         expandOverview: '展开总览',
         collapseOverview: '收起总览',
