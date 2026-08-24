@@ -362,6 +362,22 @@ export function buildProfessionalPrompt(
       ? `\n- Short reps: ${classification.structure.shortRepCount}, faster reps ${classification.structure.fastRepCount}, recovery reps ${classification.structure.recoveryRepCount}`
       : `\n- 短重复段: ${classification.structure.shortRepCount}个，快段${classification.structure.fastRepCount}个，恢复段${classification.structure.recoveryRepCount}个`;
   }
+  if (classification.structure.alternatingRepCount >= 3) {
+    const workPace = classification.structure.workPaceAverage
+      ? `${formatPace(classification.structure.workPaceAverage)}/km`
+      : 'n/a';
+    const recoveryPace = classification.structure.recoveryPaceAverage
+      ? `${formatPace(classification.structure.recoveryPaceAverage)}/km`
+      : 'n/a';
+    const spread = Math.round(classification.structure.workPaceSpread ?? 0);
+    const fade = Math.round(classification.structure.workPaceFade ?? 0);
+    prompt += en
+      ? `\n- CONFIRMED alternating set: ${classification.structure.alternatingRepCount} work laps at laps ${Array.from({ length: classification.structure.alternatingRepCount }, (_, index) => (classification.structure.alternatingStartLap ?? 0) + index * 2).join('/')}, separated by ${classification.structure.alternatingRecoveryCount} recovery laps. Work avg ${workPace}, recovery avg ${recoveryPace}, work spread ${spread}s/km, last-vs-first work rep ${fade >= 0 ? '+' : ''}${fade}s/km.`
+      : `\n- 已确认快慢交替结构：第 ${Array.from({ length: classification.structure.alternatingRepCount }, (_, index) => (classification.structure.alternatingStartLap ?? 0) + index * 2).join('/') } 圈为 ${classification.structure.alternatingRepCount} 个快段，中间有 ${classification.structure.alternatingRecoveryCount} 个恢复圈。快段均配 ${workPace}，恢复圈均配 ${recoveryPace}，快段极差 ${spread} 秒/公里，末组相对首组 ${fade >= 0 ? '+' : ''}${fade} 秒/公里。`;
+    prompt += en
+      ? `\n- Treat the alternating work/recovery relationship as stronger evidence than whole-run average pace or a generic mixed-split label.`
+      : `\n- 快圈与恢复圈的交替关系，证据优先级高于全程平均配速或笼统的 mixed 分段标签。`;
+  }
   if (classification.structure.splitPattern !== 'unknown') {
     prompt += en
       ? `\n- Split pattern: ${classification.structure.splitPattern}`
@@ -877,8 +893,11 @@ export function buildProfessionalPrompt(
       : `\n  "suggestions": ["赛后恢复建议1", "避免立即进行强度训练", "下次比赛准备建议"],`;
   } else {
     prompt += en
-      ? `\n{\n  "summary": "A concise but complete coach summary (35-70 words, 2-3 complete sentences). Cover: workout type with confidence, execution quality using one key data point, and the main recovery/load implication. Do NOT duplicate detailed suggestions or simply list numbers.",`
-      : `\n{\n  "summary": "简要但完整的教练总结（60-120字，2-3个完整句子）。包含：训练类型与置信度、结合一个关键数据点说明执行质量、主要恢复/负荷含义。不要重复详细建议，也不要简单罗列数字。",`;
+      ? `\n{\n  "summary": "A concise but complete coach summary (35-70 words, 2-3 complete sentences). Cover workout context, the most meaningful outcome, and the main recovery/load implication.",`
+      : `\n{\n  "summary": "简要但完整的教练总结（60-120字，2-3个完整句子）。概括训练背景、最有意义的结果，以及主要恢复/负荷含义。",`;
+    prompt += en
+      ? `\n  "executionSummary": "Directly answer how well the workout was executed in 2 complete sentences: give an overall verdict, one evidence-backed strength, and the main limitation or caution. Do NOT restate workout type, classification confidence, or recognition evidence. For intervals, assess work-rep consistency, recovery contrast, and late-session fade.",`
+      : `\n  "executionSummary": "用2个完整句子直接回答完成得怎么样：先给好/一般/需改进的明确结论，再用数据说明一个做得好的地方和最主要的问题或注意点。禁止复述训练类型、识别置信度或判定依据；间歇训练重点评价快段稳定性、快慢对比和后程是否掉速。",`;
     prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
     prompt += en ? `\n  "recoveryHours": number,` : `\n  "recoveryHours": 数字,`;
     prompt += en
@@ -924,6 +943,9 @@ export function buildProfessionalPrompt(
     ? `\n- Separate hard facts from inference. For example: lap structure, split pattern, weather, and heart-rate zones are facts; workout intent is an inference that should match the supplied classification confidence.`
     : `\n- 请区分数据事实与推断。圈结构、分段模式、天气、心率区间属于事实；训练意图属于推断，且应与上面提供的训练类型置信度保持一致。`;
   prompt += en
+    ? `\n- The executionSummary is the answer to “How did it go?”, not “What workout was this?”. Never use phrases such as “was identified/classified as” in that field.`
+    : `\n- executionSummary 回答的是“完成得怎么样”，不是“这是什么训练”。该字段禁止出现“被识别为/判定为/置信度”等分类说明。`;
+  prompt += en
     ? `\n- Do not invent physiology or medical claims. Unless directly measured, never claim autonomic-nervous-system suppression, soft-tissue damage, sleep debt, dehydration, or injury. Do not prescribe icing or cancel all quality sessions from load data alone.`
     : `\n- 禁止臆测生理或医学结论。没有直接数据时，不得声称自主神经受抑制、软组织损伤、睡眠债、脱水或已经受伤；也不得仅凭负荷数据建议冰敷，或取消本周全部质量课。`;
   prompt += en
@@ -944,6 +966,11 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- The key sustained segment is a priority outcome fact. Mention its distance, moving time or pace, and coaching significance before generic load commentary.`
       : `\n- 核心连续质量段属于优先级很高的结果事实。必须先写出距离、移动用时或配速及其训练意义，再展开泛化负荷提示。`;
+  }
+  if (personalRecords.length > 0 || keySustainedEffort) {
+    prompt += en
+      ? `\n- Carry this priority outcome into executionSummary as the main evidence of what was done well; do not bury it under classification wording.`
+      : `\n- executionSummary 也必须把这项优先结果作为“完成得好在哪里”的核心证据，不能被训练分类话术盖过去。`;
   }
   prompt += en
     ? `\n- If you mention confidence in Chinese output, localize it naturally as 高/中等/低 confidence instead of copying raw labels like medium or low.`

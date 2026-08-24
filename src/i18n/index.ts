@@ -963,6 +963,7 @@ const resources = {
         classificationDetail: 'Classification Detail',
         structureLaps: '{{count}} laps',
         structureReps: '{{count}} reps',
+        structureAlternatingReps: '{{count}} alternating reps',
         confidence: {
           low: 'Low confidence',
           medium: 'Medium confidence',
@@ -2007,6 +2008,7 @@ const resources = {
         classificationDetail: '识别明细',
         structureLaps: '{{count}} 圈',
         structureReps: '{{count}} 个重复段',
+        structureAlternatingReps: '{{count}} 组快慢交替',
         confidence: {
           low: '低置信度',
           medium: '中等置信度',

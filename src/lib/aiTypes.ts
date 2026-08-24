@@ -1,6 +1,8 @@
 // V2 AI Analysis - Professional coach-level insights
 export interface AIAnalysis {
   summary: string;
+  /** Direct assessment of execution quality, separate from workout classification. */
+  executionSummary?: string;
   intensity: 'easy' | 'moderate' | 'hard' | 'extreme';
   recoveryHours: number;
   comparisonToAverage: string;

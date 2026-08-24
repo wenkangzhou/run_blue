@@ -10,8 +10,6 @@ import {
 } from 'lucide-react';
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
-import { formatSustainedEffortDistance, getKeySustainedEffort } from '@/lib/activityHighlights';
-import { buildActivityWeatherContext } from '@/lib/weather';
 
 interface AIAnalysisCardProps {
   activity: StravaActivity;
@@ -120,10 +118,6 @@ function closeSentence(text: string): string {
   return /[。！？!?.]$/.test(trimmed) ? trimmed : `${trimmed}。`;
 }
 
-function cleanClause(text: string): string {
-  return text.replace(/[。！？!?.]+$/g, '').trim();
-}
-
 export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysisCardProps) {
   const { t, i18n } = useTranslation();
   const {
@@ -148,13 +142,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const fallbackReasonLabel = /timed out|timeout/i.test(fallbackReason)
     ? t('aiAnalysis.fallbackTimeout', 'Kimi 响应超时，已切换到本地分析')
     : fallbackReason;
-  const marathonPaceCeiling = trainingStats?.paceZones?.marathon.max;
-  const keySustainedEffort = useMemo(
-    () => getKeySustainedEffort(activity, marathonPaceCeiling),
-    [activity, marathonPaceCeiling]
-  );
-  const weatherContext = useMemo(() => buildActivityWeatherContext(activity), [activity]);
-
   const intensity = analysis?.intensity
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
     : null;
@@ -245,7 +232,8 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (structure.lapCount > 0) {
       parts.push(t('aiAnalysis.structureLaps', { count: structure.lapCount, defaultValue: `${structure.lapCount} 圈` }));
     }
-    const shouldShowRepCount = structure.shortRepCount > 0 && (
+    const hasAlternatingReps = structure.alternatingRepCount >= 3;
+    const shouldShowRepCount = !hasAlternatingReps && structure.shortRepCount > 0 && (
       structure.source === 'laps' ||
       structure.splitPattern === 'interval' ||
       structure.fastRepCount > 0 ||
@@ -254,7 +242,13 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (shouldShowRepCount) {
       parts.push(t('aiAnalysis.structureReps', { count: structure.shortRepCount, defaultValue: `${structure.shortRepCount} 个重复段` }));
     }
-    if (structure.splitPattern !== 'unknown') {
+    if (hasAlternatingReps) {
+      parts.push(t('aiAnalysis.structureAlternatingReps', {
+        count: structure.alternatingRepCount,
+        defaultValue: `${structure.alternatingRepCount} 组快慢交替`,
+      }));
+    }
+    if (structure.splitPattern !== 'unknown' && !(hasAlternatingReps && structure.splitPattern === 'interval')) {
       parts.push(t(`aiAnalysis.pattern.${structure.splitPattern}`, structure.splitPattern));
     }
 
@@ -306,6 +300,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
     match = evidence.match(/^(\d+) faster reps and (\d+) recovery reps$/);
     if (match) return `${match[1]} 个快段，对应 ${match[2]} 个恢复段`;
+
+    match = evidence.match(/^(\d+) alternating work reps across laps (\d+)-(\d+)$/);
+    if (match) return `第 ${match[2]}-${match[3]} 圈形成 ${match[1]} 组清晰的快慢交替`;
 
     match = evidence.match(/^high climb ratio (\d+)m\/km with repeated short reps$/);
     if (match) return `单位距离爬升较高（${match[1]} 米/公里），且伴随重复短段`;
@@ -481,82 +478,18 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     ].filter((item): item is string => Boolean(item?.trim()));
     return Array.from(new Set(candidates)).slice(0, 1).map((item) => compactSummary(item, 1, 56));
   })();
-  const coachConclusion = (() => {
-    if (!analysis) return null;
-    if (keySustainedEffort) {
-      const distanceLabel = formatSustainedEffortDistance(keySustainedEffort.distanceMeters);
-      return {
-        headline: t('aiAnalysis.qualitySegmentHeadline', {
-          distance: distanceLabel,
-          defaultValue: `连续 ${distanceLabel}K · 核心质量段`,
-        }),
-        detail: compactNaturalSentence(analysis.summary, 2, 148),
-      };
-    }
-    if (!verdict) {
-      return {
-        headline: t('aiAnalysis.trainingConclusion', '训练结论'),
-        detail: compactNaturalSentence(analysis.summary, 2, 120),
-      };
-    }
-
-    const headline = `${verdict.type} · ${verdict.effectLabel}`;
-    const base = t('aiAnalysis.conclusionBase', {
-      zone: zone.label,
-      recovery: analysis.recoveryHours,
-      defaultValue: '配速区间 {{zone}}，建议恢复约 {{recovery}}h',
-    });
-    const warningSignals = (analysis.warnings ?? []).map(cleanClause).filter(Boolean);
-    const hasWarnings = hasSessionRiskWarnings;
-    const controlledSessionSignal = isLowIntensityRun && lowIntensityLooksControlled
-      ? activity.average_heartrate && weatherContext.feelsLikeC !== undefined
-        ? t('aiAnalysis.controlledHeatHrSignal', {
-            heartRate: Math.round(activity.average_heartrate),
-            feelsLike: weatherContext.feelsLikeC,
-            defaultValue: `体感 ${weatherContext.feelsLikeC}°C 下平均心率仍为 ${Math.round(activity.average_heartrate)} bpm，低强度执行受控`,
-          })
-        : activity.average_heartrate
-          ? t('aiAnalysis.controlledHrSignal', {
-              heartRate: Math.round(activity.average_heartrate),
-              defaultValue: `平均心率 ${Math.round(activity.average_heartrate)} bpm，低强度执行受控`,
-            })
-          : verdict.pros[0] ?? ''
-      : '';
-    const mainSignal = controlledSessionSignal || warningSignals[0] || verdict.cons[0] || verdict.pros[0] || '';
-    const signalText = mainSignal
-      ? t('aiAnalysis.conclusionSignal', {
-          signal: mainSignal,
-          defaultValue: '关键观察：{{signal}}',
-        })
-      : '';
-    const focus = hasWarnings
-      ? ''
-      : isRace
-        ? t('aiAnalysis.conclusionRace', '这次主要看比赛输出与赛后恢复，不建议继续叠加强度。')
-        : classification?.loadAdjustment?.cumulativeLoadConcern === 'high'
-          ? t('aiAnalysis.conclusionCumulativeRecovery', '本次执行与累计恢复分开看：这次可以完成得很好，但下一天仍应保守安排。')
-        : isLowIntensityRun
-          ? t('aiAnalysis.conclusionEasy', '这次主要看低负荷完成度，为后续训练留余量。')
-          : classification?.intensity === 'hard'
-            ? t('aiAnalysis.conclusionQuality', '这次主要看质量刺激是否完成，下一步恢复优先。')
-            : structureSummary
-              ? t('aiAnalysis.conclusionStructured', '分段结构能支撑本次判定，重点看执行质量。')
-              : t('aiAnalysis.conclusionGeneral', '整体可作为一次有效训练，后续按疲劳反馈安排。');
-
-    return {
-      headline,
-      detail: compactNaturalSentence(analysis.summary, 2, 148) ||
-        closeSentence([base, signalText, focus].map(cleanClause).filter(Boolean).join('；')),
-    };
-  })();
   const quickTrainingType = [
     verdict?.type || workoutTypeLabel || t('aiAnalysis.workoutRead', '训练识别'),
     structureSummary,
   ].filter(Boolean).join(' · ');
-  const quickExecution = [
-    keySustainedEffort ? coachConclusion?.headline : verdict?.effectLabel,
-    coachConclusion?.detail ? compactSummary(coachConclusion.detail, 1, 82) : '',
-  ].filter(Boolean).join(' · ') || t('aiAnalysis.waitingForConclusion', '正在整理本次训练完成情况');
+  const fallbackExecution = [
+    verdict?.effectLabel,
+    verdict?.pros[0],
+    verdict?.cons[0],
+  ].filter(Boolean).join('；');
+  const quickExecution = analysis?.executionSummary
+    ? compactNaturalSentence(analysis.executionSummary, 2, 148)
+    : closeSentence(fallbackExecution) || t('aiAnalysis.waitingForConclusion', '正在整理本次训练完成情况');
   const quickNextStep = briefAdvice[0]
     || compactSummary(analysis?.nextWorkoutSuggestion || '', 1, 64)
     || t('aiAnalysis.recoverByFeel', '根据疲劳反馈安排恢复，再进入下一次训练。');

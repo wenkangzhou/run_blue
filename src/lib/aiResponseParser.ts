@@ -5,6 +5,7 @@ import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext } from './weather';
 import { getPrimaryPersonalRecord } from './activityAchievements';
 import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
+import { buildExecutionSummary } from './aiFallbackAnalysis';
 
 function formatRecordTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -517,6 +518,28 @@ function normalizeWorkoutSpecificText(
     );
 }
 
+function normalizeExecutionSummary(
+  text: string,
+  activity: StravaActivity,
+  classification: ActivityClassification,
+  locale: string
+): string {
+  const normalized = normalizeWorkoutSpecificText(
+    normalizeAnalysisText(text, activity, classification, locale),
+    classification,
+    locale
+  );
+  const classificationOnly = locale.startsWith('en')
+    ? /(?:identified|classified|recognized) as|classification confidence/i
+    : /被识别为|识别为|判定为|置信度/;
+  const sentences = normalized
+    .match(/[^。！？!?.]+[。！？!?.]?/g)
+    ?.map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !classificationOnly.test(sentence)) ?? [];
+  const executionOnly = sentences.join(locale.startsWith('en') ? ' ' : '');
+  return executionOnly || buildExecutionSummary(activity, classification, locale);
+}
+
 function normalizeMissingDataText(text: string, activity: StravaActivity, locale: string): string {
   if (!text || locale.startsWith('en')) return text;
 
@@ -725,10 +748,17 @@ export function normalizeAIAnalysisForDisplay(
     classification,
     locale
   );
+  const executionSummary = normalizeExecutionSummary(
+    analysis.executionSummary || '',
+    activity,
+    classification,
+    locale
+  );
 
   return {
     ...analysis,
     summary,
+    executionSummary,
     intensity: getFinalIntensity(analysis.intensity, classification),
     recoveryHours: Math.max(analysis.recoveryHours || 0, classification.loadAdjustment?.minimumRecoveryHours ?? 0),
     trainingLoadContext: getTrainingLoadContext(
@@ -847,6 +877,12 @@ export function parseAIResponse(
     locale,
     trainingProfile.paceZones
   );
+  const normalizedExecutionSummary = normalizeExecutionSummary(
+    result.executionSummary || '',
+    activity,
+    classification,
+    locale
+  );
   const normalizedTrainingLoadContext = getTrainingLoadContext(
     normalizeForDisplay(result.trainingLoadContext || ''),
     classification,
@@ -879,6 +915,7 @@ export function parseAIResponse(
 
   return {
     summary: normalizedSummary,
+    executionSummary: normalizedExecutionSummary,
     intensity: finalIntensity,
     recoveryHours: Math.max(
       result.recoveryHours || (classification.isRace ? 48 : 24),

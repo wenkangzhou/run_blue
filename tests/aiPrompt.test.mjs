@@ -230,6 +230,42 @@ test('buildProfessionalPrompt uses ability-based zones and workout-type guidance
   assert.match(prompt, /Sample size is small/);
 });
 
+test('buildProfessionalPrompt explains alternating reps and separates execution from classification', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity(),
+    null,
+    makeProfile(),
+    makeClassification({
+      structure: {
+        source: 'laps',
+        lapCount: 9,
+        medianLapDistance: 780,
+        shortRepCount: 9,
+        fastRepCount: 4,
+        recoveryRepCount: 3,
+        alternatingRepCount: 4,
+        alternatingRecoveryCount: 3,
+        alternatingStartLap: 2,
+        alternatingEndLap: 8,
+        workPaceAverage: 271.4,
+        recoveryPaceAverage: 329,
+        workPaceSpread: 27.2,
+        workPaceFade: 12.9,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'interval',
+        paceVariability: 0.13,
+      },
+    }),
+    'zh'
+  );
+
+  assert.match(prompt, /第 2\/4\/6\/8 圈为 4 个快段/);
+  assert.match(prompt, /快段极差 27 秒\/公里/);
+  assert.match(prompt, /executionSummary 回答的是“完成得怎么样”/);
+  assert.match(prompt, /禁止出现“被识别为\/判定为\/置信度”/);
+});
+
 test('buildProfessionalPrompt keeps ordinary long runs from becoming default M-pace workouts', () => {
   const prompt = buildProfessionalPrompt(
     makeActivity({

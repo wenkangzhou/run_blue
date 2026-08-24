@@ -147,7 +147,47 @@ test('classifyActivity recognizes interval workouts from lap structure', () => {
   assert.equal(classification.workoutType, 'interval');
   assert.equal(classification.workoutTypeConfidence, 'high');
   assert.equal(classification.structure.lapCount, 8);
-  assert.ok(classification.workoutTypeEvidence.some((evidence) => evidence.includes('short reps')));
+  assert.ok(
+    classification.workoutTypeEvidence.some((evidence) =>
+      evidence.includes('alternating work reps') || evidence.includes('short reps')
+    )
+  );
+});
+
+test('classifyActivity recognizes alternating work and recovery laps without extreme recovery pace', () => {
+  const activity = makeActivity(19864417258, {
+    name: 'Morning run',
+    distance: 6870,
+    moving_time: 2110,
+    laps: [
+      makeLap(0, 1090, 381),
+      makeLap(1, 750, 204),
+      makeLap(2, 800, 239),
+      makeLap(3, 780, 201),
+      makeLap(4, 820, 261),
+      makeLap(5, 760, 206),
+      makeLap(6, 910, 336),
+      makeLap(7, 730, 208),
+      makeLap(8, 230, 74),
+    ],
+  });
+
+  const classification = classifyActivity(activity, calculatePaceZones(1260), 'medium', 176);
+
+  assert.equal(classification.workoutType, 'interval');
+  assert.equal(classification.workoutTypeConfidence, 'high');
+  assert.equal(classification.structure.splitPattern, 'interval');
+  assert.equal(classification.structure.alternatingRepCount, 4);
+  assert.equal(classification.structure.alternatingRecoveryCount, 3);
+  assert.equal(classification.structure.alternatingStartLap, 2);
+  assert.equal(classification.structure.alternatingEndLap, 8);
+  assert.ok(Math.abs(classification.structure.workPaceAverage - 271.4) < 1);
+  assert.ok(Math.abs(classification.structure.workPaceSpread - 27.2) < 1);
+  assert.ok(
+    classification.workoutTypeEvidence.some((evidence) =>
+      evidence.includes('4 alternating work reps')
+    )
+  );
 });
 
 test('classifyActivity does not treat Strava type zero as a recovery marker', () => {

@@ -337,6 +337,46 @@ test('parseAIResponse protects interval workouts from average-pace and recovery-
   assert.match(joined, /平均配速仅作参考|恢复段慢是设计的一部分|恢复段能让下一组快段质量稳定|恢复段以恢复质量为先/);
 });
 
+test('parseAIResponse removes classification talk from the execution takeaway', () => {
+  const content = JSON.stringify({
+    summary: '本次是间歇训练，整体完成正常。',
+    executionSummary: '本次被识别为间歇训练（中等置信度）。4 个快段后程没有明显掉速，完成得不错。',
+    intensity: 'hard',
+    recoveryHours: 36,
+    suggestions: ['轻松恢复'],
+  });
+  const classification = makeClassification({
+    workoutType: 'interval',
+    intensity: 'hard',
+    paceZone: 'I',
+    structure: {
+      source: 'laps',
+      lapCount: 9,
+      medianLapDistance: 780,
+      shortRepCount: 9,
+      fastRepCount: 4,
+      recoveryRepCount: 3,
+      alternatingRepCount: 4,
+      alternatingRecoveryCount: 3,
+      alternatingStartLap: 2,
+      alternatingEndLap: 8,
+      workPaceAverage: 271.4,
+      recoveryPaceAverage: 329,
+      workPaceSpread: 27.2,
+      workPaceFade: 12.9,
+      hasWarmup: true,
+      hasCooldown: true,
+      splitPattern: 'interval',
+      paceVariability: 0.13,
+    },
+  });
+
+  const result = parseAIResponse(content, makeActivity(), makeProfile(), classification, 'zh');
+
+  assert.match(result.executionSummary, /4 个快段后程没有明显掉速/);
+  assert.doesNotMatch(result.executionSummary, /被识别为|置信度/);
+});
+
 test('parseAIResponse avoids heart-rate conclusions when heart-rate data is missing', () => {
   const result = parseAIResponse(
     JSON.stringify({
@@ -780,6 +820,45 @@ test('generateFallbackAnalysis uses training deficiencies for normal runs', () =
   assert.ok(result.suggestions.includes('需要补充长距离有氧'));
   assert.ok(result.suggestions.some((suggestion) => suggestion.includes('15km+')));
   assert.ok(result.suggestions.some((suggestion) => suggestion.includes('400m×6')));
+});
+
+test('generateFallbackAnalysis evaluates alternating interval execution instead of restating classification', () => {
+  const result = generateFallbackAnalysis(
+    makeActivity({ distance: 6870, moving_time: 2110 }),
+    makeProfile(),
+    makeClassification({
+      workoutType: 'interval',
+      intensity: 'hard',
+      paceZone: 'I',
+      structure: {
+        source: 'laps',
+        lapCount: 9,
+        medianLapDistance: 780,
+        shortRepCount: 9,
+        fastRepCount: 4,
+        recoveryRepCount: 3,
+        alternatingRepCount: 4,
+        alternatingRecoveryCount: 3,
+        alternatingStartLap: 2,
+        alternatingEndLap: 8,
+        workPaceAverage: 271.4,
+        recoveryPaceAverage: 329,
+        workPaceSpread: 27.2,
+        workPaceFade: 12.9,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'interval',
+        paceVariability: 0.13,
+      },
+    }),
+    'zh'
+  );
+
+  assert.match(result.executionSummary, /整体完成得不错/);
+  assert.match(result.executionSummary, /4 个快段平均 4'31"\/km/);
+  assert.match(result.executionSummary, /末组比首组慢 13 秒\/公里/);
+  assert.match(result.executionSummary, /最快与最慢相差 27 秒\/公里/);
+  assert.doesNotMatch(result.executionSummary, /被识别为|置信度|判定为/);
 });
 
 test('generateFallbackAnalysis uses classification pace zone instead of absolute pace cutoffs', () => {

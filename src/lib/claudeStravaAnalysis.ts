@@ -11,6 +11,7 @@ const ANALYSIS_SCHEMA = {
   additionalProperties: false,
   properties: {
     summary: { type: 'string' },
+    executionSummary: { type: 'string' },
     intensity: { type: 'string', enum: ['easy', 'moderate', 'hard', 'extreme'] },
     recoveryHours: { type: 'number', minimum: 0, maximum: 168 },
     comparisonToAverage: { type: 'string' },
@@ -37,6 +38,7 @@ const ANALYSIS_SCHEMA = {
   },
   required: [
     'summary',
+    'executionSummary',
     'intensity',
     'recoveryHours',
     'comparisonToAverage',

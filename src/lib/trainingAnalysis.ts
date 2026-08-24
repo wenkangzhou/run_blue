@@ -51,6 +51,14 @@ export interface ActivityStructureSummary {
   shortRepCount: number;
   fastRepCount: number;
   recoveryRepCount: number;
+  alternatingRepCount: number;
+  alternatingRecoveryCount: number;
+  alternatingStartLap: number | null;
+  alternatingEndLap: number | null;
+  workPaceAverage: number | null;
+  recoveryPaceAverage: number | null;
+  workPaceSpread: number | null;
+  workPaceFade: number | null;
   hasWarmup: boolean;
   hasCooldown: boolean;
   splitPattern: 'interval' | 'progression' | 'steady' | 'mixed' | 'unknown';
@@ -447,6 +455,73 @@ function detectSplitPatternFromPaces(
   return 'mixed';
 }
 
+interface AlternatingLapPattern {
+  workIndices: number[];
+  recoveryIndices: number[];
+  workPaceAverage: number;
+  recoveryPaceAverage: number;
+  workPaceSpread: number;
+  workPaceFade: number;
+}
+
+function detectAlternatingLapPattern(
+  laps: NonNullable<StravaActivity['laps']>
+): AlternatingLapPattern | null {
+  if (laps.length < 6) return null;
+
+  const paces = laps.map((lap) => getLapPaceSecPerKm(lap.distance, lap.moving_time));
+  const localFastIndices: number[] = [];
+
+  // Work laps should be clearly faster than both neighboring recovery laps.
+  // This catches 2/4/6/8-style sessions without requiring recovery laps to be
+  // unusually slow compared with the average pace of the entire activity.
+  for (let index = 1; index < paces.length - 1; index += 1) {
+    const pace = paces[index];
+    const previous = paces[index - 1];
+    const next = paces[index + 1];
+    const minimumContrast = Math.max(18, pace * 0.055);
+    if (previous - pace >= minimumContrast && next - pace >= minimumContrast) {
+      localFastIndices.push(index);
+    }
+  }
+
+  let bestChain: number[] = [];
+  let currentChain: number[] = [];
+  for (const index of localFastIndices) {
+    if (currentChain.length === 0 || index - currentChain[currentChain.length - 1] === 2) {
+      currentChain.push(index);
+    } else {
+      if (currentChain.length > bestChain.length) bestChain = currentChain;
+      currentChain = [index];
+    }
+  }
+  if (currentChain.length > bestChain.length) bestChain = currentChain;
+  if (bestChain.length < 3) return null;
+
+  const recoveryIndices = bestChain.slice(0, -1).map((index) => index + 1);
+  const workPaces = bestChain.map((index) => paces[index]);
+  const recoveryPaces = recoveryIndices.map((index) => paces[index]);
+  const workPaceAverage = average(workPaces);
+  const recoveryPaceAverage = average(recoveryPaces);
+  const workPaceSpread = Math.max(...workPaces) - Math.min(...workPaces);
+  const workPaceFade = workPaces[workPaces.length - 1] - workPaces[0];
+  const recoveryContrast = recoveryPaceAverage - workPaceAverage;
+
+  if (
+    recoveryContrast < Math.max(20, workPaceAverage * 0.07)
+    || (varianceRatio(workPaces) ?? Number.POSITIVE_INFINITY) > 0.12
+  ) return null;
+
+  return {
+    workIndices: bestChain,
+    recoveryIndices,
+    workPaceAverage,
+    recoveryPaceAverage,
+    workPaceSpread,
+    workPaceFade,
+  };
+}
+
 function summarizeActivityStructure(
   activity: StravaActivity,
   qualityPaceCeilingSecondsPerKm?: number | null
@@ -476,17 +551,32 @@ function summarizeActivityStructure(
     const patternPaces = patternLapCandidates
       .map((lap) => getLapPaceSecPerKm(lap.distance, lap.moving_time))
       .filter(Boolean);
+    const alternatingPattern = detectAlternatingLapPattern(lapCandidates);
 
     return {
       source: 'laps',
       lapCount: activity.laps?.length ?? lapCandidates.length,
       medianLapDistance: medianDistance,
       shortRepCount,
-      fastRepCount,
-      recoveryRepCount,
-      hasWarmup: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[0].distance, lapCandidates[0].moving_time) > medianPace * 1.08,
-      hasCooldown: lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[lapCandidates.length - 1].distance, lapCandidates[lapCandidates.length - 1].moving_time) > medianPace * 1.08,
-      splitPattern: detectSplitPatternFromPaces(patternPaces, qualityPaceCeilingSecondsPerKm),
+      fastRepCount: alternatingPattern?.workIndices.length ?? fastRepCount,
+      recoveryRepCount: alternatingPattern?.recoveryIndices.length ?? recoveryRepCount,
+      alternatingRepCount: alternatingPattern?.workIndices.length ?? 0,
+      alternatingRecoveryCount: alternatingPattern?.recoveryIndices.length ?? 0,
+      alternatingStartLap: alternatingPattern ? alternatingPattern.workIndices[0] + 1 : null,
+      alternatingEndLap: alternatingPattern ? alternatingPattern.workIndices[alternatingPattern.workIndices.length - 1] + 1 : null,
+      workPaceAverage: alternatingPattern?.workPaceAverage ?? null,
+      recoveryPaceAverage: alternatingPattern?.recoveryPaceAverage ?? null,
+      workPaceSpread: alternatingPattern?.workPaceSpread ?? null,
+      workPaceFade: alternatingPattern?.workPaceFade ?? null,
+      hasWarmup: alternatingPattern
+        ? alternatingPattern.workIndices[0] > 0
+        : lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[0].distance, lapCandidates[0].moving_time) > medianPace * 1.08,
+      hasCooldown: alternatingPattern
+        ? alternatingPattern.workIndices[alternatingPattern.workIndices.length - 1] < lapCandidates.length - 1
+        : lapCandidates.length >= 4 && getLapPaceSecPerKm(lapCandidates[lapCandidates.length - 1].distance, lapCandidates[lapCandidates.length - 1].moving_time) > medianPace * 1.08,
+      splitPattern: alternatingPattern
+        ? 'interval'
+        : detectSplitPatternFromPaces(patternPaces, qualityPaceCeilingSecondsPerKm),
       paceVariability,
     };
   }
@@ -512,6 +602,14 @@ function summarizeActivityStructure(
       shortRepCount: splitCandidates.filter((split) => split.distance <= 1200).length,
       fastRepCount: 0,
       recoveryRepCount: 0,
+      alternatingRepCount: 0,
+      alternatingRecoveryCount: 0,
+      alternatingStartLap: null,
+      alternatingEndLap: null,
+      workPaceAverage: null,
+      recoveryPaceAverage: null,
+      workPaceSpread: null,
+      workPaceFade: null,
       hasWarmup: false,
       hasCooldown: false,
       splitPattern: detectSplitPatternFromPaces(patternPaces, qualityPaceCeilingSecondsPerKm),
@@ -526,6 +624,14 @@ function summarizeActivityStructure(
     shortRepCount: 0,
     fastRepCount: 0,
     recoveryRepCount: 0,
+    alternatingRepCount: 0,
+    alternatingRecoveryCount: 0,
+    alternatingStartLap: null,
+    alternatingEndLap: null,
+    workPaceAverage: null,
+    recoveryPaceAverage: null,
+    workPaceSpread: null,
+    workPaceFade: null,
     hasWarmup: false,
     hasCooldown: false,
     splitPattern: 'unknown',
@@ -719,7 +825,13 @@ function inferWorkoutType(
     (structure.fastRepCount >= 2 || structure.recoveryRepCount >= 2) &&
     (structure.splitPattern === 'interval' || (structure.paceVariability ?? 0) >= 0.12)
   ) {
-    evidence.push(`${structure.lapCount} laps with ${structure.shortRepCount} short reps`);
+    if (structure.alternatingRepCount >= 3) {
+      evidence.push(
+        `${structure.alternatingRepCount} alternating work reps across laps ${structure.alternatingStartLap}-${structure.alternatingEndLap}`
+      );
+    } else {
+      evidence.push(`${structure.lapCount} laps with ${structure.shortRepCount} short reps`);
+    }
     if (structure.fastRepCount > 0 || structure.recoveryRepCount > 0) {
       evidence.push(`${structure.fastRepCount} faster reps and ${structure.recoveryRepCount} recovery reps`);
     }

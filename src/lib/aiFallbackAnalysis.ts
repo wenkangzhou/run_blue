@@ -47,6 +47,60 @@ function getZoneDescription(
     : `${zoneMap.fallback}（${formatPace(min)}-${formatPace(max)}/km）`;
 }
 
+export function buildExecutionSummary(
+  activity: StravaActivity,
+  classification: ActivityClassification,
+  locale: string
+): string {
+  const en = locale.startsWith('en');
+  const structure = classification.structure;
+
+  if (structure.alternatingRepCount >= 3 && structure.workPaceAverage) {
+    const reps = structure.alternatingRepCount;
+    const recoveries = structure.alternatingRecoveryCount;
+    const spread = Math.round(structure.workPaceSpread ?? 0);
+    const fade = Math.round(structure.workPaceFade ?? 0);
+    const workPace = formatPace(structure.workPaceAverage);
+    const recoveryContrast = structure.recoveryPaceAverage
+      ? Math.round(structure.recoveryPaceAverage - structure.workPaceAverage)
+      : null;
+    const verdict = spread <= 20 && Math.abs(fade) <= 15
+      ? (en ? 'Very well executed.' : '完成得很扎实。')
+      : spread <= 35 && fade <= 25
+        ? (en ? 'Well executed overall.' : '整体完成得不错。')
+        : (en ? 'The main work was completed, but pacing can be cleaner.' : '主要训练完成了，但节奏还有优化空间。');
+    const lateRep = fade > 5
+      ? (en ? `the final rep was ${fade}s/km slower than the first` : `末组比首组慢 ${fade} 秒/公里`)
+      : fade < -5
+        ? (en ? `the final rep was ${Math.abs(fade)}s/km faster than the first` : `末组比首组快 ${Math.abs(fade)} 秒/公里`)
+        : (en ? 'the final rep matched the first' : '末组与首组基本持平');
+    const limitation = spread > 20
+      ? (en
+          ? `The fastest-to-slowest work-rep spread was ${spread}s/km, so the next step is making the work reps more even.`
+          : `快段最快与最慢相差 ${spread} 秒/公里，下次可以把各组节奏收得更齐。`)
+      : recoveryContrast !== null
+        ? (en
+            ? `Recovery laps averaged ${recoveryContrast}s/km slower, giving the session a clear work-recovery contrast.`
+            : `恢复圈平均比快段慢 ${recoveryContrast} 秒/公里，强弱层次清楚。`)
+        : (en ? 'The work reps stayed consistent from start to finish.' : '快段从开始到结束保持得很稳定。');
+
+    return en
+      ? `${verdict} ${reps} work reps averaged ${workPace}/km with ${recoveries} recovery laps between them; ${lateRep}. ${limitation}`
+      : `${verdict}${reps} 个快段平均 ${workPace}/km，中间穿插 ${recoveries} 个恢复圈，${lateRep}；${limitation}`;
+  }
+
+  if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
+    return en
+      ? `Execution was controlled overall. The session stayed appropriate for low-intensity aerobic work; judge any extra recovery need from heat and rolling load rather than pace alone.`
+      : `整体控制得比较稳，完成了低强度有氧训练应有的作用。额外恢复需求应结合高温和近期累计负荷判断，而不是只看配速。`;
+  }
+
+  const pace = formatPace(activity.moving_time / activity.distance * 1000);
+  return en
+    ? `The planned work was completed at ${pace}/km overall. Execution quality is usable, but there is not enough structured evidence to praise or criticize a specific segment.`
+    : `本次主要训练已完成，全程平均配速 ${pace}/km。现有分段证据不足以单独表扬或批评某一段，整体按正常完成理解。`;
+}
+
 /**
  * Generate local analysis when the AI provider fails or times out.
  */
@@ -75,6 +129,9 @@ export function generateFallbackAnalysis(
       summary: en
         ? `🎉 ${classification.raceType || 'Race'} completed! Pace ${paceStr}/km — fantastic effort out there! You pushed through and got it done. Be proud of this performance.`
         : `🎉 ${classification.raceType || '比赛'}完成！配速${paceStr}/km——太棒了！你坚持了下来并完成了挑战，为这份努力感到骄傲！`,
+      executionSummary: en
+        ? 'The race was completed with a full competitive effort. Review pacing stability and late-race fade to refine the next race execution.'
+        : '比赛顺利完成，也完成了应有的竞赛强度。接下来重点复盘配速稳定性和后程掉速情况，用于优化下一次比赛执行。',
       intensity: 'extreme',
       recoveryHours: activity.distance > 40000 ? 168 : 48,
       comparisonToAverage: fallbackComparison?.comparisonToAverage || (en ? 'Excellent race performance' : '比赛表现优异'),
@@ -208,6 +265,7 @@ export function generateFallbackAnalysis(
 
   return {
     summary: isLowIntensity ? lowIntensitySummary : standardSummary,
+    executionSummary: buildExecutionSummary(activity, classification, locale),
     intensity: classification.intensity,
     recoveryHours: Math.max(
       activity.distance > 10000 ? 36 : 24,
