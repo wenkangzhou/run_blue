@@ -10,10 +10,13 @@ export interface SessionExecution {
   day: number;
   originalDate: Date;
   date: Date;
+  weekStartDate: Date;
+  weekEndDate: Date;
   dateKey: string;
   session: TrainingSession;
   status: SessionExecutionStatus;
   activity?: StravaActivity;
+  actualDate?: Date;
   dateDelta?: number;
   dateOffsetDays: number;
   matchSource?: 'automatic' | 'manual';
@@ -24,9 +27,14 @@ export interface WeekExecution {
   week: number;
   startDate: Date;
   endDate: Date;
+  isStarted: boolean;
+  isCurrent: boolean;
+  isClosed: boolean;
   sessions: SessionExecution[];
   plannedDistance: number;
   actualDistance: number;
+  extraActivityCount: number;
+  extraDistance: number;
   completedCount: number;
   partialCount: number;
   missedCount: number;
@@ -80,6 +88,12 @@ interface MatchCandidate {
   dateDelta: number;
 }
 
+interface RunningActivity {
+  activity: StravaActivity;
+  date: Date;
+  week: number;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function startOfLocalDay(date: Date): Date {
@@ -127,8 +141,35 @@ export function inferActivityKind(activity: StravaActivity): TrainingSession['ty
   if (/recovery|恢复跑|shakeout/.test(text)) return 'recovery';
   if (/interval|repeats|间歇|重复跑/.test(text)) return 'interval';
   if (/tempo|threshold|节奏|阈值/.test(text)) return 'tempo';
-  if (activity.workout_type === 3 || (activity.laps?.length ?? 0) >= 4) return 'workout';
+  if (activity.workout_type === 3 || hasAlternatingWorkLaps(activity)) return 'workout';
   return 'easy';
+}
+
+function hasAlternatingWorkLaps(activity: StravaActivity): boolean {
+  const laps = (activity.laps ?? []).filter((lap) => (
+    lap.distance >= 300
+    && lap.distance <= 2000
+    && lap.moving_time >= 60
+  ));
+  if (laps.length < 5) return false;
+
+  const paces = laps.map((lap) => lap.moving_time / (lap.distance / 1000));
+  const fastIndices = paces.flatMap((pace, index) => {
+    if (index === 0 || index === paces.length - 1) return [];
+    const fasterThanPrevious = pace <= paces[index - 1] * 0.93;
+    const fasterThanNext = pace <= paces[index + 1] * 0.93;
+    return fasterThanPrevious && fasterThanNext ? [index] : [];
+  });
+
+  let longestAlternatingChain = 0;
+  let currentChain = 0;
+  let previousIndex = -10;
+  fastIndices.forEach((index) => {
+    currentChain = index - previousIndex === 2 ? currentChain + 1 : 1;
+    longestAlternatingChain = Math.max(longestAlternatingChain, currentChain);
+    previousIndex = index;
+  });
+  return longestAlternatingChain >= 3;
 }
 
 function isKeySession(session: TrainingSession): boolean {
@@ -137,15 +178,15 @@ function isKeySession(session: TrainingSession): boolean {
 
 function getTypeScore(session: TrainingSession, activity: StravaActivity): number {
   const actualKind = inferActivityKind(activity);
-  if (session.type === actualKind) return 34;
+  if (session.type === actualKind) return 80;
   if (session.type === 'interval' || session.type === 'tempo') {
-    return actualKind === 'workout' || actualKind === 'interval' || actualKind === 'tempo' ? 24 : 0;
+    return actualKind === 'workout' || actualKind === 'interval' || actualKind === 'tempo' ? 64 : 0;
   }
   if (session.type === 'easy' || session.type === 'recovery') {
-    return actualKind === 'easy' || actualKind === 'recovery' ? 22 : 0;
+    return actualKind === 'easy' || actualKind === 'recovery' ? 58 : 0;
   }
   if (session.type === 'long' && activity.distance >= Math.max(12000, session.distance * 650)) {
-    return 24;
+    return 68;
   }
   return 0;
 }
@@ -166,7 +207,7 @@ function getCompletionRatio(session: TrainingSession, activity?: StravaActivity)
 
 function isSessionDue(session: SessionExecution, today: Date): boolean {
   if (session.session.type === 'rest') return false;
-  if (session.date.getTime() < today.getTime()) return true;
+  if (session.weekStartDate.getTime() <= today.getTime()) return true;
   return session.status === 'completed'
     || session.status === 'partial'
     || session.status === 'skipped';
@@ -184,6 +225,8 @@ export function calculateTrainingPlanExecution(
       const key = `${week.week}-${session.day}`;
       const override = plan.executionOverrides?.[key];
       const originalDate = addDays(planStartDate, (week.week - 1) * 7 + session.day);
+      const weekStartDate = addDays(planStartDate, (week.week - 1) * 7);
+      const weekEndDate = addDays(weekStartDate, 6);
       const dateOffsetDays = override?.dateOffsetDays ?? 0;
       const date = addDays(originalDate, dateOffsetDays);
       return {
@@ -192,6 +235,8 @@ export function calculateTrainingPlanExecution(
         day: session.day,
         originalDate,
         date,
+        weekStartDate,
+        weekEndDate,
         dateKey: formatDateKey(date),
         dateOffsetDays,
         override,
@@ -200,9 +245,17 @@ export function calculateTrainingPlanExecution(
     })
   );
 
-  const runningActivities = activities
+  const runningActivities: RunningActivity[] = activities
     .filter((activity) => activity.type === 'Run' || activity.sport_type === 'Run')
-    .map((activity) => ({ activity, date: startOfLocalDay(getActivityDate(activity)) }));
+    .map((activity) => {
+      const date = startOfLocalDay(getActivityDate(activity));
+      return {
+        activity,
+        date,
+        week: Math.floor(differenceInCalendarDays(date, planStartDate) / 7) + 1,
+      };
+    })
+    .filter(({ week }) => week >= 1 && week <= plan.weeks.length);
   const candidates: MatchCandidate[] = [];
   const manuallyMatchedActivityIndexes = new Set<number>();
   const manualMatches = new Map<number, MatchCandidate>();
@@ -231,21 +284,27 @@ export function calculateTrainingPlanExecution(
       || planned.override?.matchMode === 'none'
       || manualMatches.has(sessionIndex)
     ) return;
-    runningActivities.forEach(({ activity, date }, activityIndex) => {
+    runningActivities.forEach(({ activity, date, week }, activityIndex) => {
       if (manuallyMatchedActivityIndexes.has(activityIndex)) return;
+      if (week !== planned.week) return;
       const dateDelta = differenceInCalendarDays(date, planned.date);
-      if (Math.abs(dateDelta) > 1) return;
-      const dateScore = dateDelta === 0 ? 70 : 32;
+      const typeScore = getTypeScore(planned.session, activity);
+      if (typeScore <= 0) return;
+      const dateScore = Math.max(0, 12 - Math.abs(dateDelta) * 2);
       candidates.push({
         sessionIndex,
         activityIndex,
         dateDelta,
-        score: dateScore + getTypeScore(planned.session, activity) + getDistanceScore(planned.session, activity),
+        score: typeScore + getDistanceScore(planned.session, activity) + dateScore,
       });
     });
   });
 
-  candidates.sort((left, right) => right.score - left.score);
+  candidates.sort((left, right) => (
+    right.score - left.score
+    || Math.abs(left.dateDelta) - Math.abs(right.dateDelta)
+    || left.sessionIndex - right.sessionIndex
+  ));
   const matchedSessionIndexes = new Set<number>();
   const matchedActivityIndexes = new Set<number>(manuallyMatchedActivityIndexes);
   const matches = new Map<number, MatchCandidate>(manualMatches);
@@ -271,20 +330,21 @@ export function calculateTrainingPlanExecution(
     }
 
     const match = matches.get(index);
-    const activity = match ? runningActivities[match.activityIndex].activity : undefined;
+    const matchedRunningActivity = match ? runningActivities[match.activityIndex] : undefined;
+    const activity = matchedRunningActivity?.activity;
     const completionRatio = getCompletionRatio(planned.session, activity);
-    const isFutureOrToday = planned.date.getTime() >= today.getTime();
     let status: SessionExecutionStatus;
     if (activity) {
       status = completionRatio >= 0.65 ? 'completed' : 'partial';
     } else {
-      status = isFutureOrToday ? 'upcoming' : 'missed';
+      status = planned.weekEndDate.getTime() < today.getTime() ? 'missed' : 'upcoming';
     }
 
     return {
       ...planned,
       status,
       activity,
+      actualDate: matchedRunningActivity?.date,
       dateDelta: match?.dateDelta,
       matchSource: activity ? (manualMatches.has(index) ? 'manual' : 'automatic') : undefined,
       completionRatio,
@@ -293,24 +353,41 @@ export function calculateTrainingPlanExecution(
 
   const weeks: WeekExecution[] = plan.weeks.map((week) => {
     const weekSessions = sessions.filter((session) => session.week === week.week);
+    const startDate = addDays(planStartDate, (week.week - 1) * 7);
+    const endDate = addDays(startDate, 6);
+    const isStarted = startDate.getTime() <= today.getTime();
+    const isCurrent = today.getTime() >= startDate.getTime() && today.getTime() <= endDate.getTime();
+    const isClosed = endDate.getTime() < today.getTime();
+    const weekActivities = runningActivities.filter((item) => item.week === week.week);
+    const matchedActivityIds = new Set(
+      weekSessions.map((session) => session.activity?.id).filter((id): id is number => Boolean(id))
+    );
+    const extraActivities = weekActivities.filter(({ activity }) => !matchedActivityIds.has(activity.id));
     const dueSessions = weekSessions.filter((session) => isSessionDue(session, today));
     const dueKeySessions = dueSessions.filter((session) => isKeySession(session.session));
     return {
       week: week.week,
-      startDate: addDays(planStartDate, (week.week - 1) * 7),
-      endDate: addDays(planStartDate, (week.week - 1) * 7 + 6),
+      startDate,
+      endDate,
+      isStarted,
+      isCurrent,
+      isClosed,
       sessions: weekSessions,
       plannedDistance: weekSessions.reduce((sum, session) => sum + (
         session.session.type === 'rest' ? 0 : session.session.distance
       ), 0),
-      actualDistance: weekSessions.reduce((sum, session) => sum + (session.activity?.distance || 0) / 1000, 0),
+      actualDistance: weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0),
+      extraActivityCount: extraActivities.length,
+      extraDistance: extraActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0),
       completedCount: dueSessions.filter((session) => session.status === 'completed').length,
       partialCount: dueSessions.filter((session) => session.status === 'partial').length,
       missedCount: dueSessions.filter((session) => session.status === 'missed').length,
       skippedCount: dueSessions.filter((session) => session.status === 'skipped').length,
       dueCount: dueSessions.length,
       plannedDueDistance: dueSessions.reduce((sum, session) => sum + session.session.distance, 0),
-      actualDueDistance: dueSessions.reduce((sum, session) => sum + (session.activity?.distance || 0) / 1000, 0),
+      actualDueDistance: isStarted
+        ? weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0)
+        : 0,
       plannedKeyCount: dueKeySessions.length,
       completedKeyCount: dueKeySessions.filter((session) =>
         session.status === 'completed' || session.status === 'partial'
@@ -339,7 +416,7 @@ export function calculateTrainingPlanExecution(
     skippedCount,
     dueCount: dueSessions.length,
     plannedDueDistance: dueSessions.reduce((sum, session) => sum + session.session.distance, 0),
-    actualDueDistance: dueSessions.reduce((sum, session) => sum + (session.activity?.distance || 0) / 1000, 0),
+    actualDueDistance: weeks.reduce((sum, week) => sum + week.actualDueDistance, 0),
     completionRate: dueSessions.length > 0
       ? Math.round(((completedCount + partialCount * 0.5) / dueSessions.length) * 100)
       : 0,
@@ -413,8 +490,9 @@ export function getNextWeekAdjustment(
   plan: TrainingPlan,
   execution: TrainingPlanExecution
 ): NextWeekAdjustment {
-  const referenceWeekNumber = execution.currentWeek
-    ?? execution.weeks.filter((week) => week.dueCount > 0).at(-1)?.week;
+  const referenceWeekNumber = execution.weeks
+    .filter((week) => week.isClosed && week.dueCount > 0)
+    .at(-1)?.week;
   const referenceWeek = execution.weeks.find((week) => week.week === referenceWeekNumber);
   const nextWeek = referenceWeekNumber
     ? plan.weeks.find((week) => week.week === referenceWeekNumber + 1)

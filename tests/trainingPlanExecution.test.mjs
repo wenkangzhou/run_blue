@@ -111,12 +111,12 @@ test('anchors the final Sunday session to the race date', () => {
   );
 });
 
-test('matches same-day and shifted activities without reusing records', () => {
+test('matches activities across the same training week without reusing records', () => {
   const execution = calculateTrainingPlanExecution(
     makePlan(),
     [
       makeActivity(1, '2026-06-02', 5200),
-      makeActivity(2, '2026-06-08', 9000, { workout_type: 2 }),
+      makeActivity(2, '2026-06-06', 9000, { workout_type: 2 }),
       makeActivity(3, '2026-06-14', 10000, { workout_type: 1 }),
     ],
     new Date('2026-06-15T12:00:00')
@@ -128,7 +128,7 @@ test('matches same-day and shifted activities without reusing records', () => {
 
   assert.equal(easy.status, 'completed');
   assert.equal(long.status, 'completed');
-  assert.equal(long.dateDelta, 1);
+  assert.equal(long.dateDelta, -1);
   assert.equal(race.status, 'completed');
   assert.equal(new Set(execution.sessions.map((session) => session.activity?.id).filter(Boolean)).size, 3);
 });
@@ -200,10 +200,10 @@ test('suggests reducing or recovering next week based on execution', () => {
 
   assert.equal(adjustment.type, 'recover');
   assert.equal(adjustment.multiplier, 0.8);
-  assert.equal(adjustment.referenceWeek, 2);
+  assert.equal(adjustment.referenceWeek, 1);
 });
 
-test('does not count an unmatched workout scheduled for today as due', () => {
+test('keeps current-week unmatched sessions upcoming and only marks them missed after week close', () => {
   const plan = makePlan();
   const execution = calculateTrainingPlanExecution(
     plan,
@@ -215,8 +215,62 @@ test('does not count an unmatched workout scheduled for today as due', () => {
   const adjustment = getNextWeekAdjustment(plan, execution);
 
   assert.equal(todaySession.status, 'upcoming');
-  assert.equal(currentWeek.dueCount, 0);
-  assert.equal(adjustment.type, 'not_started');
+  assert.equal(currentWeek.dueCount, 2);
+  assert.equal(currentWeek.missedCount, 0);
+  assert.equal(adjustment.type, 'recover');
+});
+
+test('uses the whole week so Monday and Tuesday runs can fill separate aerobic targets', () => {
+  const plan = makePlan();
+  plan.weeks[0].sessions.splice(2, 0, makeSession(3, 'recovery', 5));
+  const execution = calculateTrainingPlanExecution(
+    plan,
+    [
+      makeActivity(11, '2026-06-01', 5000),
+      makeActivity(12, '2026-06-02', 5200),
+    ],
+    new Date('2026-06-02T12:00:00')
+  );
+  const week = execution.weeks[0];
+  const matchedIds = week.sessions.map((session) => session.activity?.id).filter(Boolean);
+
+  assert.deepEqual(new Set(matchedIds), new Set([11, 12]));
+  assert.equal(week.extraActivityCount, 0);
+  assert.equal(week.actualDistance, 10.2);
+  assert.equal(week.missedCount, 0);
+});
+
+test('keeps unmatched runs as extra weekly volume instead of discarding them', () => {
+  const execution = calculateTrainingPlanExecution(
+    makePlan(),
+    [
+      makeActivity(21, '2026-06-01', 5000),
+      makeActivity(22, '2026-06-02', 5000),
+    ],
+    new Date('2026-06-02T12:00:00')
+  );
+  const week = execution.weeks[0];
+
+  assert.equal(week.extraActivityCount, 1);
+  assert.equal(week.extraDistance, 5);
+  assert.equal(week.actualDistance, 10);
+});
+
+test('recognizes alternating lap workouts for weekly quality-session matching', () => {
+  const plan = makePlan();
+  plan.weeks[0].sessions.splice(2, 0, makeSession(2, 'interval', 7));
+  const lap = (distance, moving_time) => ({ distance, moving_time });
+  const activity = makeActivity(31, '2026-06-04', 6800, {
+    laps: [
+      lap(1000, 360), lap(750, 204), lap(800, 239), lap(780, 201),
+      lap(820, 261), lap(760, 206), lap(910, 336), lap(730, 208), lap(250, 82),
+    ],
+  });
+  const execution = calculateTrainingPlanExecution(plan, [activity], new Date('2026-06-05T12:00:00'));
+  const interval = execution.sessions.find((session) => session.session.type === 'interval');
+
+  assert.equal(interval.activity.id, 31);
+  assert.equal(interval.status, 'completed');
 });
 
 test('finds the next workout across plans and links an activity to its planned session', () => {

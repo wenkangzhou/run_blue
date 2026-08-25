@@ -4,7 +4,7 @@ import React from 'react';
 import { CalendarClock, Check, Link2Off, RotateCcw, SkipForward, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TrainingSessionExecutionOverride } from '@/lib/trainingPlan';
-import type { SessionExecution } from '@/lib/trainingPlanExecution';
+import { inferActivityKind, type SessionExecution } from '@/lib/trainingPlanExecution';
 import { getActivityDate } from '@/lib/dates';
 import { formatPaceSeconds } from '@/lib/paceFormat';
 import type { StravaActivity } from '@/types';
@@ -37,6 +37,21 @@ function formatActivityDate(activity: StravaActivity, locale: string) {
 function getActivityPace(activity: StravaActivity) {
   if (!activity.distance || !activity.moving_time) return '--';
   return `${formatPaceSeconds(activity.moving_time / (activity.distance / 1000))}/km`;
+}
+
+function getCandidateTypeRank(execution: SessionExecution, activity: StravaActivity) {
+  const planned = execution.session.type;
+  const actual = inferActivityKind(activity);
+  if (planned === actual) return 0;
+  if (
+    (planned === 'interval' || planned === 'tempo')
+    && (actual === 'workout' || actual === 'interval' || actual === 'tempo')
+  ) return 1;
+  if (
+    (planned === 'easy' || planned === 'recovery')
+    && (actual === 'easy' || actual === 'recovery')
+  ) return 1;
+  return 2;
 }
 
 function createOverride(
@@ -75,9 +90,13 @@ export function TrainingSessionEditor({
     .filter((activity) => (
       (activity.type === 'Run' || activity.sport_type === 'Run')
       && (!usedActivityIds.has(activity.id) || activity.id === execution.activity?.id)
-      && Math.abs(calendarDayDistance(getActivityDate(activity), execution.date)) <= 7
+      && getActivityDate(activity) >= execution.weekStartDate
+      && getActivityDate(activity) < new Date(execution.weekEndDate.getTime() + DAY_MS)
     ))
     .sort((left, right) => {
+      const leftType = getCandidateTypeRank(execution, left);
+      const rightType = getCandidateTypeRank(execution, right);
+      if (leftType !== rightType) return leftType - rightType;
       const leftDate = Math.abs(calendarDayDistance(getActivityDate(left), execution.date));
       const rightDate = Math.abs(calendarDayDistance(getActivityDate(right), execution.date));
       if (leftDate !== rightDate) return leftDate - rightDate;

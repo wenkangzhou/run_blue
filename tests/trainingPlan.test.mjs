@@ -75,6 +75,18 @@ test('generates a periodized training plan with seven sessions per week', async 
 
   const easyRun = plan.weeks[0].sessions.find((session) => session.type === 'easy');
   assert.match(easyRun.description, /153-160bpm/);
+
+  const repetitionSessions = plan.weeks
+    .flatMap((week) => week.sessions)
+    .filter((session) => session.paceZone === 'R');
+  const intervalSessions = plan.weeks
+    .flatMap((week) => week.sessions)
+    .filter((session) => session.paceZone === 'I');
+  assert.equal(repetitionSessions.length > 0, true);
+  assert.equal(repetitionSessions.every((session) => session.workDistance <= 1), true);
+  assert.equal(repetitionSessions.every((session) => session.distance <= 5), true);
+  assert.equal(intervalSessions.length > 0, true);
+  assert.equal(intervalSessions.every((session) => session.workDistance <= 4), true);
 });
 
 test('rejects unrealistic race goals from the 5K PB equivalency check', async () => {
@@ -152,4 +164,30 @@ test('migrates legacy localStorage training plans into IndexedDB', async () => {
 
   await clearTrainingPlans();
   assert.equal(indexedStore.has('runblue_training_plans'), false);
+});
+
+test('normalizes legacy oversized R and I sessions when plans are loaded', async () => {
+  const plan = await generateTrainingPlan('10k', 3000, 10, 1500, 30, undefined, 'zh', 175);
+  const rSession = plan.weeks.flatMap((week) => week.sessions).find((session) => session.paceZone === 'R');
+  const iSession = plan.weeks.flatMap((week) => week.sessions).find((session) => session.paceZone === 'I');
+  rSession.distance = 6;
+  rSession.workDistance = undefined;
+  rSession.description = '速度激活\n8×200m @ 3:40/km\n配速建议：R区 3:35-3:45/km';
+  iSession.distance = 8;
+  iSession.workDistance = undefined;
+  iSession.description = '间歇训练\n5×1000m @ 4:10/km，组休2.5min';
+  installBrowserStorage({
+    local: { runblue_training_plans: JSON.stringify([plan]) },
+  });
+
+  const restored = await getStoredTrainingPlan(plan.id);
+  const restoredR = restored.weeks.flatMap((week) => week.sessions).find((session) => session.paceZone === 'R');
+  const restoredI = restored.weeks.flatMap((week) => week.sessions).find((session) => session.paceZone === 'I');
+
+  assert.equal(restoredR.distance, 4.2);
+  assert.equal(restoredR.workDistance, 0.6);
+  assert.match(restoredR.description, /6×100m/);
+  assert.equal(restoredI.distance, 7);
+  assert.equal(restoredI.workDistance, 4);
+  assert.match(restoredI.description, /4×1000m/);
 });

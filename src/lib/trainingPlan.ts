@@ -31,6 +31,7 @@ export interface TrainingSession {
   title: string;
   description: string;
   distance: number; // km
+  workDistance?: number; // quality work only; distance remains the whole-session total
   duration?: string;
   paceZone?: string;
 }
@@ -85,7 +86,94 @@ function hasIndexedDb() {
 }
 
 function normalizeStoredPlans(value: unknown): TrainingPlan[] {
-  return Array.isArray(value) ? value : [];
+  if (!Array.isArray(value)) return [];
+  return value.map((plan) => normalizeTrainingPlan(plan as TrainingPlan));
+}
+
+function getQualityWorkDistance(description: string): number | undefined {
+  const direct = description.match(/(\d+)\s*[×x]\s*(\d+(?:\.\d+)?)\s*(km|m)/i);
+  if (direct) {
+    const reps = Number(direct[1]);
+    const distance = Number(direct[2]) / (direct[3].toLowerCase() === 'm' ? 1000 : 1);
+    return reps * distance;
+  }
+  const reversed = description.match(/(\d+(?:\.\d+)?)\s*(km|m)\s*[×x]\s*(\d+)/i);
+  if (!reversed) return undefined;
+  const distance = Number(reversed[1]) / (reversed[2].toLowerCase() === 'm' ? 1000 : 1);
+  return distance * Number(reversed[3]);
+}
+
+function normalizeStoredSession(session: TrainingSession): TrainingSession {
+  if (session.paceZone === 'R') {
+    if (session.workDistance && session.workDistance <= 1 && session.distance <= 5) {
+      return session;
+    }
+    const en = !/[\u3400-\u9fff]/.test(session.description);
+    const lines = session.description.split('\n').map((line) => line.trim()).filter(Boolean);
+    const paceLine = lines.find((line) => /^(配速建议|Pace)/i.test(line));
+    const heartRateLine = lines.find((line) => /^(心率建议|HR)/i.test(line));
+    const description = en
+      ? [
+          'Speed activation',
+          '2km E warm-up + 6×100m @ R pace, 100m jog between reps + 1km E cool-down',
+          'Main work: 0.6km R · whole session about 4.2km',
+          paceLine,
+          heartRateLine,
+          'Feel: fast and relaxed, stop before form tightens; this is activation, not an endurance test',
+        ].filter(Boolean).join('\n')
+      : [
+          '速度激活',
+          '2km E热身 + 6×100m @ R配速，组间100m慢跑 + 1km E放松',
+          '主训练：0.6km R · 全课约4.2km',
+          paceLine,
+          heartRateLine,
+          '体感：快而放松，动作开始变紧就停止；这是速度激活，不是耐力挑战',
+        ].filter(Boolean).join('\n');
+    return {
+      ...session,
+      title: en ? 'Speed Activation' : '速度激活',
+      description,
+      distance: 4.2,
+      workDistance: 0.6,
+    };
+  }
+
+  if (session.paceZone === 'I') {
+    if (session.workDistance && session.workDistance <= 4) return session;
+    let description = session.description
+      .replace(/800m×6/g, '800m×5')
+      .replace(/6×800m/g, '5×800m')
+      .replace(/5×1000m/g, '4×1000m')
+      .replace(/1000m×5/g, '1000m×4');
+    const parsedWorkDistance = getQualityWorkDistance(description);
+    const workDistance = Math.min(4, parsedWorkDistance ?? session.workDistance ?? 4);
+    if (parsedWorkDistance && parsedWorkDistance > 4) {
+      description = description.replace(
+        /主训练：[^\n]*/,
+        `主训练：${workDistance.toFixed(1)}km I`
+      );
+    }
+    return {
+      ...session,
+      description,
+      distance: Math.min(session.distance, 7),
+      workDistance,
+    };
+  }
+
+  return session;
+}
+
+function normalizeTrainingPlan(plan: TrainingPlan): TrainingPlan {
+  const weeks = plan.weeks.map((week) => {
+    const sessions = week.sessions.map(normalizeStoredSession);
+    return {
+      ...week,
+      sessions,
+      totalDistance: Math.round(sessions.reduce((sum, session) => sum + session.distance, 0) * 10) / 10,
+    };
+  });
+  return { ...plan, weeks };
 }
 
 function readLegacyStoredPlans(): TrainingPlan[] {
@@ -606,6 +694,7 @@ function buildQualitySession(
   let desc: string;
   let dist: number;
   let pz: string | undefined;
+  let workDistance: number | undefined;
 
   if (phase === 'base') {
     // Base: aerobic + light quality
@@ -616,6 +705,7 @@ function buildQualitySession(
         : `有氧节奏+间歇\n4km @ ${ePace} + 800m×4 @ ${iPace}，组休2min\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
       dist = Math.round(4 + 4 * 0.8 + 2);
       pz = 'I';
+      workDistance = 3.2;
     } else if (buildWeek % 4 === 2) {
       title = en ? 'Aerobic + Tempo' : '有氧节奏+阈值';
       desc = en
@@ -623,20 +713,23 @@ function buildQualitySession(
         : `有氧节奏+阈值\n4km @ ${ePace} + 1km×3 @ ${tPace}，组休2min\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z4.max}bpm（LTHR的95-99%，Z4阈值）${strength}`;
       dist = Math.round(4 + 3 + 2);
       pz = 'T';
+      workDistance = 3;
     } else if (buildWeek % 4 === 3) {
       title = en ? 'Aerobic + Intervals' : '有氧节奏+间歇';
       desc = en
-        ? `Aerobic + VO2max\n3km @ ${ePace} + 800m×6 @ ${iPace}, 2min jog rec\nPace: I zone ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\nHR: ≥${hrZones.z5.min}bpm (≥100% LTHR, Z5)${strength}`
-        : `有氧节奏+间歇\n3km @ ${ePace} + 800m×6 @ ${iPace}，组休2min\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
-      dist = Math.round(3 + 6 * 0.8 + 2);
+        ? `Aerobic + VO2max\n3km @ ${ePace} + 800m×5 @ ${iPace}, 2min jog rec\nMain work: 4.0km I\nPace: I zone ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\nHR: ≥${hrZones.z5.min}bpm (≥100% LTHR, Z5)${strength}`
+        : `有氧节奏+间歇\n3km @ ${ePace} + 800m×5 @ ${iPace}，组休2min\n主训练：4.0km I\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
+      dist = 7;
       pz = 'I';
+      workDistance = 4;
     } else {
       title = en ? 'Mixed Quality' : '复合强度';
       desc = en
-        ? `Mixed session\n2km @ ${ePace} + 1.2km×3 @ ${tPace} + 400m×4 @ ${rPace}, 90s jog rec\nPace: T ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}, R ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nHR: ${hrZones.z4.min}-${hrZones.z5.min}bpm (Z4-Z5)${strength}`
-        : `复合强度课\n2km @ ${ePace} + 1.2km×3 @ ${tPace} + 400m×4 @ ${rPace}，组休90s\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}，R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z5.min}bpm（Z4-Z5）${strength}`;
-      dist = Math.round(2 + 3.6 + 1.6 + 2);
+        ? `Mixed session\n2km @ ${ePace} + 1.2km×3 @ ${tPace} + 4×100m relaxed strides @ ${rPace}, 100m jog rec + 1km cool-down\nMain work: 3.6km T + 0.4km R\nPace: T ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}, R ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nHR: ${hrZones.z4.min}-${hrZones.z5.min}bpm (Z4-Z5)${strength}`
+        : `复合强度课\n2km @ ${ePace} + 1.2km×3 @ ${tPace} + 4×100m放松加速 @ ${rPace}，组间100m慢跑 + 1km放松\n主训练：3.6km T + 0.4km R\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}，R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z5.min}bpm（Z4-Z5）${strength}`;
+      dist = 7.4;
       pz = 'T';
+      workDistance = 4;
     }
   } else if (phase === 'build') {
     const isRecovery = buildWeek % 3 === 0 && buildWeek > 0;
@@ -647,24 +740,27 @@ function buildQualitySession(
         : `轻量激活\n3km @ ${ePace} + 800m×4 @ ${iPace}，组休2min\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
       dist = Math.round(3 + 4 * 0.8 + 2);
       pz = 'I';
+      workDistance = 3.2;
     } else if (buildWeek % 3 === 1) {
       // Interval focus
       if (distance === '42k') {
         title = en ? 'Intervals' : '间歇训练';
-        const reps = w < buildEnd - 1 ? 6 : 5;
-        const repDist = w < buildEnd - 1 ? 800 : 1000;
+        const reps = 5;
+        const repDist = 800;
         desc = en
           ? `Intervals\n${reps}×${repDist}m @ ${iPace}, 2-3min jog rec\nPace: I zone ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\nHR: ≥${hrZones.z5.min}bpm (≥100% LTHR, Z5)${strength}`
           : `间歇训练\n${reps}×${repDist}m @ ${iPace}，组休2-3min\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
-        dist = Math.round((reps * repDist) / 1000 * 0.8 + 3);
+        dist = 7;
         pz = 'I';
+        workDistance = 4;
       } else {
         title = en ? 'Intervals' : '间歇训练';
         desc = en
-          ? `Intervals\n5×1000m @ ${iPace}, 2.5min jog rec\nPace: I zone ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\nHR: ≥${hrZones.z5.min}bpm (≥100% LTHR, Z5)${strength}`
-          : `间歇训练\n5×1000m @ ${iPace}，组休2.5min\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
-        dist = Math.round(5 + 3);
+          ? `Intervals\n4×1000m @ ${iPace}, 2.5min jog rec\nMain work: 4.0km I\nPace: I zone ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\nHR: ≥${hrZones.z5.min}bpm (≥100% LTHR, Z5)${strength}`
+          : `间歇训练\n4×1000m @ ${iPace}，组休2.5min\n主训练：4.0km I\n配速建议：I区 ${fmtPace(zones.I.min)}-${fmtPace(zones.I.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（LTHR的≥100%，Z5 VO2max）${strength}`;
+        dist = 7;
         pz = 'I';
+        workDistance = 4;
       }
     } else {
       // Tempo focus
@@ -675,6 +771,7 @@ function buildQualitySession(
         : `阈值跑\n${tempoDist}km @ ${tPace}\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z4.max}bpm（LTHR的95-99%，Z4阈值）${strength}`;
       dist = Math.round(tempoDist + 3);
       pz = 'T';
+      workDistance = tempoDist;
     }
   } else if (phase === 'peak') {
     const isRecovery = peakWeek % 3 === 0 && peakWeek > 0;
@@ -685,6 +782,7 @@ function buildQualitySession(
         : `轻量激活\n3km @ ${ePace} + 1km×2 @ ${tPace}，组休2min\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z4.max}bpm（Z4阈值）${strength}`;
       dist = Math.round(3 + 2 + 2);
       pz = 'T';
+      workDistance = 2;
     } else if (peakWeek % 3 === 1) {
       title = en ? 'Tempo' : '阈值跑';
       desc = en
@@ -692,6 +790,7 @@ function buildQualitySession(
         : `阈值跑\n1×5km @ ${tPace} + 2km @ ${ePace}\n配速建议：T区 ${fmtPace(zones.T.min)}-${fmtPace(zones.T.max)}/km\n心率建议：${hrZones.z4.min}-${hrZones.z4.max}bpm（LTHR的95-99%，Z4阈值）${strength}`;
       dist = Math.round(5 + 2 + 2);
       pz = 'T';
+      workDistance = 5;
     } else {
       title = en ? 'Race Pace' : '比赛配速';
       desc = en
@@ -699,6 +798,7 @@ function buildQualitySession(
         : `比赛配速段落\n5km @ ${mPaceStr}（M配速）+ 3km @ ${ePace}\n配速建议：M区 ${fmtPace(zones.M.min)}-${fmtPace(zones.M.max)}/km\n心率建议：${hrZones.z3.min}-${hrZones.z3.max}bpm（LTHR的90-94%，Z3马拉松配速）${strength}`;
       dist = Math.round(5 + 3 + 2);
       pz = 'M';
+      workDistance = 5;
     }
   } else {
     // Taper
@@ -708,24 +808,34 @@ function buildQualitySession(
       dist = 3;
       pz = 'E';
     } else if ((w - peakEnd) % 2 === 1) {
-      title = en ? 'Speed' : '轻速度';
+      title = en ? 'Speed Activation' : '速度激活';
       desc = en
-        ? `Speed activation\n6×400m @ ${rPace}, 90s jog rec\nPace: R zone ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nHR: ≥${hrZones.z5.min}bpm (Z5)${strength}`
-        : `速度激活\n6×400m @ ${rPace}，组休90s\n配速建议：R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（Z5 VO2max）${strength}`;
-      dist = Math.round(6 * 0.4 + 2);
+        ? `Speed activation\n2km E warm-up + 6×150m @ ${rPace}, 150m jog rec + 1km E cool-down\nMain work: 0.9km R · whole session about 4.8km\nPace: R zone ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nFeel: fast and relaxed; stop before form tightens${strength}`
+        : `速度激活\n2km E热身 + 6×150m @ ${rPace}，组间150m慢跑 + 1km E放松\n主训练：0.9km R · 全课约4.8km\n配速建议：R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n体感：快而放松，动作开始变紧就停止${strength}`;
+      dist = 4.8;
       pz = 'R';
+      workDistance = 0.9;
     } else {
-      title = en ? 'Speed' : '轻速度';
+      title = en ? 'Speed Activation' : '速度激活';
       desc = en
-        ? `Speed activation\n8×200m @ ${rPace} + 2km @ ${ePace}\nPace: R zone ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nHR: ≥${hrZones.z5.min}bpm (Z5)${strength}`
-        : `速度激活\n8×200m @ ${rPace} + 2km @ ${ePace}\n配速建议：R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n心率建议：≥${hrZones.z5.min}bpm（Z5 VO2max）${strength}`;
-      dist = Math.round(8 * 0.2 + 2 + 2);
+        ? `Speed activation\n2km E warm-up + 6×100m @ ${rPace}, 100m jog rec + 1km E cool-down\nMain work: 0.6km R · whole session about 4.2km\nPace: R zone ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\nFeel: fast and relaxed; this is activation, not an endurance test${strength}`
+        : `速度激活\n2km E热身 + 6×100m @ ${rPace}，组间100m慢跑 + 1km E放松\n主训练：0.6km R · 全课约4.2km\n配速建议：R区 ${fmtPace(zones.R.min)}-${fmtPace(zones.R.max)}/km\n体感：快而放松，这是速度激活，不是耐力挑战${strength}`;
+      dist = 4.2;
       pz = 'R';
+      workDistance = 0.6;
     }
   }
 
   const type: TrainingSession['type'] = pz === 'T' || pz === 'M' ? 'tempo' : 'interval';
-  return { day, type, title, description: desc, distance: dist, paceZone: pz };
+  return {
+    day,
+    type,
+    title,
+    description: desc,
+    distance: dist,
+    ...(workDistance ? { workDistance } : {}),
+    paceZone: pz,
+  };
 }
 
 function buildLSD(

@@ -23,6 +23,17 @@ function getFirstDescriptionLine(description: string) {
     .find(Boolean) ?? '';
 }
 
+function formatDistance(distance: number) {
+  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
+}
+
+function getSessionVolumeLabel(session: TrainingPlan['weeks'][number]['sessions'][number], isZh: boolean) {
+  const total = `${formatDistance(session.distance)}km`;
+  if (!session.workDistance) return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
+  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  return isZh ? `全课约 ${total} · 主训练 ${work}` : `~${total} total · ${work} quality`;
+}
+
 function formatSessionDate(date: Date, locale: string, today = new Date()) {
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const reference = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -47,6 +58,7 @@ export function ActivityTrainingPlanCard({
   isGuest,
 }: ActivityTrainingPlanCardProps) {
   const { t, i18n } = useTranslation();
+  const isZh = i18n.language === 'zh';
   const [plans, setPlans] = React.useState<TrainingPlan[]>([]);
   const [loaded, setLoaded] = React.useState(false);
 
@@ -136,7 +148,7 @@ export function ActivityTrainingPlanCard({
                 <CircleDashed size={15} className="text-amber-600 dark:text-amber-300" />
               )}
               <p className="font-mono text-[10px] font-bold uppercase text-zinc-500">
-                {t('trainingPlan.matchedWorkout', '本次对应计划')}
+                {t('trainingPlan.matchedWorkout', '本次完成的周目标')}
               </p>
             </div>
             <h3 className="mt-2 font-pixel text-sm font-bold text-zinc-950 dark:text-zinc-50">
@@ -144,7 +156,7 @@ export function ActivityTrainingPlanCard({
             </h3>
             <p className="mt-1 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
               {t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: matchedSession.week })}
-              {' · '}{t('trainingPlan.plannedDistance', '计划 {{distance}} km', { distance: matchedSession.session.distance })}
+              {' · '}{getSessionVolumeLabel(matchedSession.session, isZh)}
               {' · '}{t('trainingPlan.actualDistance', '实际 {{distance}} km', { distance: (activity.distance / 1000).toFixed(1) })}
             </p>
           </div>
@@ -158,17 +170,18 @@ export function ActivityTrainingPlanCard({
             <div className="min-w-0">
               <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
                 <CalendarClock size={14} />
-                {t('trainingPlan.nextWorkoutEntry', '下一次训练')}
+                {nextSession.week === context.next?.execution.currentWeek
+                  ? t('trainingPlan.nextWeeklyTarget', '本周下一项')
+                  : t('trainingPlan.nextWorkoutEntry', '下一次训练')}
                 <span className="text-zinc-500 dark:text-zinc-400">
-                  {formatSessionDate(nextSession.date, i18n.language)}
+                  {t('trainingPlan.recommendedOn', '建议')}{' '}{formatSessionDate(nextSession.date, i18n.language)}
                 </span>
               </div>
               <h3 className="mt-2 font-pixel text-base font-bold text-zinc-950 dark:text-zinc-50">
                 {nextSession.session.title}
               </h3>
               <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
-                {nextSession.session.distance}km
-                {nextSession.session.paceZone ? ` · ${nextSession.session.paceZone}` : ''}
+                {getSessionVolumeLabel(nextSession.session, isZh)}
               </p>
               {nextDescription && (
                 <p className="mt-2 line-clamp-2 font-mono text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">

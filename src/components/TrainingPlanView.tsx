@@ -163,6 +163,19 @@ function getSessionDescriptionLead(description: string) {
   return description.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
 }
 
+function formatDistance(distance: number) {
+  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
+}
+
+function getSessionVolumeLabel(session: TrainingSession, isZh: boolean) {
+  const total = `${formatDistance(session.distance)}km`;
+  if (!session.workDistance) {
+    return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
+  }
+  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  return isZh ? `全课约 ${total} · 主训练 ${work}` : `~${total} total · ${work} quality`;
+}
+
 function getSessionTone(type: TrainingSession['type']) {
   const tones: Record<TrainingSession['type'], string> = {
     easy: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300',
@@ -180,12 +193,6 @@ function getPlanGuardrails(isZh: boolean) {
   return isZh
     ? ['疲劳高：质量课改 40min E 区', '心率飘高：降速，不硬顶配速', '疼痛出现：休息，不补课']
     : ['High fatigue: swap quality for 40min E', 'HR drift: slow down, do not force pace', 'Pain: rest, do not make up missed work'];
-}
-
-function isSameLocalDay(left: Date, right: Date) {
-  return left.getFullYear() === right.getFullYear()
-    && left.getMonth() === right.getMonth()
-    && left.getDate() === right.getDate();
 }
 
 function ClassSchedulePreview({
@@ -265,19 +272,13 @@ export function TrainingPlanView({
   );
   const [editingSession, setEditingSession] = React.useState<SessionExecution | null>(null);
   const [linkedSessionKey, setLinkedSessionKey] = React.useState<string | null>(null);
-  const today = new Date();
-  const pendingTodaySession = execution.sessions.find((session) => (
+  const currentWeekPendingSession = execution.sessions.find((session) => (
     session.session.type !== 'rest'
     && session.status === 'upcoming'
-    && isSameLocalDay(session.date, today)
-  ));
-  const completedTodaySession = execution.sessions.find((session) => (
-    session.session.type !== 'rest'
-    && (session.status === 'completed' || session.status === 'partial')
-    && isSameLocalDay(session.date, today)
+    && session.week === execution.currentWeek
   ));
   const nextSession = execution.sessions.find((session) => session.status === 'upcoming');
-  const focusSession = pendingTodaySession ?? nextSession ?? completedTodaySession;
+  const focusSession = currentWeekPendingSession ?? nextSession;
   const timing = getPlanTiming(plan);
   const currentWeek = execution.currentWeek ?? timing.currentWeek;
   const daysToRace = timing.daysToRace;
@@ -291,8 +292,8 @@ export function TrainingPlanView({
   const abilityGroup = plan.currentAbility.abilityGroup
     ?? getTrainingAbilityGroup(plan.currentAbility.pb5k, plan.currentAbility.weeklyVolume, i18n.language);
   const weeklyRhythm = isZh
-    ? '周一休息 / 周三质量 / 周日长距离'
-    : 'Mon rest / Wed quality / Sun long run';
+    ? '本周完成：有氧 / 质量 / 长距离'
+    : 'Weekly goals: aerobic / quality / long';
   const guardrails = getPlanGuardrails(isZh);
   const usedManualActivityIds = React.useMemo(() => new Set(
     Object.values(plan.executionOverrides ?? {})
@@ -343,22 +344,22 @@ export function TrainingPlanView({
         <div className="min-w-0">
           <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
             <CalendarClock size={14} />
-            {pendingTodaySession
-              ? t('trainingPlan.todayWorkout')
+            {focusSession.week === execution.currentWeek
+              ? t('trainingPlan.nextWeeklyTarget')
               : t('trainingPlan.nextWorkoutEntry')}
           </div>
           <h2 className="mt-2 font-pixel text-lg font-bold text-zinc-950 dark:text-zinc-50">
             {focusSession.session.title}
           </h2>
           <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+            {t('trainingPlan.recommendedOn')}{' '}
             {new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
               month: 'short',
               day: 'numeric',
               weekday: 'short',
             }).format(focusSession.date)}
             {' · '}
-            {focusSession.session.distance}km
-            {focusSession.session.paceZone ? ` · ${focusSession.session.paceZone}` : ''}
+            {getSessionVolumeLabel(focusSession.session, isZh)}
             {' · '}{t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: focusSession.week })}
           </p>
           {getSessionDescriptionLead(focusSession.session.description) && (
@@ -477,13 +478,13 @@ export function TrainingPlanView({
             </div>
             <div className="border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
               <p className="font-mono text-[10px] text-zinc-500">
-                {t('trainingPlan.weekRhythm', isZh ? '固定周节奏' : 'Weekly Rhythm')}
+                {t('trainingPlan.weekRhythm', isZh ? '建议周节奏' : 'Suggested Rhythm')}
               </p>
               <p className="mt-2 font-mono text-sm font-bold text-zinc-950 dark:text-zinc-50">{weeklyRhythm}</p>
               <p className="mt-2 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
                 {isZh
-                  ? '把强度、恢复和长距离错开，减少临时补课和连续疲劳。'
-                  : 'Hard days, recovery, and long run are separated to avoid stacked fatigue.'}
+                  ? '日期用于错开强度与恢复；同一周内可前后调整，周末按课程类型与总量结算。'
+                  : 'Dates separate stress and recovery; move sessions within the week and settle by workout type and volume.'}
               </p>
             </div>
             <div className="border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
@@ -515,7 +516,7 @@ export function TrainingPlanView({
               </h3>
             </div>
             <p className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-              {t('trainingPlan.executionProgressHint', '自动匹配计划日期前后一天内的 Strava 跑步记录')}
+              {t('trainingPlan.executionProgressHint', '同一周内按课程类型和距离自动匹配；建议日期仅用于安排恢复间隔')}
             </p>
           </div>
           <p className="font-mono text-2xl font-black text-zinc-950 dark:text-zinc-50">

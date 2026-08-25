@@ -98,6 +98,21 @@ function getSessionPurpose(type: TrainingSession['type'], isZh: boolean) {
   return isZh ? purposes[type].zh : purposes[type].en;
 }
 
+function formatDistance(distance: number) {
+  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
+}
+
+function getSessionVolumeLabel(session: TrainingSession, isZh: boolean) {
+  const total = `${formatDistance(session.distance)}km`;
+  if (!session.workDistance) {
+    return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
+  }
+  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  return isZh
+    ? `全课约 ${total} · 主训练 ${work}`
+    : `~${total} total · ${work} quality`;
+}
+
 function getDowngradeRule(type: TrainingSession['type'], isZh: boolean) {
   if (type === 'rest') return '';
   if (type === 'long') {
@@ -150,6 +165,40 @@ export function TrainingPlanCard({
     () => new Map(execution?.sessions.map((session) => [session.day, session]) || []),
     [execution]
   );
+  const weeklyTargets = React.useMemo(() => {
+    const groups = [
+      {
+        key: 'aerobic',
+        label: t('trainingPlan.aerobicTarget', '有氧'),
+        types: ['easy', 'recovery'] as TrainingSession['type'][],
+        className: 'text-blue-700 dark:text-blue-300',
+      },
+      {
+        key: 'quality',
+        label: t('trainingPlan.qualityTarget', '质量'),
+        types: ['tempo', 'interval'] as TrainingSession['type'][],
+        className: 'text-red-700 dark:text-red-300',
+      },
+      {
+        key: 'endurance',
+        label: t('trainingPlan.enduranceTarget', '耐力'),
+        types: ['long'] as TrainingSession['type'][],
+        className: 'text-violet-700 dark:text-violet-300',
+      },
+      {
+        key: 'race',
+        label: t('trainingPlan.raceTarget', '比赛'),
+        types: ['race'] as TrainingSession['type'][],
+        className: 'text-amber-700 dark:text-amber-300',
+      },
+    ];
+    return groups.flatMap((group) => {
+      const planned = execution?.sessions.filter((item) => group.types.includes(item.session.type)) ?? [];
+      if (planned.length === 0) return [];
+      const completed = planned.filter((item) => item.status === 'completed' || item.status === 'partial').length;
+      return [{ ...group, planned: planned.length, completed }];
+    });
+  }, [execution, t]);
 
   const phaseLabel: Record<WeeklyPlan['phase'], string> = {
     base: t('trainingPlan.phaseBase', '基础期'),
@@ -229,6 +278,10 @@ export function TrainingPlanCard({
             {execution && execution.dueCount > 0 && (
               <p className="mt-1 font-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-300">
                 {execution.completedCount}/{execution.dueCount} {t('trainingPlan.doneShort', '完成')}
+                {' · '}{Math.round(execution.actualDistance * 10) / 10}/{week.totalDistance}km
+                {execution.extraActivityCount > 0
+                  ? ` · ${t('trainingPlan.extraRunsShort', { count: execution.extraActivityCount })}`
+                  : ''}
               </p>
             )}
           </div>
@@ -269,6 +322,28 @@ export function TrainingPlanCard({
             })}
           </div>
 
+          {execution && weeklyTargets.length > 0 && (
+            <div className="mb-3 border-y border-zinc-100 py-2 dark:border-zinc-800">
+              <p className="mb-2 font-mono text-[9px] font-bold uppercase text-zinc-400">
+                {t('trainingPlan.weeklyGoalProgress', '本周课程目标')}
+              </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {weeklyTargets.map((target) => (
+                  <span key={target.key} className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                    {target.label}{' '}
+                    <strong className={target.className}>{target.completed}/{target.planned}</strong>
+                  </span>
+                ))}
+                <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                  {t('trainingPlan.weeklyDistanceTarget', '跑量')}{' '}
+                  <strong className="text-zinc-900 dark:text-zinc-100">
+                    {Math.round(execution.actualDistance * 10) / 10}/{week.totalDistance}km
+                  </strong>
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             {Array.from({ length: 7 }, (_, day) => {
               const session = week.sessions.find((item) => item.day === day);
@@ -300,8 +375,10 @@ export function TrainingPlanCard({
                   ].join(' ')}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 shrink-0 font-mono text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
-                      {dayLabel(day)}
+                    <div className="w-14 shrink-0 font-mono text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+                      {session.type === 'rest'
+                        ? dayLabel(day)
+                        : t('trainingPlan.suggestedDay', { day: dayLabel(day) })}
                     </div>
                     <div className={['mt-0.5 shrink-0', TYPE_ACCENT[session.type]].join(' ')}>
                       <TypeIcon type={session.type} />
@@ -311,8 +388,7 @@ export function TrainingPlanCard({
                         <p className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">{title}</p>
                         {session.type !== 'rest' && (
                           <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {session.distance > 0 ? `${session.distance}km` : session.duration}
-                            {session.paceZone ? ` · ${session.paceZone}` : ''}
+                            {session.distance > 0 ? getSessionVolumeLabel(session, isZh) : session.duration}
                           </p>
                         )}
                         {sessionExecution && <SessionStatus execution={sessionExecution} />}
@@ -382,10 +458,16 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
     month: 'numeric',
     day: 'numeric',
   }).format(execution.date);
+  const actualDateLabel = execution.actualDate
+    ? new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+        month: 'numeric',
+        day: 'numeric',
+      }).format(execution.actualDate)
+    : null;
   const shifted = execution.dateDelta
     ? isZh
-      ? ` · 调整${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}天`
-      : ` · ${execution.dateDelta > 0 ? '+' : ''}${execution.dateDelta}d`
+      ? ` · ${execution.dateDelta < 0 ? '提前' : '晚'}${Math.abs(execution.dateDelta)}天`
+      : ` · ${Math.abs(execution.dateDelta)}d ${execution.dateDelta < 0 ? 'early' : 'late'}`
     : '';
   const deferred = execution.dateOffsetDays
     ? isZh
@@ -397,7 +479,7 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
     return (
       <span className="inline-flex items-center gap-1 font-mono text-[9px] text-zinc-400">
         <Clock3 size={10} />
-        {dateLabel}
+        {t('trainingPlan.suggestedDateShort')} {dateLabel}
       </span>
     );
   }
@@ -433,7 +515,10 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
   return (
     <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] font-bold ${config.className}`}>
       {config.icon}
-      {dateLabel} · {config.label}{deferred}{shifted}
+      {actualDateLabel
+        ? `${t('trainingPlan.actualDateShort')} ${actualDateLabel}`
+        : `${t('trainingPlan.suggestedDateShort')} ${dateLabel}`}
+      {' · '}{config.label}{deferred}{shifted}
     </span>
   );
 }
