@@ -233,8 +233,16 @@ test('uses the whole week so Monday and Tuesday runs can fill separate aerobic t
   );
   const week = execution.weeks[0];
   const matchedIds = week.sessions.map((session) => session.activity?.id).filter(Boolean);
+  const mondayRun = week.activities.find((item) => item.activity.id === 11);
+  const tuesdayRun = week.activities.find((item) => item.activity.id === 12);
 
   assert.deepEqual(new Set(matchedIds), new Set([11, 12]));
+  assert.equal(mondayRun.day, 0);
+  assert.equal(mondayRun.dateKey, '2026-06-01');
+  assert.equal(tuesdayRun.day, 1);
+  assert.equal(tuesdayRun.dateKey, '2026-06-02');
+  assert.ok(mondayRun.matchedSessionKey);
+  assert.ok(tuesdayRun.matchedSessionKey);
   assert.equal(week.extraActivityCount, 0);
   assert.equal(week.actualDistance, 10.2);
   assert.equal(week.missedCount, 0);
@@ -250,10 +258,12 @@ test('keeps unmatched runs as extra weekly volume instead of discarding them', (
     new Date('2026-06-02T12:00:00')
   );
   const week = execution.weeks[0];
+  const mondayRun = week.activities.find((item) => item.activity.id === 21);
 
   assert.equal(week.extraActivityCount, 1);
   assert.equal(week.extraDistance, 5);
   assert.equal(week.actualDistance, 10);
+  assert.equal(mondayRun.day, 0);
 });
 
 test('recognizes alternating lap workouts for weekly quality-session matching', () => {

@@ -4,7 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import type { TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
-import type { SessionExecution, WeekExecution } from '@/lib/trainingPlanExecution';
+import type { SessionExecution, WeekActivityExecution, WeekExecution } from '@/lib/trainingPlanExecution';
+import { formatDuration, formatPace } from '@/lib/strava';
 import {
   Activity,
   CheckCircle2,
@@ -98,6 +99,14 @@ function getSessionPurpose(type: TrainingSession['type'], isZh: boolean) {
   return isZh ? purposes[type].zh : purposes[type].en;
 }
 
+function getWeeklyTargetLabel(type: TrainingSession['type'] | 'workout', isZh: boolean) {
+  if (type === 'easy' || type === 'recovery') return isZh ? '有氧' : 'aerobic';
+  if (type === 'tempo' || type === 'interval' || type === 'workout') return isZh ? '质量' : 'quality';
+  if (type === 'long') return isZh ? '耐力' : 'endurance';
+  if (type === 'race') return isZh ? '比赛' : 'race';
+  return isZh ? '跑量' : 'volume';
+}
+
 function formatDistance(distance: number) {
   return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
 }
@@ -137,6 +146,64 @@ function GuideItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ActualActivityEntry({ execution }: { execution: WeekActivityExecution }) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language === 'zh';
+  const { activity } = execution;
+  const dateLabel = new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
+    month: 'numeric',
+    day: 'numeric',
+  }).format(execution.date);
+  const targetLabel = getWeeklyTargetLabel(
+    execution.matchedSessionType ?? execution.inferredType,
+    isZh
+  );
+  const distance = `${formatDistance(activity.distance / 1000)}km`;
+  const pace = formatPace(activity.distance, activity.moving_time, 'min/km');
+
+  return (
+    <div className="border-t border-zinc-200 pt-2 dark:border-zinc-700">
+      <div className="flex items-start gap-2">
+        <Activity size={14} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] font-bold uppercase text-blue-600 dark:text-blue-300">
+                {t('trainingPlan.actualRun', '实际跑步')} · {dateLabel}
+              </p>
+              <p className="mt-0.5 break-words font-mono text-[11px] font-bold text-zinc-900 dark:text-zinc-100">
+                {activity.name || t('trainingPlan.runningActivity', '跑步活动')}
+              </p>
+            </div>
+            <Link
+              href={`/activities/${activity.id}`}
+              prefetch
+              className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
+            >
+              {t('trainingPlan.viewActivity', '查看')}
+              <ExternalLink size={11} />
+            </Link>
+          </div>
+          <p className="mt-1 font-mono text-[10px] text-zinc-600 dark:text-zinc-300">
+            {distance} · {pace} · {formatDuration(activity.moving_time)}
+          </p>
+          <p className="mt-1 font-mono text-[9px] text-zinc-400">
+            {execution.matchedSessionKey
+              ? t('trainingPlan.countsTowardWeeklyTarget', {
+                  target: targetLabel,
+                  defaultValue: `计入本周${targetLabel}目标`,
+                })
+              : t('trainingPlan.extraWeeklyRun', '计入本周额外跑量')}
+            {execution.matchSource === 'manual'
+              ? ` · ${t('trainingPlan.manualMatch')}`
+              : ''}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TrainingPlanCard({
   week,
   execution,
@@ -165,6 +232,13 @@ export function TrainingPlanCard({
     () => new Map(execution?.sessions.map((session) => [session.day, session]) || []),
     [execution]
   );
+  const activitiesByDay = React.useMemo(() => {
+    const grouped = new Map<number, WeekActivityExecution[]>();
+    execution?.activities.forEach((activity) => {
+      grouped.set(activity.day, [...(grouped.get(activity.day) ?? []), activity]);
+    });
+    return grouped;
+  }, [execution]);
   const weeklyTargets = React.useMemo(() => {
     const groups = [
       {
@@ -347,11 +421,21 @@ export function TrainingPlanCard({
           <div className="space-y-2">
             {Array.from({ length: 7 }, (_, day) => {
               const session = week.sessions.find((item) => item.day === day);
+              const dayActivities = activitiesByDay.get(day) ?? [];
               if (!session) {
                 return (
-                  <div key={day} className="flex items-center gap-3 border border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                    <span className="w-10 shrink-0 font-mono text-[11px] text-zinc-400">{dayLabel(day)}</span>
-                    <span className="font-mono text-xs text-zinc-400">-</span>
+                  <div key={day} className="border border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <span className="w-14 shrink-0 font-mono text-[11px] text-zinc-400">{dayLabel(day)}</span>
+                      <span className="font-mono text-xs text-zinc-400">-</span>
+                    </div>
+                    {dayActivities.length > 0 && (
+                      <div className="ml-[4.25rem] mt-2 space-y-2">
+                        {dayActivities.map((activity) => (
+                          <ActualActivityEntry key={activity.activity.id} execution={activity} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -376,9 +460,7 @@ export function TrainingPlanCard({
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-14 shrink-0 font-mono text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
-                      {session.type === 'rest'
-                        ? dayLabel(day)
-                        : t('trainingPlan.suggestedDay', { day: dayLabel(day) })}
+                      {dayLabel(day)}
                     </div>
                     <div className={['mt-0.5 shrink-0', TYPE_ACCENT[session.type]].join(' ')}>
                       <TypeIcon type={session.type} />
@@ -407,22 +489,6 @@ export function TrainingPlanCard({
                           <GuideItem label={isZh ? '降级' : 'Adjust'} value={downgrade} />
                         </div>
                       )}
-                      {sessionExecution?.activity && (
-                        <div className="mt-2 flex flex-wrap items-center gap-3">
-                          <Link
-                            href={`/activities/${sessionExecution.activity.id}`}
-                            className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-300"
-                          >
-                            {t('trainingPlan.viewMatchedActivity', '查看匹配活动')}
-                            <ExternalLink size={11} />
-                          </Link>
-                          {sessionExecution.matchSource === 'manual' && (
-                            <span className="font-mono text-[9px] text-zinc-400">
-                              {t('trainingPlan.manualMatch')}
-                            </span>
-                          )}
-                        </div>
-                      )}
                       {session.type !== 'rest' && sessionExecution && onAdjustSession && (
                         <button
                           type="button"
@@ -435,6 +501,13 @@ export function TrainingPlanCard({
                       )}
                     </div>
                   </div>
+                  {dayActivities.length > 0 && (
+                    <div className="ml-[4.25rem] mt-2 space-y-2">
+                      {dayActivities.map((activity) => (
+                        <ActualActivityEntry key={activity.activity.id} execution={activity} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -458,17 +531,7 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
     month: 'numeric',
     day: 'numeric',
   }).format(execution.date);
-  const actualDateLabel = execution.actualDate
-    ? new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
-        month: 'numeric',
-        day: 'numeric',
-      }).format(execution.actualDate)
-    : null;
-  const shifted = execution.dateDelta
-    ? isZh
-      ? ` · ${execution.dateDelta < 0 ? '提前' : '晚'}${Math.abs(execution.dateDelta)}天`
-      : ` · ${Math.abs(execution.dateDelta)}d ${execution.dateDelta < 0 ? 'early' : 'late'}`
-    : '';
+  const coveredOnAnotherDay = Boolean(execution.activity && execution.dateDelta !== 0);
   const deferred = execution.dateOffsetDays
     ? isZh
       ? ` · 顺延${execution.dateOffsetDays}天`
@@ -512,13 +575,20 @@ function SessionStatus({ execution }: { execution: SessionExecution }) {
     },
   }[execution.status];
 
+  if (coveredOnAnotherDay) {
+    return (
+      <span className="inline-flex items-center gap-1 font-mono text-[9px] text-zinc-400">
+        <Clock3 size={10} />
+        {t('trainingPlan.suggestedDateShort')} {dateLabel}{deferred}
+      </span>
+    );
+  }
+
   return (
     <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] font-bold ${config.className}`}>
       {config.icon}
-      {actualDateLabel
-        ? `${t('trainingPlan.actualDateShort')} ${actualDateLabel}`
-        : `${t('trainingPlan.suggestedDateShort')} ${dateLabel}`}
-      {' · '}{config.label}{deferred}{shifted}
+      {t('trainingPlan.suggestedDateShort')} {dateLabel}
+      {' · '}{config.label}{deferred}
     </span>
   );
 }

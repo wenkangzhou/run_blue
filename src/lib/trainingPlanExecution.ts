@@ -23,6 +23,17 @@ export interface SessionExecution {
   completionRatio: number;
 }
 
+export interface WeekActivityExecution {
+  activity: StravaActivity;
+  date: Date;
+  dateKey: string;
+  day: number;
+  inferredType: TrainingSession['type'] | 'workout';
+  matchedSessionKey?: string;
+  matchedSessionType?: TrainingSession['type'];
+  matchSource?: 'automatic' | 'manual';
+}
+
 export interface WeekExecution {
   week: number;
   startDate: Date;
@@ -31,6 +42,7 @@ export interface WeekExecution {
   isCurrent: boolean;
   isClosed: boolean;
   sessions: SessionExecution[];
+  activities: WeekActivityExecution[];
   plannedDistance: number;
   actualDistance: number;
   extraActivityCount: number;
@@ -362,6 +374,11 @@ export function calculateTrainingPlanExecution(
     const matchedActivityIds = new Set(
       weekSessions.map((session) => session.activity?.id).filter((id): id is number => Boolean(id))
     );
+    const matchedSessionByActivityId = new Map(
+      weekSessions.flatMap((session) => session.activity
+        ? [[session.activity.id, session] as const]
+        : [])
+    );
     const extraActivities = weekActivities.filter(({ activity }) => !matchedActivityIds.has(activity.id));
     const dueSessions = weekSessions.filter((session) => isSessionDue(session, today));
     const dueKeySessions = dueSessions.filter((session) => isKeySession(session.session));
@@ -373,6 +390,22 @@ export function calculateTrainingPlanExecution(
       isCurrent,
       isClosed,
       sessions: weekSessions,
+      activities: weekActivities
+        .map(({ activity, date }) => {
+          const matchedSession = matchedSessionByActivityId.get(activity.id);
+          return {
+            activity,
+            date,
+            dateKey: formatDateKey(date),
+            day: differenceInCalendarDays(date, startDate),
+            inferredType: inferActivityKind(activity),
+            matchedSessionKey: matchedSession?.key,
+            matchedSessionType: matchedSession?.session.type,
+            matchSource: matchedSession?.matchSource,
+          } satisfies WeekActivityExecution;
+        })
+        .sort((left, right) => left.date.getTime() - right.date.getTime()
+          || left.activity.start_date.localeCompare(right.activity.start_date)),
       plannedDistance: weekSessions.reduce((sum, session) => sum + (
         session.session.type === 'rest' ? 0 : session.session.distance
       ), 0),
