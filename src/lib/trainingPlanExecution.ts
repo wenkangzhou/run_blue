@@ -107,6 +107,8 @@ interface RunningActivity {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const UNLABELED_LONG_RUN_MIN_DISTANCE_METERS = 15_000;
+const UNLABELED_LONG_RUN_MIN_MOVING_TIME_SECONDS = 90 * 60;
 
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -197,7 +199,13 @@ function getTypeScore(session: TrainingSession, activity: StravaActivity): numbe
   if (session.type === 'easy' || session.type === 'recovery') {
     return actualKind === 'easy' || actualKind === 'recovery' ? 58 : 0;
   }
-  if (session.type === 'long' && activity.distance >= Math.max(12000, session.distance * 650)) {
+  if (
+    session.type === 'long'
+    && (
+      activity.distance >= UNLABELED_LONG_RUN_MIN_DISTANCE_METERS
+      || activity.moving_time >= UNLABELED_LONG_RUN_MIN_MOVING_TIME_SECONDS
+    )
+  ) {
     return 68;
   }
   return 0;

@@ -147,6 +147,28 @@ test('marks short runs partial and past unmatched sessions missed', () => {
   assert.equal(execution.missedCount, 1);
 });
 
+test('requires 15km or 90 minutes before treating an unlabeled run as endurance', () => {
+  const shortExecution = calculateTrainingPlanExecution(
+    makePlan(),
+    [makeActivity(41, '2026-06-06', 12000, { moving_time: 70 * 60 })],
+    new Date('2026-06-08T12:00:00')
+  );
+  const distanceExecution = calculateTrainingPlanExecution(
+    makePlan(),
+    [makeActivity(42, '2026-06-06', 15000, { moving_time: 80 * 60 })],
+    new Date('2026-06-08T12:00:00')
+  );
+  const durationExecution = calculateTrainingPlanExecution(
+    makePlan(),
+    [makeActivity(43, '2026-06-06', 11000, { moving_time: 90 * 60 })],
+    new Date('2026-06-08T12:00:00')
+  );
+
+  assert.equal(shortExecution.sessions.find((session) => session.key === '1-6').activity, undefined);
+  assert.equal(distanceExecution.sessions.find((session) => session.key === '1-6').activity.id, 42);
+  assert.equal(durationExecution.sessions.find((session) => session.key === '1-6').activity.id, 43);
+});
+
 test('honors manual matches, explicit unmatched state, skips, and deferred dates', () => {
   const plan = makePlan({
     executionOverrides: {
