@@ -242,7 +242,7 @@ test('keeps current-week unmatched sessions upcoming and only marks them missed 
   assert.equal(adjustment.type, 'recover');
 });
 
-test('uses the whole week so Monday and Tuesday runs can fill separate aerobic targets', () => {
+test('reconciles flexible weekly matching after the week closes', () => {
   const plan = makePlan();
   plan.weeks[0].sessions.splice(2, 0, makeSession(3, 'recovery', 5));
   const execution = calculateTrainingPlanExecution(
@@ -251,7 +251,7 @@ test('uses the whole week so Monday and Tuesday runs can fill separate aerobic t
       makeActivity(11, '2026-06-01', 5000),
       makeActivity(12, '2026-06-02', 5200),
     ],
-    new Date('2026-06-02T12:00:00')
+    new Date('2026-06-08T12:00:00')
   );
   const week = execution.weeks[0];
   const matchedIds = week.sessions.map((session) => session.activity?.id).filter(Boolean);
@@ -267,7 +267,28 @@ test('uses the whole week so Monday and Tuesday runs can fill separate aerobic t
   assert.ok(tuesdayRun.matchedSessionKey);
   assert.equal(week.extraActivityCount, 0);
   assert.equal(week.actualDistance, 10.2);
-  assert.equal(week.missedCount, 0);
+  assert.equal(week.missedCount, 1);
+});
+
+test('does not let an early rest-day run consume a future planned session', () => {
+  const plan = makePlan();
+  const mondayRun = makeActivity(13, '2026-06-01', 5000);
+  const execution = calculateTrainingPlanExecution(
+    plan,
+    [mondayRun],
+    new Date('2026-06-01T12:00:00')
+  );
+  const tuesdayEasy = execution.sessions.find((session) => session.key === '1-1');
+  const next = getNextTrainingPlanSession(
+    [plan],
+    [mondayRun],
+    new Date('2026-06-01T12:00:00')
+  );
+
+  assert.equal(tuesdayEasy.activity, undefined);
+  assert.equal(tuesdayEasy.status, 'upcoming');
+  assert.equal(execution.weeks[0].extraActivityCount, 1);
+  assert.equal(next.session.key, '1-1');
 });
 
 test('keeps unmatched runs as extra weekly volume instead of discarding them', () => {

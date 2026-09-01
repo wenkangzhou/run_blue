@@ -307,6 +307,8 @@ export function calculateTrainingPlanExecution(
     runningActivities.forEach(({ activity, date, week }, activityIndex) => {
       if (manuallyMatchedActivityIndexes.has(activityIndex)) return;
       if (week !== planned.week) return;
+      const weekIsClosed = planned.weekEndDate.getTime() < today.getTime();
+      if (!weekIsClosed && date.getTime() < planned.date.getTime()) return;
       const dateDelta = differenceInCalendarDays(date, planned.date);
       const typeScore = getTypeScore(planned.session, activity);
       if (typeScore <= 0) return;
@@ -477,10 +479,15 @@ function getUpcomingSessionReferences(
   activities: StravaActivity[],
   now: Date
 ): TrainingPlanSessionReference[] {
+  const today = startOfLocalDay(now);
   return plans.flatMap((plan) => {
     const execution = calculateTrainingPlanExecution(plan, activities, now);
     return execution.sessions
-      .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
+      .filter((session) => (
+        session.status === 'upcoming'
+        && session.session.type !== 'rest'
+        && session.date.getTime() >= today.getTime()
+      ))
       .map((session) => ({ plan, execution, session }));
   }).sort(compareSessionReferences);
 }
@@ -517,7 +524,11 @@ export function getActivityTrainingPlanContext(
 
   const upcoming = executions
     .flatMap(({ plan, execution }) => execution.sessions
-      .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
+      .filter((session) => (
+        session.status === 'upcoming'
+        && session.session.type !== 'rest'
+        && session.date.getTime() >= startOfLocalDay(now).getTime()
+      ))
       .map((session) => ({ plan, execution, session })))
     .sort(compareSessionReferences);
   const next = matched
