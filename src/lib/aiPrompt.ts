@@ -838,6 +838,9 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n5b. Hydration/dehydration rule: do NOT diagnose dehydration or "body protection" from heart-rate changes alone. If the run is under 90 minutes or there is no clear heat-stress evidence, keep hydration advice qualitative instead of giving exact electrolyte/fluid volumes.`
       : `\n5b. 补水/脱水规则：不要仅凭心率变化诊断脱水或“身体自我保护”。如果训练少于90分钟，或没有明确热应激证据，补水建议保持定性，不要给出精确电解质/饮水量。`;
+    prompt += en
+      ? `\n5c. Heart-rate consistency rule: separate zone level from trend. Staying in Z1/Z2 does not mean heart rate was stable. If second-half heart rate rises by 10 bpm or more, do not describe late-run control as stable or clean; say it remained in lower zones but rose meaningfully, and account for heat or fatigue without inventing a diagnosis.`
+      : `\n5c. 心率一致性规则：必须区分“所处区间低”和“前后程趋势稳定”。全程处于 Z1/Z2 不等于心率稳定；若后半程心率上升达到 10 bpm，禁止再写“控制稳定”或“后程很干净”，应表述为心率仍在低区间但后程明显上扬，并结合高温或疲劳解释，不得臆测诊断。`;
 
     // Extra guidance for long runs (>= 15km)
     if (activity.distance >= 15000) {

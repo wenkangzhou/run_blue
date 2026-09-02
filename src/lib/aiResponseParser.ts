@@ -6,6 +6,8 @@ import { buildActivityWeatherContext } from './weather';
 import { getPrimaryPersonalRecord } from './activityAchievements';
 import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
 import { buildExecutionSummary } from './aiFallbackAnalysis';
+import type { StreamAnalysis } from './streamAnalysis';
+import { validateAIAnalysisConsistency } from './aiConsistencyValidator';
 
 function formatRecordTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -30,25 +32,6 @@ function getWeatherFact(activity: StravaActivity, locale: string): string {
     facts.push(en ? `${weather.humidityPercent}% humidity` : `湿度 ${weather.humidityPercent}%`);
   }
   return facts.join(en ? ' with ' : '、');
-}
-
-const INTENSITY_RANK: Record<AIAnalysis['intensity'], number> = {
-  easy: 0,
-  moderate: 1,
-  hard: 2,
-  extreme: 3,
-};
-
-function getFinalIntensity(
-  candidate: AIAnalysis['intensity'] | undefined,
-  classification: ActivityClassification
-): AIAnalysis['intensity'] {
-  if (classification.isRace) return 'extreme';
-  const parsed = candidate && candidate in INTENSITY_RANK ? candidate : 'moderate';
-  if (!classification.loadAdjustment?.applied) return parsed;
-  return INTENSITY_RANK[classification.intensity] > INTENSITY_RANK[parsed]
-    ? classification.intensity
-    : parsed;
 }
 
 function getTrainingLoadFact(
@@ -711,7 +694,8 @@ export function normalizeAIAnalysisForDisplay(
   activity: StravaActivity,
   classification: ActivityClassification,
   locale: string = 'zh',
-  paceZones?: PaceZones | null
+  paceZones?: PaceZones | null,
+  streamAnalysis?: StreamAnalysis | null
 ): AIAnalysis {
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
   const suggestions = normalizeSuggestionsForRecoveryContext(Array.isArray(analysis.suggestions)
@@ -755,12 +739,10 @@ export function normalizeAIAnalysisForDisplay(
     locale
   );
 
-  return {
+  const normalizedAnalysis: AIAnalysis = {
     ...analysis,
     summary,
     executionSummary,
-    intensity: getFinalIntensity(analysis.intensity, classification),
-    recoveryHours: Math.max(analysis.recoveryHours || 0, classification.loadAdjustment?.minimumRecoveryHours ?? 0),
     trainingLoadContext: getTrainingLoadContext(
       normalizeForDisplay(analysis.trainingLoadContext || ''),
       classification,
@@ -778,6 +760,12 @@ export function normalizeAIAnalysisForDisplay(
         }
       : null,
   };
+
+  return validateAIAnalysisConsistency(normalizedAnalysis, {
+    classification,
+    locale,
+    streamAnalysis,
+  }).analysis;
 }
 
 function sanitizeJsonCandidate(candidate: string): string {
@@ -851,8 +839,6 @@ export function parseAIResponse(
   const jsonStr = extractAIJson(content);
   const result = JSON.parse(jsonStr);
 
-  const finalIntensity = getFinalIntensity(result.intensity, classification);
-
   // Override comparison fields with accurate program-generated text
   const { similarStats } = trainingProfile;
   const comparisonOverride = similarStats
@@ -913,14 +899,11 @@ export function parseAIResponse(
       }
     : null;
 
-  return {
+  const parsedAnalysis: AIAnalysis = {
     summary: normalizedSummary,
     executionSummary: normalizedExecutionSummary,
-    intensity: finalIntensity,
-    recoveryHours: Math.max(
-      result.recoveryHours || (classification.isRace ? 48 : 24),
-      classification.loadAdjustment?.minimumRecoveryHours ?? 0
-    ),
+    intensity: result.intensity,
+    recoveryHours: result.recoveryHours || (classification.isRace ? 48 : 24),
     comparisonToAverage: comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
     suggestions: normalizedSuggestions,
     generatedAt: Date.now(),
@@ -932,4 +915,9 @@ export function parseAIResponse(
     nextWorkoutSuggestion: normalizedNextWorkoutSuggestion,
     warnings: normalizedWarnings,
   };
+
+  return validateAIAnalysisConsistency(parsedAnalysis, {
+    classification,
+    locale,
+  }).analysis;
 }

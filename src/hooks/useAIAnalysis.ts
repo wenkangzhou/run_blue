@@ -225,7 +225,8 @@ export function useAIAnalysis(
         activity,
         payload.classification,
         i18n.language,
-        payload.trainingStats?.paceZones
+        payload.trainingStats?.paceZones,
+        payload.streamAnalysis
       ),
     };
   }, [activity, i18n.language]);

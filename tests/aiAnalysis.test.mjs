@@ -30,6 +30,7 @@ compileLibFile('src/lib/aiComparison.ts', 'aiComparison.js');
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
+compileLibFile('src/lib/aiConsistencyValidator.ts', 'aiConsistencyValidator.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
 
@@ -91,7 +92,7 @@ test.after(() => {
   Module._load = originalLoad;
 });
 
-const { parseAIResponse } = require(path.join(tempDir, 'aiResponseParser.js'));
+const { normalizeAIAnalysisForDisplay, parseAIResponse } = require(path.join(tempDir, 'aiResponseParser.js'));
 const { generateFallbackAnalysis } = require(path.join(tempDir, 'aiFallbackAnalysis.js'));
 
 function makeActivity(overrides = {}) {
@@ -804,6 +805,129 @@ test('generateFallbackAnalysis handles marathon race recovery conservatively', (
   assert.equal(result.recoveryHours, 168);
   assert.match(result.summary, /马拉松完成/);
   assert.ok(result.warnings.length > 0);
+});
+
+test('does not describe low-zone heart rate as stable when second-half drift is large', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '心率全程恢复区间且控制稳定，但后半程心率漂移+37bpm。',
+      executionSummary: '心率控制稳定。',
+      intensity: 'easy',
+      recoveryHours: 18,
+      suggestions: [],
+      warnings: [],
+      paceZoneAnalysis: null,
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '',
+    },
+    makeActivity({ average_heartrate: 121, max_heartrate: 146 }),
+    makeClassification({ workoutType: 'recovery', intensity: 'easy', paceZone: 'E' }),
+    'zh',
+    makeProfile().paceZones,
+    {
+      avgHRDrift: 37,
+      hasHRDrift: true,
+      pacePattern: 'steady',
+    }
+  );
+
+  assert.match(analysis.summary, /心率全程仍在恢复区间/);
+  assert.doesNotMatch(analysis.summary, /控制稳定/);
+  assert.match(analysis.executionSummary, /后半程心率上升 37 bpm/);
+});
+
+test('consistency gate aligns heat-adjusted load, recovery, and next workout advice', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '本次单次强度为轻松，恢复成本较低。',
+      executionSummary: '完成很好，无需恢复。',
+      intensity: 'easy',
+      recoveryHours: 18,
+      suggestions: ['明天安排间歇训练。'],
+      warnings: [],
+      paceZoneAnalysis: null,
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '下一次进行阈值跑。',
+    },
+    makeActivity({
+      average_heartrate: 150,
+      description: 'Temperature 30°C, Feels like 35°C, Humidity 80%',
+    }),
+    makeClassification({
+      workoutType: 'easy',
+      intensity: 'moderate',
+      paceZone: 'E',
+      loadAdjustment: {
+        applied: true,
+        baseIntensity: 'easy',
+        adjustedIntensity: 'moderate',
+        sessionEffortControlled: false,
+        cumulativeLoadConcern: 'watch',
+        thermalSeverity: 'heat-stress',
+        paceContext: 'upper-easy',
+        paceSecondsPerKm: 300,
+        easyFastBoundarySeconds: 310,
+        sameTemperaturePaceDeltaSeconds: null,
+        recentVolumeChangePercent: 12,
+        recentVolumeRatio: 1.12,
+        activityTrainingLoad: 68,
+        current7DayTrainingLoad: 180,
+        previous7DayTrainingLoad: 150,
+        averageWeeklyTrainingLoad: 145,
+        trainingLoadChangePercent: 20,
+        trainingLoadChangeReliable: true,
+        trainingLoadRatio: 1.24,
+        trainingLoadState: 'building',
+        trainingLoadHeartRateCoverage: 100,
+        activityTrainingLoadSharePercent: 38,
+        relativeEffort: 68,
+        consecutiveRunDays: 3,
+        minimumRecoveryHours: 36,
+      },
+    }),
+    'zh',
+    makeProfile().paceZones
+  );
+
+  assert.equal(analysis.intensity, 'moderate');
+  assert.equal(analysis.recoveryHours, 36);
+  assert.doesNotMatch(analysis.summary, /综合强度为轻松|恢复成本较低/);
+  assert.doesNotMatch(analysis.executionSummary, /无需恢复/);
+  assert.match(analysis.nextWorkoutSuggestion, /至少经过 36 小时/);
+  assert.deepEqual(analysis.suggestions, [
+    '下一次优先休息或极轻松活动；至少经过 36 小时并确认疲劳恢复后，再安排质量训练。',
+  ]);
+});
+
+test('consistency gate leaves heart-rate rise alone when workout structure explains it', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '渐进过程中心率控制稳定。',
+      executionSummary: '心率走势稳定。',
+      intensity: 'moderate',
+      recoveryHours: 24,
+      suggestions: [],
+      warnings: [],
+      paceZoneAnalysis: null,
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '',
+    },
+    makeActivity({ average_heartrate: 145 }),
+    makeClassification({ workoutType: 'progression', intensity: 'moderate' }),
+    'zh',
+    makeProfile().paceZones,
+    {
+      avgHRDrift: 12,
+      hasHRDrift: false,
+      pacePattern: 'progression',
+    }
+  );
+
+  assert.match(analysis.summary, /心率控制稳定/);
+  assert.match(analysis.executionSummary, /心率走势稳定/);
 });
 
 test('generateFallbackAnalysis uses training deficiencies for normal runs', () => {

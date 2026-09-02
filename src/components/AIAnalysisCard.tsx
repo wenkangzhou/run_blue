@@ -176,6 +176,24 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     const z2 = hrDist?.z2 ?? 0;
     const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
     const drift = streamAnalysis?.avgHRDrift ?? 0;
+    const hasMeaningfulHRDrift = Boolean(streamAnalysis?.hasHRDrift || drift >= 10);
+
+    if (hasMeaningfulHRDrift || hardShare >= 15) {
+      return {
+        level: 'caution' as const,
+        title: classification.workoutType === 'recovery'
+          ? t('aiAnalysis.recoveryQuality', '恢复质量')
+          : t('aiAnalysis.aerobicQuality', '有氧质量'),
+        status: t('aiAnalysis.executionCaution', '略偏顶'),
+        detail: hasMeaningfulHRDrift
+          ? t('aiAnalysis.executionDriftCautionHint', {
+              drift: Math.round(drift),
+              defaultValue: `后半程心率上升 ${Math.round(drift)} bpm；即使仍在低心率区间，恢复成本也已明显上升。`,
+            })
+          : t('aiAnalysis.executionCautionHint', '这次低强度训练的负荷略高，下一次更适合把重心放回轻松和恢复。'),
+        color: 'text-amber-600',
+      };
+    }
 
     if (z1 + z2 >= 95 && hardShare < 5) {
       return {
@@ -186,18 +204,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
         status: t('aiAnalysis.executionExcellent', '到位'),
         detail: t('aiAnalysis.executionExcellentHint', '心率分布和后程控制都很干净，说明这次低强度训练完成得很到位。'),
         color: 'text-emerald-600',
-      };
-    }
-
-    if (streamAnalysis?.hasHRDrift || hardShare >= 15 || drift >= 10) {
-      return {
-        level: 'caution' as const,
-        title: classification.workoutType === 'recovery'
-          ? t('aiAnalysis.recoveryQuality', '恢复质量')
-          : t('aiAnalysis.aerobicQuality', '有氧质量'),
-        status: t('aiAnalysis.executionCaution', '略偏顶'),
-        detail: t('aiAnalysis.executionCautionHint', '这次低强度训练的负荷略高，下一次更适合把重心放回轻松和恢复。'),
-        color: 'text-amber-600',
       };
     }
 
@@ -365,15 +371,15 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
       const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
       const drift = streamAnalysis?.avgHRDrift ?? 0;
 
-      if (z1 + z2 >= 95 && hardShare < 5) {
+      if ((streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) || drift >= 10 || hardShare >= 15) {
+        effect = 'fair';
+        effectLabel = '略偏顶';
+      } else if (z1 + z2 >= 95 && hardShare < 5) {
         effect = 'excellent';
         effectLabel = '执行到位';
       } else if (z1 + z2 >= 85) {
         effect = 'good';
         effectLabel = '控制良好';
-      } else if ((streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) || hardShare >= 15 || drift >= 10) {
-        effect = 'fair';
-        effectLabel = '略偏顶';
       } else {
         effect = 'poor';
         effectLabel = '可再放松';
