@@ -73,6 +73,15 @@ test('generates a periodized training plan with seven sessions per week', async 
   assert.equal(finalSession.type, 'race');
   assert.equal(finalSession.day, 6);
 
+  const trainingWeeks = plan.weeks.slice(0, -1);
+  assert.equal(trainingWeeks.every((week) => (
+    week.sessions.some((session) => session.type === 'long' && session.day === 5)
+  )), true);
+  assert.equal(trainingWeeks.every((week) => (
+    week.sessions.some((session) => session.day === 6 && ['recovery', 'rest'].includes(session.type))
+  )), true);
+  assert.equal(plan.weeks.every((week) => !/Sunday LSD|周日长距离/.test(week.notes)), true);
+
   const easyRun = plan.weeks[0].sessions.find((session) => session.type === 'easy');
   assert.match(easyRun.description, /153-160bpm/);
 
@@ -190,4 +199,35 @@ test('normalizes legacy oversized R and I sessions when plans are loaded', async
   assert.equal(restoredI.distance, 7);
   assert.equal(restoredI.workDistance, 4);
   assert.match(restoredI.description, /4×1000m/);
+});
+
+test('moves stored Sunday long runs to Saturday without moving race day', async () => {
+  const plan = await generateTrainingPlan('10k', 3000, 10, 1500, 30, '2026-11-08', 'zh', 175);
+  const firstWeek = plan.weeks[0];
+  const longRun = firstWeek.sessions.find((session) => session.type === 'long');
+  const sundayRecovery = firstWeek.sessions.find((session) => session.day === 6);
+  longRun.day = 6;
+  sundayRecovery.day = 5;
+  firstWeek.sessions.sort((left, right) => left.day - right.day);
+  firstWeek.notes = '建立期：周三强度课+周日长距离，重视高强度日之间的恢复。';
+  plan.executionOverrides = {
+    '1-6': {
+      matchMode: 'manual',
+      activityId: 123,
+      updatedAt: '2026-09-02T08:00:00.000Z',
+    },
+  };
+  installBrowserStorage({
+    local: { runblue_training_plans: JSON.stringify([plan]) },
+  });
+
+  const restored = await getStoredTrainingPlan(plan.id);
+  const restoredFirstWeek = restored.weeks[0];
+
+  assert.equal(restoredFirstWeek.sessions.find((session) => session.type === 'long').day, 5);
+  assert.equal(restoredFirstWeek.sessions.find((session) => session.day === 6).type, sundayRecovery.type);
+  assert.match(restoredFirstWeek.notes, /周六长距离/);
+  assert.equal(restored.executionOverrides['1-5'].activityId, 123);
+  assert.equal(restored.weeks.at(-1).sessions.at(-1).type, 'race');
+  assert.equal(restored.weeks.at(-1).sessions.at(-1).day, 6);
 });

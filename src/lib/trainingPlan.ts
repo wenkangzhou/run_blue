@@ -164,16 +164,63 @@ function normalizeStoredSession(session: TrainingSession): TrainingSession {
   return session;
 }
 
-function normalizeTrainingPlan(plan: TrainingPlan): TrainingPlan {
-  const weeks = plan.weeks.map((week) => {
-    const sessions = week.sessions.map(normalizeStoredSession);
+function migrateLegacyWeekendSchedule(week: WeeklyPlan): { week: WeeklyPlan; moved: boolean } {
+  const normalizedSessions = week.sessions.map(normalizeStoredSession);
+  const sundayLongRun = normalizedSessions.find((session) => session.day === 6 && session.type === 'long');
+  const saturdaySession = normalizedSessions.find((session) => session.day === 5);
+  if (!sundayLongRun || !saturdaySession) {
     return {
+      week: {
+        ...week,
+        sessions: normalizedSessions,
+        totalDistance: Math.round(normalizedSessions.reduce((sum, session) => sum + session.distance, 0) * 10) / 10,
+      },
+      moved: false,
+    };
+  }
+
+  const sessions = normalizedSessions
+    .map((session) => {
+      if (session === sundayLongRun) return { ...session, day: 5 };
+      if (session === saturdaySession) return { ...session, day: 6 };
+      return session;
+    })
+    .sort((left, right) => left.day - right.day);
+  const notes = week.notes
+    .replace(/Sunday LSD/g, 'Saturday LSD')
+    .replace(/Sunday long run/g, 'Saturday long run')
+    .replace(/周日长距离/g, '周六长距离');
+
+  return {
+    week: {
       ...week,
+      notes,
       sessions,
       totalDistance: Math.round(sessions.reduce((sum, session) => sum + session.distance, 0) * 10) / 10,
-    };
-  });
-  return { ...plan, weeks };
+    },
+    moved: true,
+  };
+}
+
+function normalizeTrainingPlan(plan: TrainingPlan): TrainingPlan {
+  const migratedWeeks = plan.weeks.map(migrateLegacyWeekendSchedule);
+  const movedWeekNumbers = new Set(
+    migratedWeeks.filter(({ moved }) => moved).map(({ week }) => week.week)
+  );
+  const executionOverrides = plan.executionOverrides
+    ? Object.fromEntries(Object.entries(plan.executionOverrides).map(([key, override]) => {
+        const match = key.match(/^(\d+)-(5|6)$/);
+        if (!match || !movedWeekNumbers.has(Number(match[1]))) return [key, override];
+        return [`${match[1]}-${match[2] === '5' ? '6' : '5'}`, override];
+      }))
+    : undefined;
+  const normalizedPlan = {
+    ...plan,
+    weeks: migratedWeeks.map(({ week }) => week),
+  };
+  return executionOverrides
+    ? { ...normalizedPlan, executionOverrides }
+    : normalizedPlan;
 }
 
 function readLegacyStoredPlans(): TrainingPlan[] {
@@ -949,12 +996,12 @@ function buildWeekNotes(
         : `基础期：以有氧积累为主，所有轻松跑保持对话配速。`;
     case 'build':
       return en
-        ? `Build phase. Wednesday quality + Sunday LSD. Respect recovery between hard days.`
-        : `建立期：周三强度课+周日长距离，重视高强度日之间的恢复。`;
+        ? `Build phase. Wednesday quality + Saturday LSD. Respect recovery between hard days.`
+        : `建立期：周三强度课+周六长距离，重视高强度日之间的恢复。`;
     case 'peak':
       return en
-        ? `Peak phase. Highest volume & intensity. Race-pace blocks in Sunday LSD.`
-        : `巅峰期：跑量和强度均达峰值，周日长距离加入比赛配速段落。`;
+        ? `Peak phase. Highest volume & intensity. Race-pace blocks in Saturday LSD.`
+        : `巅峰期：跑量和强度均达峰值，周六长距离加入比赛配速段落。`;
     case 'taper':
       if (w === weeks) {
         const taperTips = en
@@ -1165,18 +1212,20 @@ export function generateFallbackTrainingPlan(
       ? buildRecoveryRun(4, zones, hrZones, en, friMin)
       : buildEasyRun(4, friMin, zones, hrZones, en));
 
-    // Sat: recovery buffer before Sunday long run.
-    if (actualPhase === 'recovery' || (phase === 'taper' && w >= weeks - 1)) {
-      sessions.push(buildRestDay(5, en));
-    } else {
-      sessions.push(buildRecoveryRun(5, zones, hrZones, en, 40));
-    }
-
-    // Sun: LSD or Race
+    // Race week keeps Sunday anchored to the race date.
     if (w === weeks) {
+      sessions.push(buildRestDay(5, en));
       sessions.push(buildRaceDay(6, distance, targetTimeSeconds, mPace, en));
     } else {
-      sessions.push(buildLSD(6, phase, w, weeks, distance, targetVol, zones, hrZones, mPace, en));
+      // Sat: long run, matching the athlete's usual weekend rhythm.
+      sessions.push(buildLSD(5, phase, w, weeks, distance, targetVol, zones, hrZones, mPace, en));
+
+      // Sun: recovery buffer after the long run.
+      if (actualPhase === 'recovery' || (phase === 'taper' && w >= weeks - 1)) {
+        sessions.push(buildRestDay(6, en));
+      } else {
+        sessions.push(buildRecoveryRun(6, zones, hrZones, en, 40));
+      }
     }
 
     const totalDistance = sessions.reduce((sum, s) => sum + s.distance, 0);
