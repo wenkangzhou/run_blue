@@ -128,6 +128,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     loading,
     retrying,
     error,
+    retryError,
     isQuotaError,
     isAuthError,
     fallbackReason,
@@ -571,7 +572,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
               </button>
             </div>
           </div>
-        ) : loading ? (
+        ) : loading && !analysis ? (
           <div className="space-y-3">
             <div className="h-20 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
             <div className="grid grid-cols-2 gap-2">
@@ -582,7 +583,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
               {retrying ? t('aiAnalysis.retrying', '正在重新连接 Kimi...') : t('aiAnalysis.analyzing')}
             </p>
           </div>
-        ) : error ? (
+        ) : error && !analysis ? (
           <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-4 text-center dark:border-zinc-800 dark:bg-zinc-950/40">
             <p className={`mx-auto mb-2 max-w-full break-words font-mono text-xs ${isQuotaError || isAuthError ? 'text-amber-600' : 'text-red-500'}`}>
               {isAuthError
@@ -595,6 +596,23 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
           </div>
         ) : analysis ? (
           <div className="space-y-3">
+            {retryError && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="flex-1 font-mono text-[10px] leading-5 text-amber-700 dark:text-amber-300">
+                  {t('aiAnalysis.retryFailedKeptPrevious', '重新分析失败，已保留上一次可用结果。')}
+                  <span className="ml-1 opacity-75">{retryError}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => refreshAnalysis({ force: true })}
+                  disabled={loading}
+                  className="shrink-0 font-mono text-[10px] font-bold text-blue-600 hover:underline disabled:opacity-50"
+                >
+                  {t('common.retry')}
+                </button>
+              </div>
+            )}
             {analysis.isFallback && (
               <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
                 <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />

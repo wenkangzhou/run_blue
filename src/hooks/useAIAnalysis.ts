@@ -16,6 +16,7 @@ import {
   setAIDataConsent,
   type AIDataConsent,
 } from '@/lib/aiConsent';
+import { shouldPreserveAnalysisAfterRetry } from '@/lib/aiAnalysisRefresh';
 
 interface AITrainingStats {
   totalRunsAnalyzed: number;
@@ -195,11 +196,17 @@ export function useAIAnalysis(
   );
 
   const [viewState, setViewState] = useState<AIAnalysisViewState>(EMPTY_AI_ANALYSIS_STATE);
+  const viewStateRef = useRef(viewState);
   const analysisGenerationRef = useRef(0);
   const loadedInputKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
+  const [retryError, setRetryError] = useState('');
+
+  useEffect(() => {
+    viewStateRef.current = viewState;
+  }, [viewState]);
 
   const {
     analysis,
@@ -258,10 +265,18 @@ export function useAIAnalysis(
     }
 
     const requestGeneration = ++analysisGenerationRef.current;
+    const previousSettledState = force
+      && viewStateRef.current.inputKey === cacheKey
+      && viewStateRef.current.analysis
+      ? viewStateRef.current
+      : null;
     setLoading(true);
     setRetrying(force);
     setError('');
-    setViewState(EMPTY_AI_ANALYSIS_STATE);
+    setRetryError('');
+    if (!previousSettledState) {
+      setViewState(EMPTY_AI_ANALYSIS_STATE);
+    }
 
     const profile = getUserProfile();
     const userProfilePBs = getMergedPBsForAnalysis(profile, null);
@@ -269,9 +284,7 @@ export function useAIAnalysis(
 
     let request: Promise<AIAnalyzeResponse> | undefined;
     try {
-      if (force) {
-        await clearCachedAIAnalysis(cacheKey);
-      } else {
+      if (!force) {
         request = aiAnalysisRequestsInFlight.get(cacheKey);
       }
       if (!request) {
@@ -308,6 +321,16 @@ export function useAIAnalysis(
 
       const data = await request;
       if (analysisGenerationRef.current !== requestGeneration) return;
+      if (shouldPreserveAnalysisAfterRetry({
+        force,
+        hasPreviousAnalysis: Boolean(previousSettledState?.analysis),
+        consentStatus,
+        analysisSource: data.analysisSource,
+        analysisError: data.analysisError,
+      })) {
+        setRetryError(data.analysisError || t('errors.aiAnalysisFailed', 'AI analysis failed'));
+        return;
+      }
       applyAnalysisPayload({
         analysis: data.analysis,
         streamAnalysis: data.streamAnalysis,
@@ -334,7 +357,12 @@ export function useAIAnalysis(
         : err instanceof Error
           ? err.message
           : '';
-      setError(message || t('errors.aiAnalysisFailed', 'AI analysis failed'));
+      const failureMessage = message || t('errors.aiAnalysisFailed', 'AI analysis failed');
+      if (previousSettledState?.analysis) {
+        setRetryError(failureMessage);
+      } else {
+        setError(failureMessage);
+      }
     } finally {
       if (request && aiAnalysisRequestsInFlight.get(cacheKey) === request) {
         aiAnalysisRequestsInFlight.delete(cacheKey);
@@ -357,6 +385,7 @@ export function useAIAnalysis(
         analysisGenerationRef.current += 1;
       }
       setError('');
+      setRetryError('');
       setRetrying(false);
       setViewState((current) => current.inputKey === cacheKey ? current : EMPTY_AI_ANALYSIS_STATE);
 
@@ -413,6 +442,7 @@ export function useAIAnalysis(
     setConsentStatus('accepted');
     setViewState(EMPTY_AI_ANALYSIS_STATE);
     setError('');
+    setRetryError('');
   }, []);
 
   const declineAIConsent = useCallback(() => {
@@ -421,6 +451,7 @@ export function useAIAnalysis(
     setConsentStatus('declined');
     setViewState(EMPTY_AI_ANALYSIS_STATE);
     setError('');
+    setRetryError('');
   }, []);
 
   const errorMessage = typeof error === 'string' ? error : '';
@@ -443,6 +474,7 @@ export function useAIAnalysis(
     loading: loading || isSettling,
     retrying,
     error: errorMessage,
+    retryError,
     isQuotaError,
     isAuthError,
     analysisSource,
