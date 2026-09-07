@@ -148,9 +148,13 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     : null;
   const isRace = classification?.isRace;
   const hasAdjustedInternalLoad = classification?.loadAdjustment?.applied === true;
+  const hasThermalLoad = classification?.loadAdjustment?.thermalSeverity === 'heat-load'
+    || classification?.loadAdjustment?.thermalSeverity === 'heat-stress';
   const workoutTypeLabel = classification
     ? hasAdjustedInternalLoad
-      ? t('aiAnalysis.heatLoadRun', '高温负荷有氧跑')
+      ? hasThermalLoad
+        ? t('aiAnalysis.heatLoadRun', '高温负荷有氧跑')
+        : t('aiAnalysis.loadAdjustedRun', '较高负荷有氧跑')
       : getWorkoutTypeLabel(classification.workoutType, i18n.language)
     : '';
   const confidenceLabel = classification

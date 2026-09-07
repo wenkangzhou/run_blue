@@ -21,7 +21,10 @@ import {
   isGuestUser,
   saveGuestTrainingPlan,
 } from '@/lib/guestMode';
-import { calculateTrainingPlanExecution } from '@/lib/trainingPlanExecution';
+import {
+  calculateTrainingPlanExecution,
+  getNextTrainingPlanSession,
+} from '@/lib/trainingPlanExecution';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 import { AppBackButton } from '@/components/AppBackButton';
 import {
@@ -121,15 +124,8 @@ export default function TrainingPlansListPage() {
     [plans, sourceActivities]
   );
   const nextPlanSession = React.useMemo(
-    () => plans
-      .flatMap((plan) => {
-        const execution = planExecutions.get(plan.id);
-        return execution?.sessions
-          .filter((session) => session.status === 'upcoming' && session.session.type !== 'rest')
-          .map((session) => ({ plan, execution, session })) ?? [];
-      })
-      .sort((left, right) => left.session.date.getTime() - right.session.date.getTime())[0],
-    [planExecutions, plans]
+    () => getNextTrainingPlanSession(plans, sourceActivities),
+    [plans, sourceActivities]
   );
 
   useEffect(() => {
@@ -440,7 +436,7 @@ export default function TrainingPlansListPage() {
               const daysToRace = getPlanDaysToRace(plan);
               const phasePreview = getPlanPhasePreview(plan);
               const execution = planExecutions.get(plan.id);
-              const nextSession = execution?.sessions.find((session) => session.status === 'upcoming');
+              const nextSession = getNextTrainingPlanSession([plan], sourceActivities)?.session;
 
               return (
                 <article

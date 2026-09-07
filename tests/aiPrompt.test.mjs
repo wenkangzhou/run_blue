@@ -597,7 +597,9 @@ test('buildProfessionalPrompt separates current heat cost from cumulative recove
         trainingLoadState: 'high',
         trainingLoadHeartRateCoverage: 100,
         activityTrainingLoadSharePercent: 18,
+        activityTrainingLoadPerHour: 45,
         relativeEffort: 42,
+        averageHeartRatePercentMax: 92,
         consecutiveRunDays: 9,
         minimumRecoveryHours: 36,
       },
@@ -605,7 +607,7 @@ test('buildProfessionalPrompt separates current heat cost from cumulative recove
     'zh'
   );
 
-  assert.match(prompt, /本次热环境强度校正/);
+  assert.match(prompt, /本次单次强度校正/);
   assert.match(prompt, /滚动训练负荷（与统计页同口径）/);
   assert.match(prompt, /本次活动: 40 负荷点（占近 7 天负荷的 18%）/);
   assert.match(prompt, /近 7 天: 223 点；上一个 7 天: 56 点；前 3 周均值: 162 点/);
@@ -615,9 +617,11 @@ test('buildProfessionalPrompt separates current heat cost from cumulative recove
   assert.match(prompt, /截至本次已连续跑步 9 天/);
   assert.match(prompt, /本次 Relative Effort: 42/);
   assert.match(prompt, /本次均配: 5'20"\/km；个人配速位置: E 区较快一侧/);
+  assert.match(prompt, /平均心率达到档案最大心率的 92%/);
+  assert.match(prompt, /本次训练负荷密度: 45 点\/小时/);
   assert.match(prompt, /本次强度与累计恢复状态是两个不同结论/);
-  assert.match(prompt, /这项校正来自本次数据本身，不来自滚动负荷/);
-  assert.match(prompt, /单次强度校正为至少“适中”/);
+  assert.match(prompt, /这项校正来自本次训练本身，不来自滚动负荷/);
+  assert.match(prompt, /把强度校正为至少“适中”/);
   assert.match(prompt, /建议恢复不得少于 36h/);
   assert.doesNotMatch(prompt, /\+298%/);
 });

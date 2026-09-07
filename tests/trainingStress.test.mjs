@@ -222,3 +222,81 @@ test('keeps a controlled hot recovery run easy while raising cumulative recovery
   assert.equal(adjusted.loadAdjustment.relativeEffort, 21);
   assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 24);
 });
+
+test('uses average heart rate to prevent a high-cardiac-cost run from staying easy', () => {
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(344, {
+      distance: 12020,
+      moving_time: 4138,
+      elapsed_time: 4138,
+      average_heartrate: 155,
+      max_heartrate: 176,
+      weather_context: {
+        temperatureC: 20,
+        feelsLikeC: 20,
+        humidityPercent: 55,
+        sources: ['strava'],
+        source: 'strava',
+        hasWeather: true,
+        thermalSeverity: 'neutral',
+      },
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    {
+      ...makeTrainingLoadContext({ state: 'balanced', loadRatio: 1, consecutiveRunDays: 1 }),
+      maxHeartRate: 182,
+    }
+  );
+
+  assert.equal(adjusted.intensity, 'moderate');
+  assert.equal(adjusted.loadAdjustment.applied, true);
+  assert.equal(adjusted.loadAdjustment.averageHeartRatePercentMax, 85);
+  assert.equal(adjusted.loadAdjustment.sessionEffortControlled, false);
+  assert.ok(adjusted.workoutTypeEvidence.includes('average heart rate raises current-session effort'));
+});
+
+test('uses per-hour activity load when max heart rate is unavailable', () => {
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(344, {
+      distance: 12020,
+      moving_time: 4138,
+      elapsed_time: 4138,
+      average_heartrate: 155,
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    {
+      ...makeTrainingLoadContext({ state: 'balanced', loadRatio: 1, consecutiveRunDays: 1 }),
+      activityLoad: 54,
+    }
+  );
+
+  assert.equal(adjusted.intensity, 'moderate');
+  assert.equal(adjusted.loadAdjustment.applied, true);
+  assert.equal(adjusted.loadAdjustment.averageHeartRatePercentMax, null);
+  assert.equal(adjusted.loadAdjustment.activityTrainingLoadPerHour, 47);
+  assert.equal(adjusted.loadAdjustment.sessionEffortControlled, false);
+  assert.ok(adjusted.workoutTypeEvidence.includes('activity load density raises current-session effort'));
+});
+
+test('does not turn high total load from a long easy duration into high intensity', () => {
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(400, {
+      distance: 18000,
+      moving_time: 7200,
+      elapsed_time: 7200,
+      average_heartrate: 130,
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    {
+      ...makeTrainingLoadContext({ state: 'balanced', loadRatio: 1, consecutiveRunDays: 1 }),
+      activityLoad: 60,
+    }
+  );
+
+  assert.equal(adjusted.intensity, 'easy');
+  assert.equal(adjusted.loadAdjustment.applied, false);
+  assert.equal(adjusted.loadAdjustment.activityTrainingLoadPerHour, 30);
+});

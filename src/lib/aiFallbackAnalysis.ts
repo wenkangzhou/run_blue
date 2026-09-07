@@ -165,10 +165,14 @@ export function generateFallbackAnalysis(
   // Normal training fallback
   const adjustment = classification.loadAdjustment;
   const cumulativeRecoveryHigh = adjustment?.cumulativeLoadConcern === 'high';
-  const isLowIntensity = classification.workoutType === 'easy' || classification.workoutType === 'recovery';
+  const isLowIntensity = classification.intensity === 'easy'
+    && (classification.workoutType === 'easy' || classification.workoutType === 'recovery');
   const suggestions: string[] = [];
   const workoutTypeLabel = classification.loadAdjustment?.applied
-    ? (en ? 'heat-load aerobic run' : '高温负荷有氧跑')
+    ? classification.loadAdjustment.thermalSeverity === 'heat-load'
+      || classification.loadAdjustment.thermalSeverity === 'heat-stress'
+      ? (en ? 'heat-load aerobic run' : '高温负荷有氧跑')
+      : (en ? 'elevated-load aerobic run' : '较高负荷有氧跑')
     : getWorkoutTypeLabel(classification.workoutType, locale);
   if (cumulativeRecoveryHigh) {
     suggestions.push(en
@@ -237,9 +241,13 @@ export function generateFallbackAnalysis(
         : ` 本次单次努力保持受控${activity.average_heartrate ? `，平均心率 ${Math.round(activity.average_heartrate)} bpm` : ''}${adjustment.relativeEffort !== null ? `，Relative Effort ${adjustment.relativeEffort}` : ''}。`)
     : '';
   const cumulativeRecoveryFact = cumulativeRecoveryHigh
-    ? (en
-        ? ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `This was running day ${adjustment.consecutiveRunDays} in a row; ` : ''}rolling load is elevated, so cumulative recovery deserves attention even though this session was controlled.`
-        : ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `这是连续第 ${adjustment.consecutiveRunDays} 天跑步；` : ''}近期累计负荷偏高，因此需要关注累计恢复，但不改变本次执行受控的结论。`)
+    ? adjustment?.sessionEffortControlled
+      ? (en
+          ? ` ${adjustment.consecutiveRunDays > 1 ? `This was running day ${adjustment.consecutiveRunDays} in a row; ` : ''}rolling load is elevated, so cumulative recovery deserves attention even though this session was controlled.`
+          : ` ${adjustment.consecutiveRunDays > 1 ? `这是连续第 ${adjustment.consecutiveRunDays} 天跑步；` : ''}近期累计负荷偏高，因此需要关注累计恢复，但不改变本次执行受控的结论。`)
+      : (en
+          ? ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `This was running day ${adjustment.consecutiveRunDays} in a row; ` : ''}rolling load is elevated and adds to this session's recovery cost.`
+          : ` ${adjustment?.consecutiveRunDays && adjustment.consecutiveRunDays > 1 ? `这是连续第 ${adjustment.consecutiveRunDays} 天跑步；` : ''}近期累计负荷偏高，进一步增加了本次训练的恢复成本。`)
     : '';
   const distanceKm = (activity.distance / 1000).toFixed(1);
   const relativeEffort = adjustment?.relativeEffort;

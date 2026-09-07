@@ -120,23 +120,49 @@ export function adjustClassificationForTrainingStress(
   const relativeEffort = typeof activity.suffer_score === 'number' && Number.isFinite(activity.suffer_score)
     ? Math.round(activity.suffer_score)
     : null;
+  const activityTrainingLoadPerHour = trainingLoadContext && activity.moving_time > 0
+    ? trainingLoadContext.activityLoad / (activity.moving_time / 3600)
+    : null;
   const heartRateRatio = trainingLoadContext?.maxHeartRate
     && activity.average_heartrate
     && activity.average_heartrate > 0
       ? activity.average_heartrate / trainingLoadContext.maxHeartRate
       : null;
-  const hasControlledEffortSignal = (heartRateRatio !== null && heartRateRatio <= 0.81)
+  const heartRateIntensityFloor: ActivityClassification['intensity'] | null = heartRateRatio !== null
+    ? heartRateRatio > 0.89
+      ? 'hard'
+      : heartRateRatio > 0.81
+        ? 'moderate'
+        : null
+    : null;
+  const hasDirectControlledEffortSignal = (heartRateRatio !== null && heartRateRatio <= 0.81)
     || (relativeEffort !== null && relativeEffort <= 35);
+  const loadDensityIntensityFloor: ActivityClassification['intensity'] | null = activityTrainingLoadPerHour !== null
+    && !hasDirectControlledEffortSignal
+    ? activityTrainingLoadPerHour >= 60
+      ? 'hard'
+      : activityTrainingLoadPerHour >= 42
+        ? 'moderate'
+        : null
+    : null;
+  const currentSessionIntensityFloor = heartRateIntensityFloor && loadDensityIntensityFloor
+    ? maxIntensity(heartRateIntensityFloor, loadDensityIntensityFloor)
+    : heartRateIntensityFloor ?? loadDensityIntensityFloor;
+  const hasControlledEffortSignal = hasDirectControlledEffortSignal
+    || (activityTrainingLoadPerHour !== null && activityTrainingLoadPerHour < 42);
   const sessionEffortControlled = classification.intensity === 'easy'
     && paceContext === 'relaxed-easy'
+    && currentSessionIntensityFloor === null
     && (hasControlledEffortSignal || (heartRateRatio === null && relativeEffort === null));
 
   let adjustedIntensity = classification.intensity;
-  if (weather.thermalSeverity === 'heat-stress') {
-    if (pacePressure) {
-      adjustedIntensity = maxIntensity(adjustedIntensity, 'moderate');
-    }
-  } else if (weather.thermalSeverity === 'heat-load' && pacePressure && !sessionEffortControlled) {
+  if (currentSessionIntensityFloor) {
+    adjustedIntensity = maxIntensity(adjustedIntensity, currentSessionIntensityFloor);
+  }
+  const thermalPacePressure = weather.thermalSeverity === 'heat-stress'
+    ? pacePressure
+    : weather.thermalSeverity === 'heat-load' && pacePressure && !sessionEffortControlled;
+  if (thermalPacePressure) {
     adjustedIntensity = maxIntensity(adjustedIntensity, 'moderate');
   }
 
@@ -185,7 +211,11 @@ export function adjustClassificationForTrainingStress(
     activityTrainingLoadSharePercent: trainingLoadContext && trainingLoad?.current7DayLoad
       ? round((trainingLoadContext.activityLoad / trainingLoad.current7DayLoad) * 100, 0)
       : null,
+    activityTrainingLoadPerHour: activityTrainingLoadPerHour === null
+      ? null
+      : round(activityTrainingLoadPerHour, 1),
     relativeEffort,
+    averageHeartRatePercentMax: heartRateRatio === null ? null : round(heartRateRatio * 100, 0),
     consecutiveRunDays,
     minimumRecoveryHours,
   };
@@ -194,7 +224,12 @@ export function adjustClassificationForTrainingStress(
     ...classification,
     intensity: adjustedIntensity,
     workoutTypeEvidence: applied
-      ? [...classification.workoutTypeEvidence, 'heat and pace raise current-session effort']
+      ? [
+          ...classification.workoutTypeEvidence,
+          ...(heartRateIntensityFloor ? ['average heart rate raises current-session effort'] : []),
+          ...(loadDensityIntensityFloor ? ['activity load density raises current-session effort'] : []),
+          ...(thermalPacePressure ? ['heat and pace raise current-session effort'] : []),
+        ]
       : classification.workoutTypeEvidence,
     loadAdjustment,
   };

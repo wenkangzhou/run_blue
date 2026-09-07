@@ -456,7 +456,7 @@ export function buildProfessionalPrompt(
     const adjustedIntensityLabel = en
       ? loadAdjustment.adjustedIntensity
       : ({ easy: '轻松', moderate: '适中', hard: '高强度', extreme: '极限' } as const)[loadAdjustment.adjustedIntensity];
-    prompt += en ? `\n\n## Current-session Heat Adjustment` : `\n\n## 本次热环境强度校正`;
+    prompt += en ? `\n\n## Current-session Intensity Adjustment` : `\n\n## 本次单次强度校正`;
     prompt += en
       ? `\n- External pace-zone label: ${classification.paceZone}; adjusted internal intensity: ${adjustedIntensityLabel}`
       : `\n- 外部配速区间仍为 ${classification.paceZone}，但综合内部强度已校正为：${adjustedIntensityLabel}`;
@@ -465,9 +465,19 @@ export function buildProfessionalPrompt(
         ? `\n- Current pace: ${formatPace(loadAdjustment.paceSecondsPerKm)}/km; pace context: ${loadAdjustment.paceContext}`
         : `\n- 本次均配: ${formatPace(loadAdjustment.paceSecondsPerKm)}/km；个人配速位置: ${loadAdjustment.paceContext === 'upper-easy' ? 'E 区较快一侧' : loadAdjustment.paceContext === 'quality' ? '质量训练区间' : 'E 区放松侧'}`;
     }
+    if (typeof loadAdjustment.averageHeartRatePercentMax === 'number') {
+      prompt += en
+        ? `\n- Average HR was ${loadAdjustment.averageHeartRatePercentMax}% of profile max HR`
+        : `\n- 平均心率达到档案最大心率的 ${loadAdjustment.averageHeartRatePercentMax}%`;
+    }
+    if (typeof loadAdjustment.activityTrainingLoadPerHour === 'number') {
+      prompt += en
+        ? `\n- Current-session load density: ${loadAdjustment.activityTrainingLoadPerHour} points/hour`
+        : `\n- 本次训练负荷密度: ${loadAdjustment.activityTrainingLoadPerHour} 点/小时`;
+    }
     prompt += en
-      ? `\n- HARD RULE: Current-session heat plus pace/effort evidence raises this session to at least ${adjustedIntensityLabel}. This correction is based on the session itself, not on rolling load. Recovery must be at least ${loadAdjustment.minimumRecoveryHours}h.`
-      : `\n- 硬性规则：本次热环境与配速/努力证据共同把单次强度校正为至少“${adjustedIntensityLabel}”。这项校正来自本次数据本身，不来自滚动负荷；建议恢复不得少于 ${loadAdjustment.minimumRecoveryHours}h。`;
+      ? `\n- HARD RULE: Current-session heart-rate, heat, and pace evidence raises this session to at least ${adjustedIntensityLabel}. This correction is based on the session itself, not on rolling load. Recovery must be at least ${loadAdjustment.minimumRecoveryHours}h.`
+      : `\n- 硬性规则：本次心率、热环境与配速等单次证据把强度校正为至少“${adjustedIntensityLabel}”。这项校正来自本次训练本身，不来自滚动负荷；建议恢复不得少于 ${loadAdjustment.minimumRecoveryHours}h。`;
   }
 
   // Athlete physique info

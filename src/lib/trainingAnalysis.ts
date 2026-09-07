@@ -88,7 +88,9 @@ export interface ActivityLoadAdjustment {
   trainingLoadState: 'insufficient' | 'recover' | 'balanced' | 'building' | 'high' | null;
   trainingLoadHeartRateCoverage: number | null;
   activityTrainingLoadSharePercent: number | null;
+  activityTrainingLoadPerHour: number | null;
   relativeEffort: number | null;
+  averageHeartRatePercentMax: number | null;
   consecutiveRunDays: number;
   minimumRecoveryHours: number;
 }

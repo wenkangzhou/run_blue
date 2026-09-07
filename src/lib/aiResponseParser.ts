@@ -128,21 +128,36 @@ function getLoadAdjustedSummary(
     : adjustment.paceContext === 'quality' && pace
       ? (en ? `${pace} is already a quality-zone pace` : `${pace}已进入质量训练配速`)
       : pace;
-  const facts = [paceFact, weatherFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
+  const heartRateFact = typeof adjustment.averageHeartRatePercentMax !== 'number'
+    ? ''
+    : en
+      ? `average HR reached ${adjustment.averageHeartRatePercentMax}% of profile max HR`
+      : `平均心率达到档案最大心率的 ${adjustment.averageHeartRatePercentMax}%`;
+  const loadDensityFact = typeof adjustment.activityTrainingLoadPerHour !== 'number'
+    ? ''
+    : en
+      ? `load density reached ${adjustment.activityTrainingLoadPerHour} points/hour`
+      : `训练负荷密度达到 ${adjustment.activityTrainingLoadPerHour} 点/小时`;
+  const facts = [paceFact, heartRateFact, loadDensityFact, weatherFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
   const lead = en
     ? `${facts || 'The current-session evidence'} makes this session ${intensityLabel}; allow at least ${adjustment.minimumRecoveryHours}h recovery. Rolling load is a separate recovery-context conclusion.`
     : `${facts || '本次数据'}使本次单次强度应按${intensityLabel}解读；建议至少 ${adjustment.minimumRecoveryHours}h 恢复。滚动负荷只作为另一层累计恢复背景。`;
 
   let cleaned = summary;
+  const hasThermalLoad = adjustment.thermalSeverity === 'heat-load'
+    || adjustment.thermalSeverity === 'heat-stress';
+  const adjustedRunLabel = en
+    ? (hasThermalLoad ? 'heat-load aerobic run' : 'elevated-load aerobic run')
+    : (hasThermalLoad ? '高温负荷有氧跑' : '较高负荷有氧跑');
   if (en) {
     cleaned = cleaned
-      .replace(/\b(?:this (?:was|is) an?\s+)?(?:easy|recovery) run\b/gi, 'this heat-load aerobic run')
+      .replace(/\b(?:this (?:was|is) an?\s+)?(?:easy|recovery) run\b/gi, `this ${adjustedRunLabel}`)
       .replace(/\b(?:easy|light) intensity\b/gi, `${intensityLabel} intensity`)
       .replace(/(?:allow|recommend)\s+(?:about\s+)?\d+\s*h(?:ours?)?\s+(?:of\s+)?recovery/gi, `allow at least ${adjustment.minimumRecoveryHours}h recovery`);
   } else {
     cleaned = cleaned
-      .replace(/本次(?:训练)?(?:为|是|属于|识别为|判定为)\s*(?:一次)?(?:恢复跑|轻松跑)/g, '本次为高温负荷有氧跑')
-      .replace(/这是\s*(?:一次)?(?:恢复跑|轻松跑)/g, '这是一次高温负荷有氧跑')
+      .replace(/本次(?:训练)?(?:为|是|属于|识别为|判定为)\s*(?:一次)?(?:恢复跑|轻松跑)/g, `本次为${adjustedRunLabel}`)
+      .replace(/这是\s*(?:一次)?(?:恢复跑|轻松跑)/g, `这是一次${adjustedRunLabel}`)
       .replace(/(?:综合)?强度(?:为|是|判断为)?\s*轻松/g, `综合强度为${intensityLabel}`)
       .replace(/建议恢复(?:约)?\s*\d+\s*(?:h|小时)/g, `建议至少 ${adjustment.minimumRecoveryHours}h 恢复`)
       .replace(/恢复(?:约)?\s*\d+\s*(?:h|小时)/g, `至少 ${adjustment.minimumRecoveryHours}h 恢复`);
