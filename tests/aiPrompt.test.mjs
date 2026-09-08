@@ -527,6 +527,7 @@ test('buildProfessionalPrompt promotes a standout continuous 5K block even witho
   assert.match(prompt, /本次核心连续质量段/);
   assert.match(prompt, /第3-7公里: 连续 5 km，移动用时 20:25，平均配速 4'05"\/km/);
   assert.match(prompt, /比全程平均配速快 5[34] 秒\/公里/);
+  assert.match(prompt, /100% 的距离本身达到 M 区或更快/);
   assert.match(prompt, /官方最佳区间用时为 21:20/);
   assert.match(prompt, /即使它不是 PB/);
   assert.match(prompt, /明显热应激下，应明确提高对表现含金量的评价/);
@@ -558,6 +559,33 @@ test('buildProfessionalPrompt does not promote a relatively faster 3K that remai
   assert.doesNotMatch(prompt, /第6-8公里: 连续 3 km/);
   assert.match(prompt, /个人 M 区慢端（5'10"\/km）/);
   assert.match(prompt, /轻松区间内的普通提速硬造成本次亮点/);
+});
+
+test('buildProfessionalPrompt does not promote a block whose average is pulled up by isolated surges', () => {
+  const splitPaces = [420, 330, 330, 330, 250, 250, 420, 420];
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      distance: 8000,
+      moving_time: splitPaces.reduce((sum, pace) => sum + pace, 0),
+      splits_metric: splitPaces.map((movingTime, index) => ({
+        split: index + 1,
+        distance: 1000,
+        moving_time: movingTime,
+        elapsed_time: movingTime,
+        average_speed: 1000 / movingTime,
+        elevation_difference: 0,
+      })),
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'easy', paceZone: 'E', intensity: 'easy' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(prompt, /## 本次核心连续质量段/);
+  assert.doesNotMatch(prompt, /第2-6公里: 连续 5 km/);
+  assert.match(prompt, /至少 80% 的区间距离也必须各自达到该门槛/);
+  assert.match(prompt, /被个别短促加速拉快的平均值/);
 });
 
 test('buildProfessionalPrompt separates current heat cost from cumulative recovery', () => {

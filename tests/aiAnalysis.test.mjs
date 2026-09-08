@@ -690,6 +690,39 @@ test('parseAIResponse removes an easy-zone 3K falsely promoted as the main quali
   assert.match(result.summary, /这次主要看低负荷完成度/);
 });
 
+test('parseAIResponse removes a quality claim produced by isolated fast splits', () => {
+  const splitPaces = [420, 330, 330, 330, 250, 250, 420, 420];
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '本次最值得肯定的是第2-6公里连续5公里以4\'58"/km完成，比全程均配更快，是本次训练的核心质量成果。整体训练负荷受控。',
+      intensity: 'easy',
+      recoveryHours: 18,
+      suggestions: ['下一次继续轻松跑。'],
+    }),
+    makeActivity({
+      distance: 8000,
+      moving_time: splitPaces.reduce((sum, pace) => sum + pace, 0),
+      average_heartrate: 135,
+      splits_metric: splitPaces.map((movingTime, index) => ({
+        split: index + 1,
+        distance: 1000,
+        moving_time: movingTime,
+        elapsed_time: movingTime,
+        average_speed: 1000 / movingTime,
+        elevation_difference: 0,
+      })),
+    }),
+    makeProfile(),
+    makeClassification({ workoutType: 'easy', paceZone: 'E', intensity: 'easy' }),
+    'zh'
+  );
+
+  assert.doesNotMatch(result.summary, /最值得肯定|核心质量成果|速度耐力/);
+  assert.match(result.summary, /整体有氧完成与强度控制/);
+  assert.match(result.summary, /虽有更快配速，但持续覆盖不足，不能作为核心连续质量段/);
+  assert.match(result.summary, /整体训练负荷受控/);
+});
+
 test('parseAIResponse preserves controlled hot recovery effort while making cumulative recovery conservative', () => {
   const result = parseAIResponse(
     JSON.stringify({

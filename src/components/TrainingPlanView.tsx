@@ -12,6 +12,7 @@ import type {
 import type { StravaActivity } from '@/types';
 import {
   calculateTrainingPlanExecution,
+  getNextTrainingPlanSession,
   getNextWeekAdjustment,
   type SessionExecution,
 } from '@/lib/trainingPlanExecution';
@@ -272,13 +273,11 @@ export function TrainingPlanView({
   );
   const [editingSession, setEditingSession] = React.useState<SessionExecution | null>(null);
   const [linkedSessionKey, setLinkedSessionKey] = React.useState<string | null>(null);
-  const currentWeekPendingSession = execution.sessions.find((session) => (
-    session.session.type !== 'rest'
-    && session.status === 'upcoming'
-    && session.week === execution.currentWeek
-  ));
-  const nextSession = execution.sessions.find((session) => session.status === 'upcoming');
-  const focusSession = currentWeekPendingSession ?? nextSession;
+  const nextSession = React.useMemo(
+    () => getNextTrainingPlanSession([plan], activities)?.session,
+    [activities, plan]
+  );
+  const focusSession = nextSession;
   const timing = getPlanTiming(plan);
   const currentWeek = execution.currentWeek ?? timing.currentWeek;
   const daysToRace = timing.daysToRace;

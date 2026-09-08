@@ -522,15 +522,7 @@ export function getActivityTrainingPlanContext(
         || right.plan.createdAt.localeCompare(left.plan.createdAt);
     })[0];
 
-  const upcoming = executions
-    .flatMap(({ plan, execution }) => execution.sessions
-      .filter((session) => (
-        session.status === 'upcoming'
-        && session.session.type !== 'rest'
-        && session.date.getTime() >= startOfLocalDay(now).getTime()
-      ))
-      .map((session) => ({ plan, execution, session })))
-    .sort(compareSessionReferences);
+  const upcoming = getUpcomingSessionReferences(plans, activities, now);
   const next = matched
     ? upcoming.find((reference) => reference.plan.id === matched.plan.id) ?? upcoming[0]
     : upcoming[0];

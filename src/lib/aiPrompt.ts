@@ -609,6 +609,9 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n- This block was ${Math.round(keySustainedEffort.paceGainVsActivitySeconds)}s/km faster than the whole-activity average.`
       : `\n- 该区间比全程平均配速快 ${Math.round(keySustainedEffort.paceGainVsActivitySeconds)} 秒/公里。`;
+    prompt += en
+      ? `\n- ${Math.round(keySustainedEffort.qualityDistanceRatio * 100)}% of this block's distance independently reached marathon pace or faster; the result was sustained rather than produced by isolated surges.`
+      : `\n- 该区间有 ${Math.round(keySustainedEffort.qualityDistanceRatio * 100)}% 的距离本身达到 M 区或更快，属于持续输出，不是由个别短促加速拉快平均值。`;
     if (keySustainedEffort.averageHeartRate !== undefined) {
       prompt += en
         ? `\n- Average heart rate across the block: ${Math.round(keySustainedEffort.averageHeartRate)} bpm.`
@@ -965,8 +968,8 @@ export function buildProfessionalPrompt(
     ? `\n- Unless the activity data explicitly contains a planned workout target, say "reference pace" or "estimated zone" instead of "target pace".`
     : `\n- 除非活动数据明确包含计划训练目标，否则不要写“目标配速”，应写“参考配速”或“能力估算区间”。`;
   prompt += en
-    ? `\n- Do not call a segment a key quality block merely because it is faster than the whole-run average. A sustained block slower than the athlete's marathon-zone ceiling (${formatPace(marathonPaceCeiling)}/km) is easy-pace variation, not evidence of speed endurance or a quality workout. PBs remain a separate highest-priority fact.`
-    : `\n- 禁止仅因某一段比全程均配快，就称其为核心质量段。连续段若仍慢于个人 M 区慢端（${formatPace(marathonPaceCeiling)}/km），只能视为轻松配速内的节奏变化，不能据此表扬速度耐力或质量课执行；明确 PB 仍是独立的最高优先级事实。`;
+    ? `\n- Do not call a segment a key quality block merely because it is faster than the whole-run average. Its average must reach the athlete's marathon-zone ceiling (${formatPace(marathonPaceCeiling)}/km) or faster, and at least 80% of its distance must independently meet that ceiling. Otherwise it is easy-pace variation or an average distorted by isolated surges, not evidence of speed endurance or a quality workout. PBs remain a separate highest-priority fact.`
+    : `\n- 禁止仅因某一段比全程均配快，就称其为核心质量段。除了区间均配须达到个人 M 区慢端（${formatPace(marathonPaceCeiling)}/km）或更快，至少 80% 的区间距离也必须各自达到该门槛；否则只能视为轻松配速内的节奏变化，或被个别短促加速拉快的平均值，不能据此表扬速度耐力或质量课执行。明确 PB 仍是独立的最高优先级事实。`;
   prompt += en
     ? `\n- If confidence is low or evidence is missing, you MUST say so directly in the summary instead of writing overconfident prose.`
     : `\n- 如果识别置信度较低或关键证据缺失，必须在 summary 中直接说明，不要用很笃定的口吻掩盖不确定性。`;

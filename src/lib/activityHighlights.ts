@@ -4,6 +4,7 @@ const STANDARD_DISTANCES = [10_000, 5_000, 3_000] as const;
 const DISTANCE_TOLERANCE = 0.025;
 const MIN_PACE_GAIN_SECONDS = 20;
 const MIN_PACE_GAIN_RATIO = 0.08;
+const MIN_QUALITY_DISTANCE_RATIO = 0.8;
 
 export interface SustainedEffortHighlight {
   distanceMeters: number;
@@ -15,6 +16,7 @@ export interface SustainedEffortHighlight {
   averageHeartRate?: number;
   paceGainVsActivitySeconds: number;
   paceGainVsActivityRatio: number;
+  qualityDistanceRatio: number;
   officialBestEffortElapsedSeconds?: number;
   officialBestEffortMovingSeconds?: number;
 }
@@ -77,6 +79,15 @@ function buildCandidate(
   const averagePaceSecondsPerKm = movingTimeSeconds / distanceMeters * 1000;
   if (averagePaceSecondsPerKm > qualityPaceCeilingSecondsPerKm) return null;
 
+  const qualityDistanceMeters = window.reduce((sum, split) => {
+    const splitPaceSecondsPerKm = split.moving_time / split.distance * 1000;
+    return splitPaceSecondsPerKm <= qualityPaceCeilingSecondsPerKm
+      ? sum + split.distance
+      : sum;
+  }, 0);
+  const qualityDistanceRatio = qualityDistanceMeters / distanceMeters;
+  if (qualityDistanceRatio < MIN_QUALITY_DISTANCE_RATIO) return null;
+
   const activityPaceSecondsPerKm = activity.moving_time / activity.distance * 1000;
   const paceGainVsActivitySeconds = activityPaceSecondsPerKm - averagePaceSecondsPerKm;
   const paceGainVsActivityRatio = paceGainVsActivitySeconds / activityPaceSecondsPerKm;
@@ -105,6 +116,7 @@ function buildCandidate(
       : undefined,
     paceGainVsActivitySeconds,
     paceGainVsActivityRatio,
+    qualityDistanceRatio,
     officialBestEffortElapsedSeconds: officialBestEffort?.elapsed_time,
     officialBestEffortMovingSeconds: officialBestEffort?.moving_time,
   };
@@ -112,8 +124,9 @@ function buildCandidate(
 
 /**
  * Finds the longest clearly faster continuous 3K/5K/10K block that also
- * reaches the athlete's marathon zone or faster. Relative improvement against
- * a deliberately easy whole-run average is not enough to make a quality block.
+ * reaches the athlete's marathon zone or faster. At least 80% of the block's
+ * distance must independently reach that ceiling, so isolated surges cannot
+ * pull an otherwise easy block's average into the quality range.
  */
 export function getKeySustainedEffort(
   activity: Pick<StravaActivity, 'distance' | 'moving_time' | 'splits_metric' | 'best_efforts'>,

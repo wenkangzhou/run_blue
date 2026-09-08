@@ -340,6 +340,26 @@ test('finds the next workout across plans and links an activity to its planned s
   assert.equal(next.session.key, '1-6');
 });
 
+test('keeps today eligible while excluding past sessions and rest days from next workout', () => {
+  const plan = makePlan();
+
+  const onTuesday = getNextTrainingPlanSession(
+    [plan],
+    [],
+    new Date('2026-06-02T18:00:00')
+  );
+  const onFriday = getNextTrainingPlanSession(
+    [plan],
+    [],
+    new Date('2026-06-05T08:00:00')
+  );
+
+  assert.equal(onTuesday.session.key, '1-1');
+  assert.equal(onFriday.session.key, '1-6');
+  assert.notEqual(onTuesday.session.session.type, 'rest');
+  assert.notEqual(onFriday.session.session.type, 'rest');
+});
+
 test('prefers a manual activity match when multiple plans can claim the same run', () => {
   const activity = makeActivity(9, '2026-06-02', 5000);
   const automaticPlan = makePlan({ id: 'automatic-plan' });

@@ -379,9 +379,24 @@ function normalizeUnsupportedQualitySegmentSummary(
     ? Math.round(activity.average_heartrate)
     : null;
   const weatherFact = getWeatherFact(activity, locale);
+  const hasIsolatedQualityPace = Boolean(
+    paceZones?.marathon.max &&
+    activity.splits_metric?.some((split) => (
+      split.distance > 0 &&
+      split.moving_time > 0 &&
+      split.moving_time / split.distance * 1000 <= paceZones.marathon.max
+    ))
+  );
+  const fasterSplitAssessment = hasIsolatedQualityPace
+    ? (en
+        ? 'some splits did reach faster paces, but they lacked enough sustained coverage to count as a key continuous quality block'
+        : '分段中虽有更快配速，但持续覆盖不足，不能作为核心连续质量段')
+    : (en
+        ? 'the faster splits remained easy-pace variation'
+        : '分段提速仍属于轻松配速内的节奏变化');
   const neutralSummary = en
-    ? `This ${distanceKm} km run averaged ${pace || 'an aerobic pace'}${heartRate ? ` at ${heartRate} bpm` : ''}${weatherFact ? ` in ${weatherFact}` : ''}; its value came from the overall aerobic completion and effort control, while the faster splits remained easy-pace variation.`
-    : `本次 ${distanceKm} 公里平均配速 ${pace || '以有氧配速完成'}${heartRate ? `、平均心率 ${heartRate} bpm` : ''}${weatherFact ? `，处于${weatherFact}` : ''}；训练价值主要在整体有氧完成与强度控制，分段提速仍属于轻松配速内的节奏变化。`;
+    ? `This ${distanceKm} km run averaged ${pace || 'an aerobic pace'}${heartRate ? ` at ${heartRate} bpm` : ''}${weatherFact ? ` in ${weatherFact}` : ''}; its value came from the overall aerobic completion and effort control; ${fasterSplitAssessment}.`
+    : `本次 ${distanceKm} 公里平均配速 ${pace || '以有氧配速完成'}${heartRate ? `、平均心率 ${heartRate} bpm` : ''}${weatherFact ? `，处于${weatherFact}` : ''}；训练价值主要在整体有氧完成与强度控制，${fasterSplitAssessment}。`;
 
   return [neutralSummary, ...retained].filter(Boolean).join(en ? ' ' : '');
 }
