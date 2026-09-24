@@ -1,10 +1,14 @@
 import type { AIAnalysis } from './aiTypes';
-import type { ActivityClassification } from './trainingAnalysis';
+import type { StravaActivity } from '@/types';
+import type { ActivityClassification, PaceZones } from './trainingAnalysis';
 import type { StreamAnalysis } from './streamAnalysis';
+import { getPrimaryPersonalRecord } from './activityAchievements';
+import { getKeySustainedEffort } from './activityHighlights';
 
 export type AIConsistencyRule =
   | 'intensity-floor'
   | 'recovery-floor'
+  | 'execution-quality'
   | 'heart-rate-trend'
   | 'load-cost'
   | 'next-workout-recovery';
@@ -17,6 +21,8 @@ export interface AIConsistencyResult {
 interface AIConsistencyContext {
   classification: ActivityClassification;
   locale: string;
+  activity?: StravaActivity;
+  paceZones?: PaceZones | null;
   streamAnalysis?: StreamAnalysis | null;
 }
 
@@ -47,6 +53,79 @@ function getUnexplainedHeartRateRise(streamAnalysis?: StreamAnalysis | null): nu
   return streamAnalysis.hasHRDrift || !paceExplainsRise
     ? Math.round(streamAnalysis.avgHRDrift)
     : null;
+}
+
+function getExecutionQuality(
+  analysis: AIAnalysis,
+  context: AIConsistencyContext,
+  heartRateRise: number | null
+): NonNullable<AIAnalysis['executionQuality']> {
+  const { activity, classification, paceZones, streamAnalysis } = context;
+  const structure = classification.structure;
+
+  if (activity && getPrimaryPersonalRecord(activity)) return 'excellent';
+  if (classification.isRace) return 'good';
+
+  if (structure.alternatingRepCount >= 3 && structure.workPaceAverage) {
+    const spread = structure.workPaceSpread ?? 0;
+    const fade = structure.workPaceFade ?? 0;
+    if (spread > 60 || fade > 45) return 'poor';
+    if (spread <= 20 && fade <= 15) return 'excellent';
+    if (spread <= 35 && fade <= 25) return 'good';
+    return 'fair';
+  }
+
+  const isLowIntensityWorkout = classification.workoutType === 'easy'
+    || classification.workoutType === 'recovery';
+  if (isLowIntensityWorkout) {
+    const hrDistribution = streamAnalysis?.hrZoneDistribution;
+    const lowShare = (hrDistribution?.z1 ?? 0) + (hrDistribution?.z2 ?? 0);
+    const hardShare = (hrDistribution?.z4 ?? 0) + (hrDistribution?.z5 ?? 0);
+
+    if ((heartRateRise ?? 0) >= 20 || hardShare >= 30) return 'poor';
+    if (heartRateRise !== null || hardShare >= 15) return 'fair';
+    if (hrDistribution && lowShare >= 95 && hardShare < 5) return 'excellent';
+    if (hrDistribution && lowShare >= 85) return 'good';
+    if (classification.loadAdjustment?.applied) return 'fair';
+    return 'good';
+  }
+
+  if ((heartRateRise ?? 0) >= 20) return 'poor';
+  if (heartRateRise !== null) return 'fair';
+  if (analysis.paceZoneAnalysis?.appropriateness !== undefined
+    && analysis.paceZoneAnalysis.appropriateness !== 'appropriate') {
+    return 'fair';
+  }
+  if (activity && getKeySustainedEffort(activity, paceZones?.marathon.max)) {
+    return 'excellent';
+  }
+  return 'good';
+}
+
+function alignExecutionQualityText(
+  text: string,
+  quality: NonNullable<AIAnalysis['executionQuality']>,
+  locale: string
+): string {
+  if (!text || (quality !== 'fair' && quality !== 'poor')) return text;
+
+  if (locale.startsWith('en')) {
+    const replacement = quality === 'poor'
+      ? 'Execution needs improvement'
+      : 'Execution had clear strengths but also a meaningful deviation';
+    return text.replace(
+      /(?:very well executed|well executed overall|executed (?:very )?well|excellent execution)/gi,
+      replacement
+    );
+  }
+
+  const replacement = quality === 'poor'
+    ? '完成质量需改进'
+    : '完成有亮点，但存在明显偏差';
+  return text.replace(
+    /(?:完成得很扎实|完成得很好|完成很好|整体完成得不错|完成质量到位|执行到位)/g,
+    replacement
+  );
 }
 
 function normalizeHeartRateTrendText(
@@ -171,9 +250,11 @@ export function validateAIAnalysisConsistency(
   const minimumRecoveryHours = classification.loadAdjustment?.minimumRecoveryHours ?? 0;
   const finalRecoveryHours = Math.max(analysis.recoveryHours || 0, minimumRecoveryHours);
   const heartRateRise = getUnexplainedHeartRateRise(streamAnalysis);
+  const executionQuality = getExecutionQuality(analysis, context, heartRateRise);
 
   if (finalIntensity !== analysis.intensity) correctedRules.add('intensity-floor');
   if (finalRecoveryHours !== analysis.recoveryHours) correctedRules.add('recovery-floor');
+  if (executionQuality !== analysis.executionQuality) correctedRules.add('execution-quality');
 
   const normalizeNarrative = (text: string): string => {
     const heartRateChecked = normalizeHeartRateTrendText(
@@ -194,13 +275,19 @@ export function validateAIAnalysisConsistency(
   };
 
   const normalizedExecution = normalizeNarrative(analysis.executionSummary || '');
-  const executionSummary = ensureExecutionMentionsHeartRateRise(
+  const executionWithHeartRate = ensureExecutionMentionsHeartRateRise(
     normalizedExecution,
     heartRateRise,
     classification,
     locale
   );
-  if (executionSummary !== normalizedExecution) correctedRules.add('heart-rate-trend');
+  if (executionWithHeartRate !== normalizedExecution) correctedRules.add('heart-rate-trend');
+  const executionSummary = alignExecutionQualityText(
+    executionWithHeartRate,
+    executionQuality,
+    locale
+  );
+  if (executionSummary !== executionWithHeartRate) correctedRules.add('execution-quality');
 
   let nextWorkoutSuggestion = normalizeNarrative(analysis.nextWorkoutSuggestion || '');
   let suggestions = analysis.suggestions.map(normalizeNarrative);
@@ -221,6 +308,7 @@ export function validateAIAnalysisConsistency(
       ...analysis,
       summary: normalizeNarrative(analysis.summary || ''),
       executionSummary,
+      executionQuality,
       intensity: finalIntensity,
       recoveryHours: finalRecoveryHours,
       trainingLoadContext: normalizeNarrative(analysis.trainingLoadContext || ''),

@@ -792,8 +792,10 @@ export function normalizeAIAnalysisForDisplay(
   };
 
   return validateAIAnalysisConsistency(normalizedAnalysis, {
+    activity,
     classification,
     locale,
+    paceZones,
     streamAnalysis,
   }).analysis;
 }
@@ -947,7 +949,9 @@ export function parseAIResponse(
   };
 
   return validateAIAnalysisConsistency(parsedAnalysis, {
+    activity,
     classification,
     locale,
+    paceZones: trainingProfile.paceZones,
   }).analysis;
 }

@@ -868,6 +868,7 @@ test('does not describe low-zone heart rate as stable when second-half drift is 
   assert.match(analysis.summary, /心率全程仍在恢复区间/);
   assert.doesNotMatch(analysis.summary, /控制稳定/);
   assert.match(analysis.executionSummary, /后半程心率上升 37 bpm/);
+  assert.equal(analysis.executionQuality, 'poor');
 });
 
 test('consistency gate aligns heat-adjusted load, recovery, and next workout advice', () => {
@@ -925,9 +926,11 @@ test('consistency gate aligns heat-adjusted load, recovery, and next workout adv
   );
 
   assert.equal(analysis.intensity, 'moderate');
+  assert.equal(analysis.executionQuality, 'fair');
   assert.equal(analysis.recoveryHours, 36);
   assert.doesNotMatch(analysis.summary, /综合强度为轻松|恢复成本较低/);
-  assert.doesNotMatch(analysis.executionSummary, /无需恢复/);
+  assert.doesNotMatch(analysis.executionSummary, /完成很好|无需恢复/);
+  assert.match(analysis.executionSummary, /完成有亮点，但存在明显偏差/);
   assert.match(analysis.nextWorkoutSuggestion, /至少经过 36 小时/);
   assert.deepEqual(analysis.suggestions, [
     '下一次优先休息或极轻松活动；至少经过 36 小时并确认疲劳恢复后，再安排质量训练。',
@@ -961,6 +964,92 @@ test('consistency gate leaves heart-rate rise alone when workout structure expla
 
   assert.match(analysis.summary, /心率控制稳定/);
   assert.match(analysis.executionSummary, /心率走势稳定/);
+});
+
+test('keeps hard intensity separate from excellent interval execution', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '这是一堂高强度间歇训练。',
+      executionSummary: '完成得很扎实。4 个快段从开始到结束保持稳定。',
+      intensity: 'hard',
+      recoveryHours: 36,
+      suggestions: [],
+      warnings: ['下一次先恢复。'],
+      paceZoneAnalysis: { zone: 'I', description: '间歇区间', appropriateness: 'appropriate' },
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '',
+    },
+    makeActivity({ distance: 6870, moving_time: 2110 }),
+    makeClassification({
+      workoutType: 'interval',
+      intensity: 'hard',
+      paceZone: 'I',
+      structure: {
+        source: 'laps',
+        lapCount: 9,
+        medianLapDistance: 780,
+        shortRepCount: 9,
+        fastRepCount: 4,
+        recoveryRepCount: 3,
+        alternatingRepCount: 4,
+        alternatingRecoveryCount: 3,
+        alternatingStartLap: 2,
+        alternatingEndLap: 8,
+        workPaceAverage: 271,
+        recoveryPaceAverage: 329,
+        workPaceSpread: 18,
+        workPaceFade: 8,
+        hasWarmup: true,
+        hasCooldown: true,
+        splitPattern: 'interval',
+        paceVariability: 0.13,
+      },
+    }),
+    'zh',
+    makeProfile().paceZones,
+    {
+      avgHRDrift: 8,
+      hasHRDrift: false,
+      pacePattern: 'interval',
+      hrZoneDistribution: { z1: 10, z2: 25, z3: 25, z4: 25, z5: 15 },
+    }
+  );
+
+  assert.equal(analysis.intensity, 'hard');
+  assert.equal(analysis.executionQuality, 'excellent');
+  assert.match(analysis.executionSummary, /完成得很扎实/);
+});
+
+test('does not downgrade excellent easy execution because warnings exist', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '本次单次努力保持受控。',
+      executionSummary: '低强度目的执行得很完整。',
+      intensity: 'easy',
+      recoveryHours: 24,
+      suggestions: [],
+      warnings: ['近期累计负荷偏高，下一天保守安排。'],
+      paceZoneAnalysis: { zone: 'E', description: '轻松区间', appropriateness: 'appropriate' },
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '',
+    },
+    makeActivity({ distance: 8000, moving_time: 3040 }),
+    makeClassification({ workoutType: 'easy', intensity: 'easy', paceZone: 'E' }),
+    'zh',
+    makeProfile().paceZones,
+    {
+      avgHRDrift: 3,
+      hasHRDrift: false,
+      pacePattern: 'steady',
+      hrZoneDistribution: { z1: 40, z2: 57, z3: 2, z4: 1, z5: 0 },
+    }
+  );
+
+  assert.equal(analysis.intensity, 'easy');
+  assert.equal(analysis.executionQuality, 'excellent');
+  assert.equal(analysis.warnings.length, 1);
 });
 
 test('generateFallbackAnalysis uses training deficiencies for normal runs', () => {

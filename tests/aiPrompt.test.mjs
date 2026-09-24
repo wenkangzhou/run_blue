@@ -264,6 +264,9 @@ test('buildProfessionalPrompt explains alternating reps and separates execution 
   assert.match(prompt, /快段极差 27 秒\/公里/);
   assert.match(prompt, /executionSummary 回答的是“完成得怎么样”/);
   assert.match(prompt, /禁止出现“被识别为\/判定为\/置信度”/);
+  assert.match(prompt, /强度与完成质量必须分开表达/);
+  assert.match(prompt, /轻松强度可以完成得很到位，高强度也可以完成得很到位/);
+  assert.match(prompt, /到位、良好、有偏差、需改进/);
 });
 
 test('buildProfessionalPrompt keeps ordinary long runs from becoming default M-pace workouts', () => {

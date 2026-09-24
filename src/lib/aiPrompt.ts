@@ -962,6 +962,12 @@ export function buildProfessionalPrompt(
     ? `\n- The executionSummary is the answer to “How did it go?”, not “What workout was this?”. Never use phrases such as “was identified/classified as” in that field.`
     : `\n- executionSummary 回答的是“完成得怎么样”，不是“这是什么训练”。该字段禁止出现“被识别为/判定为/置信度”等分类说明。`;
   prompt += en
+    ? `\n- Keep intensity and execution quality separate: intensity describes physiological effort, while execution quality describes how well the workout intent was fulfilled. An easy session can be excellently executed, and a hard session can also be excellently executed. Warnings or high rolling load must not automatically turn good execution into poor execution.`
+    : `\n- 强度与完成质量必须分开表达：强度描述身体付出，完成质量描述训练目的执行得如何。轻松强度可以完成得很到位，高强度也可以完成得很到位；注意事项或累计负荷偏高不得自动把良好执行改写成“完成不好”。`;
+  prompt += en
+    ? `\n- Use a clear execution verdict consistent with one of four levels: right on target, good, some deviation, or needs improvement. Then explain the strongest evidence and the main limitation.`
+    : `\n- executionSummary 的结论统一使用四档语义：到位、良好、有偏差、需改进。先给明确结论，再说明最强证据和主要不足；不要混用“需要注意”“强度高”来替代完成质量结论。`;
+  prompt += en
     ? `\n- Do not invent physiology or medical claims. Unless directly measured, never claim autonomic-nervous-system suppression, soft-tissue damage, sleep debt, dehydration, or injury. Do not prescribe icing or cancel all quality sessions from load data alone.`
     : `\n- 禁止臆测生理或医学结论。没有直接数据时，不得声称自主神经受抑制、软组织损伤、睡眠债、脱水或已经受伤；也不得仅凭负荷数据建议冰敷，或取消本周全部质量课。`;
   prompt += en

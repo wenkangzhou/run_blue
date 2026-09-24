@@ -3,6 +3,8 @@ export interface AIAnalysis {
   summary: string;
   /** Direct assessment of execution quality, separate from workout classification. */
   executionSummary?: string;
+  /** How well the workout intent was executed; independent from physiological intensity. */
+  executionQuality?: 'excellent' | 'good' | 'fair' | 'poor';
   intensity: 'easy' | 'moderate' | 'hard' | 'extreme';
   recoveryHours: number;
   comparisonToAverage: string;

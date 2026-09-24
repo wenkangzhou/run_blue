@@ -146,6 +146,29 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const intensity = analysis?.intensity
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
     : null;
+  const executionQualityLevel = analysis?.executionQuality ?? 'good';
+  const executionQualityDisplay = {
+    excellent: {
+      label: t('aiAnalysis.executionQualityExcellent', '到位'),
+      color: 'text-emerald-700 dark:text-emerald-400',
+      bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    },
+    good: {
+      label: t('aiAnalysis.executionQualityGood', '良好'),
+      color: 'text-blue-700 dark:text-blue-400',
+      bg: 'bg-blue-100 dark:bg-blue-900/30',
+    },
+    fair: {
+      label: t('aiAnalysis.executionQualityFair', '有偏差'),
+      color: 'text-amber-700 dark:text-amber-400',
+      bg: 'bg-amber-100 dark:bg-amber-900/30',
+    },
+    poor: {
+      label: t('aiAnalysis.executionQualityPoor', '需改进'),
+      color: 'text-red-700 dark:text-red-400',
+      bg: 'bg-red-100 dark:bg-red-900/30',
+    },
+  }[executionQualityLevel];
   const isRace = classification?.isRace;
   const hasAdjustedInternalLoad = classification?.loadAdjustment?.applied === true;
   const hasThermalLoad = classification?.loadAdjustment?.thermalSeverity === 'heat-load'
@@ -162,10 +185,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     : '';
   const isLowIntensityRun = !hasAdjustedInternalLoad && (
     classification?.workoutType === 'easy' || classification?.workoutType === 'recovery'
-  );
-  const hasSessionRiskWarnings = Boolean(
-    analysis?.warnings?.length
-    && (!classification?.loadAdjustment?.sessionEffortControlled || hasAdjustedInternalLoad)
   );
   const comparisonMeta = trainingStats?.similarStats ?? null;
   const comparisonIsReferenceOnly = Boolean(
@@ -363,50 +382,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     // 1. Training type
     const type = workoutTypeLabel;
 
-    // 2. Effect evaluation
-    let effect: 'excellent' | 'good' | 'fair' | 'poor' = 'good';
-    let effectLabel = '完成良好';
-
-    if (isRace) {
-      effect = 'good';
-      effectLabel = '比赛完成';
-    } else if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
-      const z1 = hrDist?.z1 ?? 0;
-      const z2 = hrDist?.z2 ?? 0;
-      const hardShare = (hrDist?.z4 ?? 0) + (hrDist?.z5 ?? 0);
-      const drift = streamAnalysis?.avgHRDrift ?? 0;
-
-      if ((streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) || drift >= 10 || hardShare >= 15) {
-        effect = 'fair';
-        effectLabel = '略偏顶';
-      } else if (z1 + z2 >= 95 && hardShare < 5) {
-        effect = 'excellent';
-        effectLabel = '执行到位';
-      } else if (z1 + z2 >= 85) {
-        effect = 'good';
-        effectLabel = '控制良好';
-      } else {
-        effect = 'poor';
-        effectLabel = '可再放松';
-      }
-    } else if (classification.intensity === 'hard') {
-      if (classification.paceZoneExactMatch) {
-        effect = 'good';
-        effectLabel = '配速精准';
-      } else if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift) {
-        effect = 'fair';
-        effectLabel = '后程掉速';
-      } else {
-        effect = 'good';
-        effectLabel = '完成良好';
-      }
-    }
-
-    // Override by warnings
-    if (hasSessionRiskWarnings) {
-      effect = 'poor';
-      effectLabel = '需要注意';
-    }
+    // 2. Execution quality stays independent from intensity and recovery warnings.
+    const effect = executionQualityLevel;
+    const effectLabel = executionQualityDisplay.label;
 
     // 3. Pros & cons
     const pros: string[] = [];
@@ -462,7 +440,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     return { type, effect, effectLabel, pros, cons, advice };
-  }, [analysis, classification, isRace, workoutTypeLabel, hrDist, streamAnalysis, lowIntensityExecution, lowIntensityLooksControlled, comparisonIsReferenceOnly, pacePatternExplainsHRDrift, hasSessionRiskWarnings]);
+  }, [analysis, classification, workoutTypeLabel, streamAnalysis, lowIntensityExecution, lowIntensityLooksControlled, comparisonIsReferenceOnly, pacePatternExplainsHRDrift, executionQualityLevel, executionQualityDisplay.label]);
 
   const effectStyles: Record<string, { color: string; bg: string; border: string }> = {
     excellent: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-400' },
@@ -656,6 +634,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
                 <AIKeyTakeawayRow
                   label={t('aiAnalysis.quickExecution', '完成得怎么样')}
                   value={quickExecution}
+                  status={executionQualityDisplay}
                 />
                 <AIKeyTakeawayRow
                   label={t('aiAnalysis.quickNextStep', '接下来做什么')}
@@ -869,18 +848,27 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 function AIKeyTakeawayRow({
   label,
   value,
+  status,
   isLast = false,
 }: {
   label: string;
   value: string;
+  status?: { label: string; color: string; bg: string };
   isLast?: boolean;
 }) {
   return (
     <div className={`grid gap-1 px-3 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:items-start ${isLast ? '' : 'border-b border-zinc-200/80 dark:border-zinc-800'}`}>
       <p className="font-mono text-[10px] font-bold text-zinc-500">{label}</p>
-      <p className="break-words font-mono text-xs font-bold leading-relaxed text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
-        {value}
-      </p>
+      <div className="flex min-w-0 items-start gap-2">
+        {status && (
+          <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-black ${status.color} ${status.bg}`}>
+            {status.label}
+          </span>
+        )}
+        <p className="min-w-0 break-words font-mono text-xs font-bold leading-relaxed text-zinc-900 [overflow-wrap:anywhere] dark:text-zinc-100">
+          {value}
+        </p>
+      </div>
     </div>
   );
 }
