@@ -94,6 +94,100 @@ test.after(() => {
 
 const { normalizeAIAnalysisForDisplay, parseAIResponse } = require(path.join(tempDir, 'aiResponseParser.js'));
 const { generateFallbackAnalysis } = require(path.join(tempDir, 'aiFallbackAnalysis.js'));
+const { getKeySustainedEffort, getLongRunTenKilometerBlocks, getLongRunPacingPattern } = require(path.join(tempDir, 'activityHighlights.js'));
+
+function makeProgressive32k() {
+  const splits = Array.from({ length: 32 }, (_, index) => {
+    const pace = index < 10 ? 360 : index < 20 ? 345 : index < 30 ? 330 : 285;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_speed: 1000 / pace,
+      elevation_difference: 0,
+      average_heartrate: index < 10 ? 140 : index < 20 ? 148 : index < 30 ? 156 : 164,
+    };
+  });
+  return makeActivity({
+    name: 'Long run',
+    distance: 32_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    average_heartrate: 149,
+    splits_metric: splits,
+  });
+}
+
+test('32 km analysis leads with 10 km progression and high total load, not a 3 km patch or easy verdict', () => {
+  const activity = makeProgressive32k();
+  const blocks = getLongRunTenKilometerBlocks(activity);
+  assert.equal(blocks.length, 3);
+  assert.equal(getLongRunPacingPattern(blocks), 'progressive');
+  assert.equal(getKeySustainedEffort(activity, 310), null);
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '最值得肯定的是最后3公里速度很快，本次是轻松跑。',
+      executionSummary: '最后3公里速度很快。',
+      intensity: 'easy',
+      recoveryHours: 24,
+      suggestions: [],
+      warnings: [],
+    }),
+    activity,
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
+    'zh'
+  );
+  assert.equal(result.intensity, 'moderate');
+  assert.match(result.summary, /高总量负荷/);
+  assert.match(result.summary, /0–10 km 6'00"\/km/);
+  assert.match(result.summary, /10–20 km 5'45"\/km/);
+  assert.match(result.summary, /20–30 km 5'30"\/km/);
+  assert.match(result.summary, /20–30 km 5'30"\/km、156 bpm/);
+  assert.match(result.summary, /全程平均心率 149 bpm/);
+  assert.match(result.summary, /逐段渐快/);
+  assert.match(result.executionSummary, /完整 10 公里分段/);
+  assert.doesNotMatch(result.executionSummary, /最后3公里/);
+  const displayed = normalizeAIAnalysisForDisplay(
+    result,
+    activity,
+    makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
+    'zh',
+    makeProfile().paceZones
+  );
+  assert.equal((displayed.summary.match(/高总量负荷/g) ?? []).length, 1);
+});
+
+test('long-run analysis does not invent a 10 km progression when splits are missing', () => {
+  const activity = makeProgressive32k();
+  activity.splits_metric = activity.splits_metric.filter((split) => split.split !== 15);
+  assert.deepEqual(getLongRunTenKilometerBlocks(activity), []);
+  const result = parseAIResponse(
+    JSON.stringify({ summary: '本次为轻松跑。', intensity: 'easy', suggestions: [], warnings: [] }),
+    activity,
+    makeProfile({ similarStats: null }),
+    makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
+    'zh'
+  );
+  assert.match(result.summary, /缺少完整的 10 公里分段/);
+  assert.doesNotMatch(result.summary, /逐段渐快/);
+  assert.equal(result.intensity, 'moderate');
+});
+
+test('a qualifying 3 km block remains meaningful in a 7 km run', () => {
+  const splits = [370, 370, 370, 290, 290, 290, 370].map((pace, index) => ({
+    split: index + 1,
+    distance: 1000,
+    moving_time: pace,
+    elapsed_time: pace,
+  }));
+  const activity = makeActivity({
+    distance: 7000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  });
+  assert.equal(getKeySustainedEffort(activity, 310)?.distanceMeters, 3000);
+});
 
 function makeActivity(overrides = {}) {
   return {

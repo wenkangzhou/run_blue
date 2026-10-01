@@ -4,6 +4,7 @@ import type { ActivityClassification, TrainingProfile } from './trainingAnalysis
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext, getThermalContext } from './weather';
+import { getLongRunPacingPattern, getLongRunTenKilometerBlocks } from './activityHighlights';
 
 function getZoneDescription(
   zone: ActivityClassification['paceZone'],
@@ -89,6 +90,20 @@ export function buildExecutionSummary(
       : `${verdict}${reps} 个快段平均 ${workPace}/km，中间穿插 ${recoveries} 个恢复圈，${lateRep}；${limitation}`;
   }
 
+  if (activity.distance >= 25_000) {
+    const blocks = getLongRunTenKilometerBlocks(activity);
+    const pattern = getLongRunPacingPattern(blocks);
+    const blockText = blocks.map((block) =>
+      `${block.startKm}–${block.endKm}km ${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `、${Math.round(block.averageHeartRate)} bpm` : ''}`
+    ).join(en ? '; ' : '；');
+    const trend = en
+      ? ({ progressive: 'progressively faster', stable: 'stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'unavailable' } as const)[pattern]
+      : ({ progressive: '逐段渐快', stable: '整体稳定', slowing: '逐段放慢', mixed: '有起伏', unknown: '无法判断' } as const)[pattern];
+    return en
+      ? `${blockText ? `${blockText}. Complete 10 km blocks were ${trend}.` : 'Complete 10 km splits are unavailable; pacing trend cannot be verified.'} Judge the full-session cost from distance, pace and heart rate, not a short fast patch.`
+      : `${blockText ? `${blockText}，完整的每 10 公里分段${trend}。` : '缺少完整的 10 公里分段，无法核验逐段配速。'}应结合距离、配速和心率评估整堂课负荷，不以局部快段代替整体表现。`;
+  }
+
   if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
     return en
       ? `Execution was controlled overall. The session stayed appropriate for low-intensity aerobic work; judge any extra recovery need from heat and rolling load rather than pace alone.`
@@ -165,7 +180,7 @@ export function generateFallbackAnalysis(
   // Normal training fallback
   const adjustment = classification.loadAdjustment;
   const cumulativeRecoveryHigh = adjustment?.cumulativeLoadConcern === 'high';
-  const isLowIntensity = classification.intensity === 'easy'
+  const isLowIntensity = activity.distance < 25_000 && classification.intensity === 'easy'
     && (classification.workoutType === 'easy' || classification.workoutType === 'recovery');
   const suggestions: string[] = [];
   const workoutTypeLabel = classification.loadAdjustment?.applied

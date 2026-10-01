@@ -9,7 +9,7 @@ import {
 } from './trainingAnalysis';
 import { buildActivityWeatherContext, getThermalContext, getWeatherSourceLabel } from './weather';
 import { getActivityPersonalRecords } from './activityAchievements';
-import { formatSustainedEffortDistance, getKeySustainedEffort } from './activityHighlights';
+import { formatSustainedEffortDistance, getKeySustainedEffort, getLongRunPacingPattern, getLongRunTenKilometerBlocks } from './activityHighlights';
 import { getHRZones } from './heartRateZones';
 
 // Format seconds to HH:MM:SS or MM:SS
@@ -265,6 +265,7 @@ export function buildProfessionalPrompt(
   const personalRecords = getActivityPersonalRecords(activity);
   const marathonPaceCeiling = trainingProfile.paceZones.marathon.max;
   const keySustainedEffort = getKeySustainedEffort(activity, marathonPaceCeiling);
+  const longRunBlocks = getLongRunTenKilometerBlocks(activity);
   const weatherInfo = buildActivityWeatherContext(activity, streams);
   const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
   const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
@@ -296,6 +297,30 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Avg Pace: ${paceStr} /km`
     : `\n- 平均配速: ${paceStr} /km`;
+  if (activity.distance >= 25_000) {
+    const blockPattern = getLongRunPacingPattern(longRunBlocks);
+    const blockPatternLabel = ({ progressive: '逐段渐快', stable: '整体稳定', slowing: '逐段放慢', mixed: '有起伏', unknown: '无法判断' } as const)[blockPattern];
+    prompt += en
+      ? `\n- HIGH-VOLUME LONG RUN: ${distanceKm} km is substantial total session load even if the external pace is easy. Do not label the overall session "easy"; distinguish easy pace from high total load. The intensity field must be at least moderate, without claiming threshold effort solely from distance.`
+      : `\n- 高总量长距离：${distanceKm} 公里本身构成较大单次总负荷，即使外部配速处于 E 区，也不能将整堂课评价为“轻松”。区分轻松配速与高总负荷；intensity 至少为 moderate，但不能仅凭距离宣称阈值强度。`;
+    if (longRunBlocks.length) {
+      longRunBlocks.forEach((block) => {
+        prompt += en
+          ? `\n- ${block.startKm}–${block.endKm} km: ${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `, avg HR ${Math.round(block.averageHeartRate)} bpm` : ', HR unavailable'}`
+          : `\n- ${block.startKm}–${block.endKm} 公里：${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `，平均心率 ${Math.round(block.averageHeartRate)} bpm` : '，心率缺失'}`;
+      });
+      prompt += en
+        ? `\n- Complete 10 km block pattern: ${blockPattern}. Make this trend and pace stability the primary execution assessment; treat the remaining partial distance separately.`
+        : `\n- 完整 10 公里分段走势：${blockPatternLabel}。把每 10 公里配速趋势与稳定性放在执行评价首位，末尾不足 10 公里的部分单独看。`;
+    } else {
+      prompt += en
+        ? `\n- Complete 10 km splits unavailable: do not invent block paces or a progression claim.`
+        : `\n- 缺少完整 10 公里分段：不得编造各段配速或逐段渐快结论。`;
+    }
+    prompt += en
+      ? `\n- Summary priority: whole-run distance, 10 km blocks, pace stability, and HR alongside pace. A 3 km fast patch is too small a share of this run to be the headline.`
+      : `\n- summary 优先写全程距离、每 10 公里走势、配速稳定性，并结合心率与配速判断负荷；3 公里快段占比太小，不能成为本次标题或主结论。`;
+  }
   prompt += en
     ? `\n- Elevation: ${Math.round(activity.total_elevation_gain)} m`
     : `\n- 爬升: ${Math.round(activity.total_elevation_gain)} m`;

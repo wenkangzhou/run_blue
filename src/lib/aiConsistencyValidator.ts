@@ -3,7 +3,7 @@ import type { StravaActivity } from '@/types';
 import type { ActivityClassification, PaceZones } from './trainingAnalysis';
 import type { StreamAnalysis } from './streamAnalysis';
 import { getPrimaryPersonalRecord } from './activityAchievements';
-import { getKeySustainedEffort } from './activityHighlights';
+import { getKeySustainedEffort, getLongRunPacingPattern, getLongRunTenKilometerBlocks } from './activityHighlights';
 
 export type AIConsistencyRule =
   | 'intensity-floor'
@@ -11,7 +11,8 @@ export type AIConsistencyRule =
   | 'execution-quality'
   | 'heart-rate-trend'
   | 'load-cost'
-  | 'next-workout-recovery';
+  | 'next-workout-recovery'
+  | 'long-run-priority';
 
 export interface AIConsistencyResult {
   analysis: AIAnalysis;
@@ -35,14 +36,71 @@ const INTENSITY_RANK: Record<AIAnalysis['intensity'], number> = {
 
 function getFinalIntensity(
   candidate: AIAnalysis['intensity'] | undefined,
-  classification: ActivityClassification
+  classification: ActivityClassification,
+  activity?: StravaActivity
 ): AIAnalysis['intensity'] {
   if (classification.isRace) return 'extreme';
   const parsed = candidate && candidate in INTENSITY_RANK ? candidate : 'moderate';
-  if (!classification.loadAdjustment?.applied) return parsed;
-  return INTENSITY_RANK[classification.intensity] > INTENSITY_RANK[parsed]
-    ? classification.intensity
-    : parsed;
+  const minimum = activity && activity.distance >= 20_000
+    ? 'moderate'
+    : classification.loadAdjustment?.applied ? classification.intensity : 'easy';
+  return INTENSITY_RANK[minimum] > INTENSITY_RANK[parsed] ? minimum : parsed;
+}
+
+function formatBlockPace(secondsPerKm: number): string {
+  const rounded = Math.round(secondsPerKm);
+  return `${Math.floor(rounded / 60)}'${String(rounded % 60).padStart(2, '0')}\"`;
+}
+
+function getLongRunFact(activity: StravaActivity | undefined, locale: string): string {
+  if (!activity || activity.distance < 25_000) return '';
+  const en = locale.startsWith('en');
+  const blocks = getLongRunTenKilometerBlocks(activity);
+  const pattern = getLongRunPacingPattern(blocks);
+  const distance = (activity.distance / 1000).toFixed(1);
+  const segments = blocks.map((block) =>
+    `${block.startKm}–${block.endKm} km ${formatBlockPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `${en ? ', ' : '、'}${Math.round(block.averageHeartRate)} bpm` : ''}`
+  ).join(en ? '; ' : '；');
+  const trend = en
+    ? ({ progressive: 'progressively faster', stable: 'broadly stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'not verifiable' } as const)[pattern]
+    : ({ progressive: '逐段渐快', stable: '整体稳定', slowing: '逐段放慢', mixed: '存在起伏', unknown: '暂无法核验' } as const)[pattern];
+  const heartRate = activity.average_heartrate
+    ? (en ? `average HR ${Math.round(activity.average_heartrate)} bpm` : `全程平均心率 ${Math.round(activity.average_heartrate)} bpm`)
+    : (en ? 'HR data unavailable' : '缺少全程心率数据');
+  return en
+    ? `This ${distance} km run carries high total volume even if the pace was easy; it is not an easy session overall. ${segments ? `${segments}; the complete 10 km blocks were ${trend}.` : 'Complete 10 km splits are unavailable, so a block trend cannot be claimed.'} Judge load using distance, pace and ${heartRate}.`
+    : `本次 ${distance} 公里属于高总量负荷，即使配速处于轻松区，也不能把整堂课评价为轻松。${segments ? `${segments}；完整的每 10 公里分段${trend}。` : '缺少完整的 10 公里分段，暂不判断逐段趋势。'}总负荷需结合距离、配速和${heartRate}判断。`;
+}
+
+function prioritizeLongRunSummary(summary: string, activity: StravaActivity | undefined, locale: string): string {
+  const fact = getLongRunFact(activity, locale);
+  if (!fact) return summary;
+  const cleaned = locale.startsWith('en')
+    ? summary.replace(/(?:this|the) (?:entire |overall )?(?:run|session) (?:was|is|remained) (?:an? )?(?:easy|low-intensity) (?:run|session)[.!]?/gi, '')
+    : summary.replace(/(?:整体|本次(?:训练)?)(?:仍|是|为|属于|判定为)?(?:一次|一堂)?(?:轻松跑|低强度有氧训练|轻松训练)[。！？]?/g, '');
+  if (cleaned.includes(fact)) return cleaned;
+  const record = activity && getPrimaryPersonalRecord(activity);
+  if (record && /^(?:本次|This activity).{0,100}(?:PB|个人最佳|personal best)/i.test(cleaned)) {
+    const end = cleaned.search(/[。！？.!?]/);
+    if (end >= 0) return `${cleaned.slice(0, end + 1)} ${fact} ${cleaned.slice(end + 1).trim()}`.trim();
+  }
+  return `${fact} ${cleaned.trim()}`.trim();
+}
+
+function getLongRunExecution(activity: StravaActivity | undefined, locale: string): string | null {
+  if (!activity || activity.distance < 25_000) return null;
+  const blocks = getLongRunTenKilometerBlocks(activity);
+  if (blocks.length < 2) return null;
+  const pattern = getLongRunPacingPattern(blocks);
+  const paces = blocks.map((block) =>
+    `${block.startKm}–${block.endKm}km ${formatBlockPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `、${Math.round(block.averageHeartRate)}bpm` : ''}`
+  ).join(locale.startsWith('en') ? '; ' : '、');
+  const trend = locale.startsWith('en')
+    ? ({ progressive: 'progressively faster', stable: 'stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'unclear' } as const)[pattern]
+    : ({ progressive: '逐段渐快', stable: '基本稳定', slowing: '逐段放慢', mixed: '有起伏', unknown: '趋势不明' } as const)[pattern];
+  return locale.startsWith('en')
+    ? `Complete 10 km blocks: ${paces}; ${trend}. Judge execution across the full distance, not a short fast patch.`
+    : `完整 10 公里分段：${paces}，${trend}。应看全程配速稳定性，而非局部 3 公里快段。`;
 }
 
 function getUnexplainedHeartRateRise(streamAnalysis?: StreamAnalysis | null): number | null {
@@ -246,7 +304,7 @@ export function validateAIAnalysisConsistency(
 ): AIConsistencyResult {
   const { classification, locale, streamAnalysis } = context;
   const correctedRules = new Set<AIConsistencyRule>();
-  const finalIntensity = getFinalIntensity(analysis.intensity, classification);
+  const finalIntensity = getFinalIntensity(analysis.intensity, classification, context.activity);
   const minimumRecoveryHours = classification.loadAdjustment?.minimumRecoveryHours ?? 0;
   const finalRecoveryHours = Math.max(analysis.recoveryHours || 0, minimumRecoveryHours);
   const heartRateRise = getUnexplainedHeartRateRise(streamAnalysis);
@@ -282,8 +340,12 @@ export function validateAIAnalysisConsistency(
     locale
   );
   if (executionWithHeartRate !== normalizedExecution) correctedRules.add('heart-rate-trend');
+  const longRunExecution = getLongRunExecution(context.activity, locale);
+  if (longRunExecution && longRunExecution !== executionWithHeartRate) correctedRules.add('long-run-priority');
   const executionSummary = alignExecutionQualityText(
-    executionWithHeartRate,
+    longRunExecution
+      ? ensureExecutionMentionsHeartRateRise(longRunExecution, heartRateRise, classification, locale)
+      : executionWithHeartRate,
     executionQuality,
     locale
   );
@@ -303,10 +365,14 @@ export function validateAIAnalysisConsistency(
     }
   }
 
+  const normalizedSummary = normalizeNarrative(analysis.summary || '');
+  const prioritizedSummary = prioritizeLongRunSummary(normalizedSummary, context.activity, locale);
+  if (prioritizedSummary !== normalizedSummary) correctedRules.add('long-run-priority');
+
   return {
     analysis: {
       ...analysis,
-      summary: normalizeNarrative(analysis.summary || ''),
+      summary: prioritizedSummary,
       executionSummary,
       executionQuality,
       intensity: finalIntensity,

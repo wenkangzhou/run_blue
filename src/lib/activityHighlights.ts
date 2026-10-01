@@ -21,6 +21,60 @@ export interface SustainedEffortHighlight {
   officialBestEffortMovingSeconds?: number;
 }
 
+export interface LongRunBlock {
+  startKm: number;
+  endKm: number;
+  distanceMeters: number;
+  movingTimeSeconds: number;
+  averagePaceSecondsPerKm: number;
+  averageHeartRate?: number;
+}
+
+export type LongRunPacingPattern = 'progressive' | 'stable' | 'slowing' | 'mixed' | 'unknown';
+
+export function getLongRunPacingPattern(blocks: LongRunBlock[]): LongRunPacingPattern {
+  if (blocks.length < 2) return 'unknown';
+  const paces = blocks.map((block) => block.averagePaceSecondsPerKm);
+  const range = Math.max(...paces) - Math.min(...paces);
+  const changes = paces.slice(1).map((pace, index) => pace - paces[index]);
+  if (changes.every((change) => change <= -3)) return 'progressive';
+  if (changes.every((change) => change >= 3)) return 'slowing';
+  if (range <= 10) return 'stable';
+  return 'mixed';
+}
+
+/** Complete 10 km blocks from consecutive metric splits; a short tail is not
+ * compared with full blocks. Missing/irregular splits are not extrapolated. */
+export function getLongRunTenKilometerBlocks(
+  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
+): LongRunBlock[] {
+  if (activity.distance < 20_000) return [];
+  const splits = getValidSplits(activity.splits_metric);
+  const fullBlockCount = Math.floor(activity.distance / 10_000);
+  const blocks: LongRunBlock[] = [];
+  for (let blockIndex = 0; blockIndex < fullBlockCount; blockIndex += 1) {
+    const window = splits.slice(blockIndex * 10, blockIndex * 10 + 10);
+    if (window.length !== 10 || window.some((split, index) =>
+      split.split !== blockIndex * 10 + index + 1 ||
+      Math.abs(split.distance - 1000) > 25
+    )) return [];
+    const distanceMeters = window.reduce((sum, split) => sum + split.distance, 0);
+    const movingTimeSeconds = window.reduce((sum, split) => sum + split.moving_time, 0);
+    const hasHeartRate = window.every((split) => isPositiveFinite(split.average_heartrate));
+    blocks.push({
+      startKm: blockIndex * 10,
+      endKm: (blockIndex + 1) * 10,
+      distanceMeters,
+      movingTimeSeconds,
+      averagePaceSecondsPerKm: movingTimeSeconds / distanceMeters * 1000,
+      averageHeartRate: hasHeartRate
+        ? window.reduce((sum, split) => sum + (split.average_heartrate ?? 0) * split.moving_time, 0) / movingTimeSeconds
+        : undefined,
+    });
+  }
+  return blocks;
+}
+
 export function formatSustainedEffortDistance(distanceMeters: number): string {
   const distanceKm = distanceMeters / 1000;
   const roundedKm = Math.round(distanceKm);
@@ -144,7 +198,9 @@ export function getKeySustainedEffort(
 
   const candidates: SustainedEffortHighlight[] = [];
   for (const targetDistance of STANDARD_DISTANCES) {
-    if (targetDistance > activity.distance * 0.9) continue;
+    // A small fast patch should not become the headline of a long session.
+    if (targetDistance > activity.distance * 0.9 || targetDistance < activity.distance * 0.25) continue;
+    if (activity.distance >= 25_000) continue;
 
     for (let startIndex = 0; startIndex < splits.length; startIndex += 1) {
       let accumulatedDistance = 0;

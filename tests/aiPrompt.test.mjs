@@ -100,6 +100,38 @@ test.after(() => {
 
 const { buildProfessionalPrompt } = require(path.join(tempDir, 'aiPrompt.js'));
 
+test('32 km prompt prioritizes complete 10 km blocks, pace stability and total load', () => {
+  const splits = Array.from({ length: 32 }, (_, index) => {
+    const pace = index < 10 ? 360 : index < 20 ? 345 : index < 30 ? 330 : 285;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_speed: 1000 / pace,
+      average_heartrate: index < 10 ? 140 : index < 20 ? 148 : 156,
+    };
+  });
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      name: 'Long run',
+      distance: 32_000,
+      moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+      splits_metric: splits,
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
+    'zh'
+  );
+  assert.match(prompt, /0–10 公里：6'00"\/km/);
+  assert.match(prompt, /10–20 公里：5'45"\/km/);
+  assert.match(prompt, /20–30 公里：5'30"\/km/);
+  assert.match(prompt, /完整 10 公里分段走势：逐段渐快/);
+  assert.match(prompt, /不能将整堂课评价为“轻松”/);
+  assert.match(prompt, /3 公里快段占比太小/);
+});
+
 function makeActivity(overrides = {}) {
   return {
     id: 1,
