@@ -30,40 +30,52 @@ export interface LongRunBlock {
   averageHeartRate?: number;
 }
 
-export type LongRunPacingPattern = 'progressive' | 'stable' | 'slowing' | 'mixed' | 'unknown';
+export type LongRunExecutionPattern =
+  | 'negative-split'
+  | 'steady'
+  | 'intentional-slowdown'
+  | 'fatigue-fade'
+  | 'slowing-unclear'
+  | 'mixed'
+  | 'unknown';
 
-export function getLongRunPacingPattern(blocks: LongRunBlock[]): LongRunPacingPattern {
-  if (blocks.length < 2) return 'unknown';
-  const paces = blocks.map((block) => block.averagePaceSecondsPerKm);
-  const range = Math.max(...paces) - Math.min(...paces);
-  const changes = paces.slice(1).map((pace, index) => pace - paces[index]);
-  if (changes.every((change) => change <= -3)) return 'progressive';
-  if (changes.every((change) => change >= 3)) return 'slowing';
-  if (range <= 10) return 'stable';
-  return 'mixed';
+export interface LongRunAssessment {
+  tier: 'long-run' | 'race-simulation';
+  blockSizeKm: 5 | 10;
+  blocks: LongRunBlock[];
+  pattern: LongRunExecutionPattern;
+  earlyPaceSecondsPerKm?: number;
+  latePaceSecondsPerKm?: number;
+  paceChangeSecondsPerKm?: number;
+  earlyHeartRate?: number;
+  lateHeartRate?: number;
+  heartRateChange?: number;
+  paceSpreadSecondsPerKm?: number;
 }
 
-/** Complete 10 km blocks from consecutive metric splits; a short tail is not
- * compared with full blocks. Missing/irregular splits are not extrapolated. */
-export function getLongRunTenKilometerBlocks(
-  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
+/** Complete blocks from consecutive metric splits. A short tail is not
+ * compared with full blocks, and missing/irregular splits are not extrapolated. */
+export function getLongRunBlocks(
+  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>,
+  blockSizeMeters: 5_000 | 10_000
 ): LongRunBlock[] {
   if (activity.distance < 20_000) return [];
   const splits = getValidSplits(activity.splits_metric);
-  const fullBlockCount = Math.floor(activity.distance / 10_000);
+  const splitsPerBlock = blockSizeMeters / 1000;
+  const fullBlockCount = Math.floor(activity.distance / blockSizeMeters);
   const blocks: LongRunBlock[] = [];
   for (let blockIndex = 0; blockIndex < fullBlockCount; blockIndex += 1) {
-    const window = splits.slice(blockIndex * 10, blockIndex * 10 + 10);
-    if (window.length !== 10 || window.some((split, index) =>
-      split.split !== blockIndex * 10 + index + 1 ||
+    const window = splits.slice(blockIndex * splitsPerBlock, blockIndex * splitsPerBlock + splitsPerBlock);
+    if (window.length !== splitsPerBlock || window.some((split, index) =>
+      split.split !== blockIndex * splitsPerBlock + index + 1 ||
       Math.abs(split.distance - 1000) > 25
     )) return [];
     const distanceMeters = window.reduce((sum, split) => sum + split.distance, 0);
     const movingTimeSeconds = window.reduce((sum, split) => sum + split.moving_time, 0);
     const hasHeartRate = window.every((split) => isPositiveFinite(split.average_heartrate));
     blocks.push({
-      startKm: blockIndex * 10,
-      endKm: (blockIndex + 1) * 10,
+      startKm: blockIndex * splitsPerBlock,
+      endKm: (blockIndex + 1) * splitsPerBlock,
       distanceMeters,
       movingTimeSeconds,
       averagePaceSecondsPerKm: movingTimeSeconds / distanceMeters * 1000,
@@ -73,6 +85,87 @@ export function getLongRunTenKilometerBlocks(
     });
   }
   return blocks;
+}
+
+export function getLongRunTenKilometerBlocks(
+  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
+): LongRunBlock[] {
+  return getLongRunBlocks(activity, 10_000);
+}
+
+function average(values: number[]): number | undefined {
+  return values.length > 0
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : undefined;
+}
+
+/**
+ * Evaluates long-run execution from broad blocks instead of promoting a short
+ * fast patch. Runs around 20 km use 5 km blocks; 30 km+ runs use 10 km blocks
+ * because they are usually race-specific simulations. A late slowdown only
+ * becomes a fatigue fade when heart rate stays high instead of falling with it.
+ */
+export function getLongRunAssessment(
+  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
+): LongRunAssessment | null {
+  if (activity.distance < 20_000) return null;
+
+  const raceSimulation = activity.distance >= 30_000;
+  const blockSizeMeters = raceSimulation ? 10_000 : 5_000;
+  const blocks = getLongRunBlocks(activity, blockSizeMeters);
+  const base: LongRunAssessment = {
+    tier: raceSimulation ? 'race-simulation' : 'long-run',
+    blockSizeKm: raceSimulation ? 10 : 5,
+    blocks,
+    pattern: 'unknown',
+  };
+  if (blocks.length < 2) return base;
+
+  const comparisonBlockCount = Math.max(1, Math.floor(blocks.length / 3));
+  const earlyBlocks = blocks.slice(0, comparisonBlockCount);
+  const lateBlocks = blocks.slice(-comparisonBlockCount);
+  const earlyPaceSecondsPerKm = average(earlyBlocks.map((block) => block.averagePaceSecondsPerKm));
+  const latePaceSecondsPerKm = average(lateBlocks.map((block) => block.averagePaceSecondsPerKm));
+  if (earlyPaceSecondsPerKm === undefined || latePaceSecondsPerKm === undefined) return base;
+
+  const earlyHeartRates = earlyBlocks.map((block) => block.averageHeartRate).filter(isPositiveFinite);
+  const lateHeartRates = lateBlocks.map((block) => block.averageHeartRate).filter(isPositiveFinite);
+  const earlyHeartRate = earlyHeartRates.length === earlyBlocks.length ? average(earlyHeartRates) : undefined;
+  const lateHeartRate = lateHeartRates.length === lateBlocks.length ? average(lateHeartRates) : undefined;
+  const paceChangeSecondsPerKm = latePaceSecondsPerKm - earlyPaceSecondsPerKm;
+  const heartRateChange = earlyHeartRate !== undefined && lateHeartRate !== undefined
+    ? lateHeartRate - earlyHeartRate
+    : undefined;
+  const paces = blocks.map((block) => block.averagePaceSecondsPerKm);
+  const paceSpreadSecondsPerKm = Math.max(...paces) - Math.min(...paces);
+  const meaningfulPaceChange = Math.max(12, earlyPaceSecondsPerKm * 0.03);
+  const steadySpread = Math.max(15, earlyPaceSecondsPerKm * 0.04);
+
+  let pattern: LongRunExecutionPattern;
+  if (paceSpreadSecondsPerKm <= steadySpread && Math.abs(paceChangeSecondsPerKm) < meaningfulPaceChange) {
+    pattern = 'steady';
+  } else if (paceChangeSecondsPerKm <= -meaningfulPaceChange) {
+    pattern = 'negative-split';
+  } else if (paceChangeSecondsPerKm >= meaningfulPaceChange) {
+    if (heartRateChange === undefined) pattern = 'slowing-unclear';
+    else if (heartRateChange <= -5) pattern = 'intentional-slowdown';
+    else if (heartRateChange >= -2) pattern = 'fatigue-fade';
+    else pattern = 'slowing-unclear';
+  } else {
+    pattern = 'mixed';
+  }
+
+  return {
+    ...base,
+    pattern,
+    earlyPaceSecondsPerKm,
+    latePaceSecondsPerKm,
+    paceChangeSecondsPerKm,
+    earlyHeartRate,
+    lateHeartRate,
+    heartRateChange,
+    paceSpreadSecondsPerKm,
+  };
 }
 
 export function formatSustainedEffortDistance(distanceMeters: number): string {

@@ -3,7 +3,11 @@ import type { StravaActivity } from '@/types';
 import type { ActivityClassification, PaceZones } from './trainingAnalysis';
 import type { StreamAnalysis } from './streamAnalysis';
 import { getPrimaryPersonalRecord } from './activityAchievements';
-import { getKeySustainedEffort, getLongRunPacingPattern, getLongRunTenKilometerBlocks } from './activityHighlights';
+import {
+  getKeySustainedEffort,
+  getLongRunAssessment,
+  type LongRunAssessment,
+} from './activityHighlights';
 
 export type AIConsistencyRule =
   | 'intensity-floor'
@@ -53,23 +57,45 @@ function formatBlockPace(secondsPerKm: number): string {
 }
 
 function getLongRunFact(activity: StravaActivity | undefined, locale: string): string {
-  if (!activity || activity.distance < 25_000) return '';
+  if (!activity || activity.distance < 20_000) return '';
   const en = locale.startsWith('en');
-  const blocks = getLongRunTenKilometerBlocks(activity);
-  const pattern = getLongRunPacingPattern(blocks);
+  const assessment = getLongRunAssessment(activity);
+  if (!assessment) return '';
+  const { blocks, blockSizeKm, pattern, paceChangeSecondsPerKm, heartRateChange } = assessment;
   const distance = (activity.distance / 1000).toFixed(1);
   const segments = blocks.map((block) =>
     `${block.startKm}–${block.endKm} km ${formatBlockPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `${en ? ', ' : '、'}${Math.round(block.averageHeartRate)} bpm` : ''}`
   ).join(en ? '; ' : '；');
+  const paceDelta = paceChangeSecondsPerKm !== undefined ? Math.abs(Math.round(paceChangeSecondsPerKm)) : null;
+  const hrDelta = heartRateChange !== undefined ? Math.round(heartRateChange) : null;
   const trend = en
-    ? ({ progressive: 'progressively faster', stable: 'broadly stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'not verifiable' } as const)[pattern]
-    : ({ progressive: '逐段渐快', stable: '整体稳定', slowing: '逐段放慢', mixed: '存在起伏', unknown: '暂无法核验' } as const)[pattern];
+    ? ({
+        'negative-split': `the later blocks were ${paceDelta}s/km faster, a well-executed negative split`,
+        steady: 'pace stayed broadly steady across the full distance',
+        'intentional-slowdown': `the later blocks were ${paceDelta}s/km slower while HR fell ${Math.abs(hrDelta ?? 0)} bpm, which is consistent with an intentional slowdown`,
+        'fatigue-fade': `the later blocks were ${paceDelta}s/km slower without a matching HR drop, indicating a fatigue fade`,
+        'slowing-unclear': `the later blocks were ${paceDelta}s/km slower, but the available HR data cannot distinguish an intentional slowdown from fatigue`,
+        mixed: 'the block pacing was variable without one clear direction',
+        unknown: 'the block pattern is not verifiable',
+      } as const)[pattern]
+    : ({
+        'negative-split': `后程比前段快 ${paceDelta} 秒/公里，属于完成出色的前慢后快`,
+        steady: '全程分段配速基本均匀',
+        'intentional-slowdown': `后程比前段慢 ${paceDelta} 秒/公里，同时心率下降 ${Math.abs(hrDelta ?? 0)} bpm，更符合主动降速`,
+        'fatigue-fade': `后程比前段慢 ${paceDelta} 秒/公里，心率却没有相应下降，呈现疲劳性掉速`,
+        'slowing-unclear': `后程比前段慢 ${paceDelta} 秒/公里，但现有心率数据不足以区分主动降速与疲劳掉速`,
+        mixed: '各分段有起伏，未形成单一配速趋势',
+        unknown: '暂无法核验分段趋势',
+      } as const)[pattern];
   const heartRate = activity.average_heartrate
     ? (en ? `average HR ${Math.round(activity.average_heartrate)} bpm` : `全程平均心率 ${Math.round(activity.average_heartrate)} bpm`)
     : (en ? 'HR data unavailable' : '缺少全程心率数据');
+  const tier = assessment.tier === 'race-simulation'
+    ? (en ? 'very long run, often used as a race-specific simulation' : '超长距离训练（通常用于比赛专项模拟）')
+    : (en ? 'long run' : '长距离训练');
   return en
-    ? `This ${distance} km run carries high total volume even if the pace was easy; it is not an easy session overall. ${segments ? `${segments}; the complete 10 km blocks were ${trend}.` : 'Complete 10 km splits are unavailable, so a block trend cannot be claimed.'} Judge load using distance, pace and ${heartRate}.`
-    : `本次 ${distance} 公里属于高总量负荷，即使配速处于轻松区，也不能把整堂课评价为轻松。${segments ? `${segments}；完整的每 10 公里分段${trend}。` : '缺少完整的 10 公里分段，暂不判断逐段趋势。'}总负荷需结合距离、配速和${heartRate}判断。`;
+    ? `This ${distance} km ${tier} carries high total volume even if the pace was easy. ${segments ? `Across complete ${blockSizeKm} km blocks (${segments}), ${trend}.` : `Complete ${blockSizeKm} km blocks are unavailable, so a pacing pattern cannot be claimed.`} Judge load using distance, pace and ${heartRate}.`
+    : `本次 ${distance} 公里属于高总量负荷的${tier}，即使配速处于轻松区，也不能把整堂课评价为轻松。${segments ? `按完整 ${blockSizeKm} 公里分段（${segments}）看，${trend}。` : `缺少完整的 ${blockSizeKm} 公里分段，暂不判断配速结构。`}总负荷需结合距离、配速，并参考${heartRate}来判断。`;
 }
 
 function prioritizeLongRunSummary(summary: string, activity: StravaActivity | undefined, locale: string): string {
@@ -88,23 +114,46 @@ function prioritizeLongRunSummary(summary: string, activity: StravaActivity | un
 }
 
 function getLongRunExecution(activity: StravaActivity | undefined, locale: string): string | null {
-  if (!activity || activity.distance < 25_000) return null;
-  const blocks = getLongRunTenKilometerBlocks(activity);
+  if (!activity || activity.distance < 20_000) return null;
+  const assessment = getLongRunAssessment(activity);
+  if (!assessment) return null;
+  const { blocks, blockSizeKm, pattern, paceChangeSecondsPerKm, heartRateChange } = assessment;
   if (blocks.length < 2) return null;
-  const pattern = getLongRunPacingPattern(blocks);
   const paces = blocks.map((block) =>
     `${block.startKm}–${block.endKm}km ${formatBlockPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `、${Math.round(block.averageHeartRate)}bpm` : ''}`
   ).join(locale.startsWith('en') ? '; ' : '、');
-  const trend = locale.startsWith('en')
-    ? ({ progressive: 'progressively faster', stable: 'stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'unclear' } as const)[pattern]
-    : ({ progressive: '逐段渐快', stable: '基本稳定', slowing: '逐段放慢', mixed: '有起伏', unknown: '趋势不明' } as const)[pattern];
+  const paceDelta = Math.abs(Math.round(paceChangeSecondsPerKm ?? 0));
+  const hrDelta = Math.round(heartRateChange ?? 0);
+  const verdict = locale.startsWith('en')
+    ? ({
+        'negative-split': `The later section was ${paceDelta}s/km faster: a strong negative split and excellent long-run execution.`,
+        steady: 'Pace stayed even across the full distance, showing good long-run control.',
+        'intentional-slowdown': `The later section was ${paceDelta}s/km slower while HR fell ${Math.abs(hrDelta)} bpm; this looks like an intentional ease-down rather than a bonk, so execution remained sound.`,
+        'fatigue-fade': `The later section was ${paceDelta}s/km slower while HR stayed high; this is consistent with a fatigue fade, so execution needs improvement.`,
+        'slowing-unclear': `The later section was ${paceDelta}s/km slower, but HR evidence is insufficient to tell an intentional ease-down from a fatigue fade.`,
+        mixed: 'The block pacing varied without a clear steady or progressive strategy, so execution was usable but not especially clean.',
+        unknown: 'There is not enough complete block data to judge execution.',
+      } as const)[pattern]
+    : ({
+        'negative-split': `后程比前段快 ${paceDelta} 秒/公里，前慢后快的节奏分配很出色，这次长距离完成到位。`,
+        steady: '全程分段配速基本均匀，长距离节奏控制良好。',
+        'intentional-slowdown': `后程比前段慢 ${paceDelta} 秒/公里，但心率同步下降 ${Math.abs(hrDelta)} bpm，更像主动降速而非跑崩，整体执行仍然合理。`,
+        'fatigue-fade': `后程比前段慢 ${paceDelta} 秒/公里，心率却维持高位，符合疲劳性掉速，完成质量需要改进。`,
+        'slowing-unclear': `后程比前段慢 ${paceDelta} 秒/公里，但心率证据不足，暂时不能把它定性为主动降速或跑崩。`,
+        mixed: '各分段有明显起伏，未形成匀速或后程提速策略，整体完成可用但节奏不够清晰。',
+        unknown: '完整分段不足，暂时无法判断长距离执行质量。',
+      } as const)[pattern];
   return locale.startsWith('en')
-    ? `Complete 10 km blocks: ${paces}; ${trend}. Judge execution across the full distance, not a short fast patch.`
-    : `完整 10 公里分段：${paces}，${trend}。应看全程配速稳定性，而非局部 3 公里快段。`;
+    ? `Complete ${blockSizeKm} km blocks: ${paces}. ${verdict}`
+    : `完整 ${blockSizeKm} 公里分段：${paces}。${verdict}`;
 }
 
-function getUnexplainedHeartRateRise(streamAnalysis?: StreamAnalysis | null): number | null {
+function getUnexplainedHeartRateRise(
+  streamAnalysis?: StreamAnalysis | null,
+  longRunAssessment?: LongRunAssessment | null
+): number | null {
   if (!streamAnalysis || streamAnalysis.avgHRDrift < 10) return null;
+  if (longRunAssessment?.pattern === 'negative-split') return null;
   const paceExplainsRise = streamAnalysis.pacePattern === 'interval'
     || streamAnalysis.pacePattern === 'progression'
     || streamAnalysis.pacePattern === 'warmup-cooldown';
@@ -130,6 +179,18 @@ function getExecutionQuality(
     if (spread > 60 || fade > 45) return 'poor';
     if (spread <= 20 && fade <= 15) return 'excellent';
     if (spread <= 35 && fade <= 25) return 'good';
+    return 'fair';
+  }
+
+  const longRunAssessment = activity ? getLongRunAssessment(activity) : null;
+  if (longRunAssessment && longRunAssessment.blocks.length >= 2) {
+    if (longRunAssessment.pattern === 'negative-split') return 'excellent';
+    if (longRunAssessment.pattern === 'steady') {
+      if ((longRunAssessment.heartRateChange ?? 0) >= 20) return 'fair';
+      return 'good';
+    }
+    if (longRunAssessment.pattern === 'intentional-slowdown') return 'good';
+    if (longRunAssessment.pattern === 'fatigue-fade') return 'poor';
     return 'fair';
   }
 
@@ -307,7 +368,8 @@ export function validateAIAnalysisConsistency(
   const finalIntensity = getFinalIntensity(analysis.intensity, classification, context.activity);
   const minimumRecoveryHours = classification.loadAdjustment?.minimumRecoveryHours ?? 0;
   const finalRecoveryHours = Math.max(analysis.recoveryHours || 0, minimumRecoveryHours);
-  const heartRateRise = getUnexplainedHeartRateRise(streamAnalysis);
+  const longRunAssessment = context.activity ? getLongRunAssessment(context.activity) : null;
+  const heartRateRise = getUnexplainedHeartRateRise(streamAnalysis, longRunAssessment);
   const executionQuality = getExecutionQuality(analysis, context, heartRateRise);
 
   if (finalIntensity !== analysis.intensity) correctedRules.add('intensity-floor');

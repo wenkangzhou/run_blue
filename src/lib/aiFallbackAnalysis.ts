@@ -4,7 +4,7 @@ import type { ActivityClassification, TrainingProfile } from './trainingAnalysis
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext, getThermalContext } from './weather';
-import { getLongRunPacingPattern, getLongRunTenKilometerBlocks } from './activityHighlights';
+import { getLongRunAssessment } from './activityHighlights';
 
 function getZoneDescription(
   zone: ActivityClassification['paceZone'],
@@ -90,18 +90,41 @@ export function buildExecutionSummary(
       : `${verdict}${reps} 个快段平均 ${workPace}/km，中间穿插 ${recoveries} 个恢复圈，${lateRep}；${limitation}`;
   }
 
-  if (activity.distance >= 25_000) {
-    const blocks = getLongRunTenKilometerBlocks(activity);
-    const pattern = getLongRunPacingPattern(blocks);
+  if (activity.distance >= 20_000) {
+    const assessment = getLongRunAssessment(activity);
+    if (!assessment) {
+      return en
+        ? 'There is not enough block data to assess long-run execution.'
+        : '分段数据不足，暂时无法判断长距离执行质量。';
+    }
+    const { blocks, blockSizeKm, pattern, paceChangeSecondsPerKm, heartRateChange } = assessment;
     const blockText = blocks.map((block) =>
       `${block.startKm}–${block.endKm}km ${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `、${Math.round(block.averageHeartRate)} bpm` : ''}`
     ).join(en ? '; ' : '；');
-    const trend = en
-      ? ({ progressive: 'progressively faster', stable: 'stable', slowing: 'progressively slower', mixed: 'variable', unknown: 'unavailable' } as const)[pattern]
-      : ({ progressive: '逐段渐快', stable: '整体稳定', slowing: '逐段放慢', mixed: '有起伏', unknown: '无法判断' } as const)[pattern];
+    const paceDelta = Math.abs(Math.round(paceChangeSecondsPerKm ?? 0));
+    const hrDelta = Math.round(heartRateChange ?? 0);
+    const verdict = en
+      ? ({
+          'negative-split': `The later section was ${paceDelta}s/km faster, an excellent negative split.`,
+          steady: 'Pace stayed steady across the full distance, showing good control.',
+          'intentional-slowdown': `The later section was ${paceDelta}s/km slower while HR fell ${Math.abs(hrDelta)} bpm, which looks intentional rather than a bonk.`,
+          'fatigue-fade': `The later section was ${paceDelta}s/km slower while HR stayed high, indicating a fatigue fade.`,
+          'slowing-unclear': `The later section slowed ${paceDelta}s/km, but HR evidence is insufficient to distinguish intent from fatigue.`,
+          mixed: 'The block pacing varied without a clear steady or progressive strategy.',
+          unknown: 'There are not enough complete blocks to verify the pacing structure.',
+        } as const)[pattern]
+      : ({
+          'negative-split': `后程比前段快 ${paceDelta} 秒/公里，前慢后快的节奏分配很出色。`,
+          steady: '全程分段配速基本均匀，长距离节奏控制良好。',
+          'intentional-slowdown': `后程比前段慢 ${paceDelta} 秒/公里，同时心率下降 ${Math.abs(hrDelta)} bpm，更像主动降速而非跑崩。`,
+          'fatigue-fade': `后程比前段慢 ${paceDelta} 秒/公里，心率却维持高位，符合疲劳性掉速。`,
+          'slowing-unclear': `后程比前段慢 ${paceDelta} 秒/公里，但心率证据不足，暂不能区分主动降速与跑崩。`,
+          mixed: '各分段有起伏，未形成清晰的匀速或后程提速策略。',
+          unknown: '完整分段不足，暂时无法核验配速结构。',
+        } as const)[pattern];
     return en
-      ? `${blockText ? `${blockText}. Complete 10 km blocks were ${trend}.` : 'Complete 10 km splits are unavailable; pacing trend cannot be verified.'} Judge the full-session cost from distance, pace and heart rate, not a short fast patch.`
-      : `${blockText ? `${blockText}，完整的每 10 公里分段${trend}。` : '缺少完整的 10 公里分段，无法核验逐段配速。'}应结合距离、配速和心率评估整堂课负荷，不以局部快段代替整体表现。`;
+      ? `${blockText ? `Complete ${blockSizeKm} km blocks: ${blockText}. ${verdict}` : `Complete ${blockSizeKm} km blocks are unavailable; pacing structure cannot be verified.`}`
+      : `${blockText ? `完整 ${blockSizeKm} 公里分段：${blockText}。${verdict}` : `缺少完整的 ${blockSizeKm} 公里分段，无法核验配速结构。`}`;
   }
 
   if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {

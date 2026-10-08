@@ -100,7 +100,7 @@ test.after(() => {
 
 const { buildProfessionalPrompt } = require(path.join(tempDir, 'aiPrompt.js'));
 
-test('32 km prompt prioritizes complete 10 km blocks, pace stability and total load', () => {
+test('32 km prompt treats the full-block negative split as successful race-simulation execution', () => {
   const splits = Array.from({ length: 32 }, (_, index) => {
     const pace = index < 10 ? 360 : index < 20 ? 345 : index < 30 ? 330 : 285;
     return {
@@ -127,9 +127,11 @@ test('32 km prompt prioritizes complete 10 km blocks, pace stability and total l
   assert.match(prompt, /0–10 公里：6'00"\/km/);
   assert.match(prompt, /10–20 公里：5'45"\/km/);
   assert.match(prompt, /20–30 公里：5'30"\/km/);
-  assert.match(prompt, /完整 10 公里分段走势：逐段渐快/);
+  assert.match(prompt, /高总量超长距离（大概率为比赛专项模拟）/);
+  assert.match(prompt, /完整 10 公里分段结构：前慢后快/);
+  assert.match(prompt, /全程匀速与前慢后快都属于完成良好/);
   assert.match(prompt, /不能将整堂课评价为“轻松”/);
-  assert.match(prompt, /3 公里快段占比太小/);
+  assert.match(prompt, /局部短距离快段不能取代全程结论/);
 });
 
 function makeActivity(overrides = {}) {
