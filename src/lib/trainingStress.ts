@@ -1,5 +1,6 @@
 import type { StravaActivity } from '@/types';
 import { buildActivityWeatherContext } from './weather';
+import type { StreamAnalysis } from './streamAnalysis';
 import type { TrainingLoadSummary } from './trainingLoad';
 import type {
   ActivityClassification,
@@ -11,6 +12,7 @@ export interface TrainingLoadContext {
   activityLoad: number;
   summary: TrainingLoadSummary;
   maxHeartRate?: number | null;
+  streamAnalysis?: StreamAnalysis | null;
 }
 
 const INTENSITY_RANK: Record<ActivityClassification['intensity'], number> = {
@@ -128,13 +130,44 @@ export function adjustClassificationForTrainingStress(
     && activity.average_heartrate > 0
       ? activity.average_heartrate / trainingLoadContext.maxHeartRate
       : null;
+  const streamAnalysis = trainingLoadContext?.streamAnalysis;
+  const highHeartRateSharePercent = streamAnalysis
+    ? (streamAnalysis.hrZoneDistribution.z4 ?? 0) + (streamAnalysis.hrZoneDistribution.z5 ?? 0)
+    : null;
+  const highHeartRateSegmentCount = streamAnalysis
+    ? streamAnalysis.segments.filter((segment) => segment.zone === 'z4' || segment.zone === 'z5').length
+    : 0;
+  const sustainedHighHeartRate = highHeartRateSharePercent !== null
+    && highHeartRateSharePercent >= 30
+    && highHeartRateSegmentCount >= 2;
+  const elevatedHeartRateSharePercent = streamAnalysis
+    ? highHeartRateSharePercent! + (streamAnalysis.hrZoneDistribution.z3 ?? 0)
+    : null;
+  const sustainedElevatedHeartRate = elevatedHeartRateSharePercent !== null
+    && elevatedHeartRateSharePercent >= 40
+    && streamAnalysis!.segments.length >= 3;
   const heartRateIntensityFloor: ActivityClassification['intensity'] | null = heartRateRatio !== null
-    ? heartRateRatio > 0.89
+    ? heartRateRatio > 0.89 || sustainedHighHeartRate
       ? 'hard'
-      : heartRateRatio > 0.81
+      : heartRateRatio > 0.81 || sustainedElevatedHeartRate
         ? 'moderate'
         : null
-    : null;
+    : sustainedHighHeartRate
+      ? 'hard'
+      : sustainedElevatedHeartRate
+        ? 'moderate'
+        : null;
+  const distanceKilometers = activity.distance / 1000;
+  const durationMinutes = activity.moving_time / 60;
+  const volumeContext: ActivityLoadAdjustment['volumeContext'] =
+    distanceKilometers >= 28 || durationMinutes >= 150
+      ? 'very-long'
+      : distanceKilometers >= 15 || durationMinutes >= 90
+        ? 'long'
+        : 'normal';
+  const volumeIntensityFloor: ActivityClassification['intensity'] | null = volumeContext === 'normal'
+    ? null
+    : 'moderate';
   const hasDirectControlledEffortSignal = (heartRateRatio !== null && heartRateRatio <= 0.81)
     || (relativeEffort !== null && relativeEffort <= 35);
   const loadDensityIntensityFloor: ActivityClassification['intensity'] | null = activityTrainingLoadPerHour !== null
@@ -145,9 +178,17 @@ export function adjustClassificationForTrainingStress(
         ? 'moderate'
         : null
     : null;
-  const currentSessionIntensityFloor = heartRateIntensityFloor && loadDensityIntensityFloor
-    ? maxIntensity(heartRateIntensityFloor, loadDensityIntensityFloor)
-    : heartRateIntensityFloor ?? loadDensityIntensityFloor;
+  let currentSessionIntensityFloor: ActivityClassification['intensity'] | null = heartRateIntensityFloor;
+  if (loadDensityIntensityFloor) {
+    currentSessionIntensityFloor = currentSessionIntensityFloor
+      ? maxIntensity(currentSessionIntensityFloor, loadDensityIntensityFloor)
+      : loadDensityIntensityFloor;
+  }
+  if (volumeIntensityFloor) {
+    currentSessionIntensityFloor = currentSessionIntensityFloor
+      ? maxIntensity(currentSessionIntensityFloor, volumeIntensityFloor)
+      : volumeIntensityFloor;
+  }
   const hasControlledEffortSignal = hasDirectControlledEffortSignal
     || (activityTrainingLoadPerHour !== null && activityTrainingLoadPerHour < 42);
   const sessionEffortControlled = classification.intensity === 'easy'
@@ -179,12 +220,21 @@ export function adjustClassificationForTrainingStress(
     : adjustedIntensity === 'moderate'
       ? 36
       : 0;
+  const volumeRecoveryFloor = volumeContext === 'very-long'
+    ? 48
+    : volumeContext === 'long'
+      ? 36
+      : 0;
   const cumulativeRecoveryFloor = cumulativeLoadConcern === 'high'
     ? 24
     : cumulativeLoadConcern === 'watch'
       ? 18
       : 0;
-  const minimumRecoveryHours = Math.max(sessionRecoveryFloor, cumulativeRecoveryFloor);
+  const minimumRecoveryHours = Math.max(
+    sessionRecoveryFloor,
+    volumeRecoveryFloor,
+    cumulativeRecoveryFloor
+  );
 
   const loadAdjustment: ActivityLoadAdjustment = {
     applied,
@@ -216,6 +266,11 @@ export function adjustClassificationForTrainingStress(
       : round(activityTrainingLoadPerHour, 1),
     relativeEffort,
     averageHeartRatePercentMax: heartRateRatio === null ? null : round(heartRateRatio * 100, 0),
+    highHeartRateSharePercent,
+    sustainedHighHeartRate,
+    distanceKilometers: round(distanceKilometers, 2),
+    durationMinutes: round(durationMinutes, 1),
+    volumeContext,
     consecutiveRunDays,
     minimumRecoveryHours,
   };
@@ -228,6 +283,7 @@ export function adjustClassificationForTrainingStress(
           ...classification.workoutTypeEvidence,
           ...(heartRateIntensityFloor ? ['average heart rate raises current-session effort'] : []),
           ...(loadDensityIntensityFloor ? ['activity load density raises current-session effort'] : []),
+          ...(volumeIntensityFloor ? ['distance or duration raises total session cost'] : []),
           ...(thermalPacePressure ? ['heat and pace raise current-session effort'] : []),
         ]
       : classification.workoutTypeEvidence,

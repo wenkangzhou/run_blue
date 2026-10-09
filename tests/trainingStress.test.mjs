@@ -280,7 +280,7 @@ test('uses per-hour activity load when max heart rate is unavailable', () => {
   assert.ok(adjusted.workoutTypeEvidence.includes('activity load density raises current-session effort'));
 });
 
-test('does not turn high total load from a long easy duration into high intensity', () => {
+test('uses long distance or duration to raise total session cost without calling it hard', () => {
   const adjusted = adjustClassificationForTrainingStress(
     makeActivity(400, {
       distance: 18000,
@@ -296,7 +296,105 @@ test('does not turn high total load from a long easy duration into high intensit
     }
   );
 
-  assert.equal(adjusted.intensity, 'easy');
-  assert.equal(adjusted.loadAdjustment.applied, false);
+  assert.equal(adjusted.intensity, 'moderate');
+  assert.equal(adjusted.loadAdjustment.applied, true);
   assert.equal(adjusted.loadAdjustment.activityTrainingLoadPerHour, 30);
+  assert.equal(adjusted.loadAdjustment.volumeContext, 'long');
+  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 36);
+});
+
+test('does not promote one isolated high-heart-rate kilometer to hard intensity', () => {
+  const segments = Array.from({ length: 10 }, (_, index) => ({
+    km: index,
+    avgHR: index === 4 ? 176 : 138,
+    avgPaceSecPerKm: index === 4 ? 278 : 390,
+    zone: index === 4 ? 'z5' : 'z2',
+    paceVsAvgPct: 0,
+  }));
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(390, {
+      distance: 10000,
+      moving_time: 3900,
+      average_heartrate: 142,
+      max_heartrate: 176,
+      weather_context: {
+        temperatureC: 20,
+        feelsLikeC: 20,
+        humidityPercent: 55,
+        sources: ['strava'],
+        source: 'strava',
+        hasWeather: true,
+        thermalSeverity: 'neutral',
+      },
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    {
+      ...makeTrainingLoadContext({ state: 'balanced', loadRatio: 1, consecutiveRunDays: 1 }),
+      activityLoad: 34,
+      maxHeartRate: 182,
+      streamAnalysis: {
+        segments,
+        hrZoneDistribution: { z1: 0, z2: 90, z3: 0, z4: 0, z5: 10 },
+        heartRateZoneBasis: 'maxHeartRate',
+        pacePattern: 'mixed',
+        patternConfidence: 'mixed',
+        avgHRDrift: 1,
+        hasPaceSurges: true,
+        hasHRDrift: false,
+      },
+    }
+  );
+
+  assert.equal(adjusted.intensity, 'easy');
+  assert.equal(adjusted.loadAdjustment.highHeartRateSharePercent, 10);
+  assert.equal(adjusted.loadAdjustment.sustainedHighHeartRate, false);
+});
+
+test('uses sustained Z4-Z5 exposure as hard-intensity evidence', () => {
+  const segments = Array.from({ length: 10 }, (_, index) => ({
+    km: index,
+    avgHR: index >= 5 ? 166 : 146,
+    avgPaceSecPerKm: index >= 5 ? 300 : 360,
+    zone: index >= 5 ? 'z4' : 'z2',
+    paceVsAvgPct: 0,
+  }));
+  const adjusted = adjustClassificationForTrainingStress(
+    makeActivity(330, {
+      distance: 10000,
+      moving_time: 3300,
+      average_heartrate: 150,
+      weather_context: {
+        temperatureC: 20,
+        feelsLikeC: 20,
+        humidityPercent: 55,
+        sources: ['strava'],
+        source: 'strava',
+        hasWeather: true,
+        thermalSeverity: 'neutral',
+      },
+    }),
+    makeProfile([40000, 40000, 40000, 40000]),
+    makeClassification(),
+    {
+      ...makeTrainingLoadContext({ state: 'balanced', loadRatio: 1, consecutiveRunDays: 1 }),
+      activityLoad: 50,
+      maxHeartRate: 182,
+      streamAnalysis: {
+        segments,
+        hrZoneDistribution: { z1: 0, z2: 50, z3: 0, z4: 50, z5: 0 },
+        heartRateZoneBasis: 'maxHeartRate',
+        pacePattern: 'progression',
+        patternConfidence: 'progression',
+        avgHRDrift: 20,
+        hasPaceSurges: false,
+        hasHRDrift: false,
+      },
+    }
+  );
+
+  assert.equal(adjusted.intensity, 'hard');
+  assert.equal(adjusted.loadAdjustment.highHeartRateSharePercent, 50);
+  assert.equal(adjusted.loadAdjustment.sustainedHighHeartRate, true);
+  assert.equal(adjusted.loadAdjustment.minimumRecoveryHours, 48);
 });

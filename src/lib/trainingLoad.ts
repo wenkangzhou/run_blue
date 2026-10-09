@@ -1,5 +1,6 @@
 import type { StravaActivity } from '@/types';
 import { formatLocalDateKey, getActivityDateKey, getActivityTimestamp } from '@/lib/dates';
+import type { PaceZones } from './trainingAnalysis';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -46,7 +47,28 @@ function getFallbackIntensity(activity: StravaActivity): number {
   return 0.66;
 }
 
-export function calculateActivityTrainingLoad(activity: StravaActivity, lthr?: number | null): number {
+function getPaceIntensity(activity: StravaActivity, paceZones?: PaceZones | null): number | null {
+  if (!paceZones || activity.distance <= 0 || activity.moving_time <= 0) return null;
+  const pace = activity.moving_time / (activity.distance / 1000);
+  const paceIntensity = pace <= paceZones.repetition.max
+    ? 1.12
+    : pace <= paceZones.interval.max
+      ? 1.05
+      : pace <= paceZones.threshold.max
+        ? 0.95
+        : pace <= paceZones.marathon.max
+          ? 0.82
+          : 0.68;
+  if (activity.workout_type === 1) return Math.max(1.05, paceIntensity);
+  if (activity.workout_type === 3) return Math.max(0.9, paceIntensity);
+  return paceIntensity;
+}
+
+export function calculateActivityTrainingLoad(
+  activity: StravaActivity,
+  lthr?: number | null,
+  paceZones?: PaceZones | null
+): number {
   if (!isRun(activity) || activity.moving_time <= 0) return 0;
 
   const durationMinutes = activity.moving_time / 60;
@@ -56,10 +78,16 @@ export function calculateActivityTrainingLoad(activity: StravaActivity, lthr?: n
     && activity.average_heartrate
     && activity.average_heartrate > 0
   );
-  const intensity = hasUsableHeartRate
+  const heartRateIntensity = hasUsableHeartRate
     ? clamp(activity.average_heartrate! / lthr!, 0.5, 1.18)
-    : getFallbackIntensity(activity);
+    : null;
+  const paceIntensity = getPaceIntensity(activity, paceZones);
+  const intensity = heartRateIntensity !== null && paceIntensity !== null
+    ? heartRateIntensity * 0.7 + paceIntensity * 0.3
+    : heartRateIntensity ?? paceIntensity ?? getFallbackIntensity(activity);
 
+  // TRIMP-like session load: duration captures volume, while squared effort
+  // makes sustained faster pace or higher cardiac cost progressively dearer.
   return Math.max(1, Math.round(durationMinutes * intensity * intensity));
 }
 
@@ -95,7 +123,8 @@ function calculateConsecutiveRunDays(
 export function calculateTrainingLoadSummary(
   activities: StravaActivity[],
   lthr?: number | null,
-  now = new Date()
+  now = new Date(),
+  paceZones?: PaceZones | null
 ): TrainingLoadSummary {
   const nowTime = now.getTime();
   const allRuns = activities
@@ -103,7 +132,7 @@ export function calculateTrainingLoadSummary(
     .map((activity) => ({
       activity,
       timestamp: getActivityTimestamp(activity),
-      load: calculateActivityTrainingLoad(activity, lthr),
+      load: calculateActivityTrainingLoad(activity, lthr, paceZones),
     }))
     .filter((item) => item.timestamp <= nowTime)
     .sort((a, b) => b.timestamp - a.timestamp);

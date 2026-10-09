@@ -637,7 +637,7 @@ test('parseAIResponse extracts markdown JSON and overrides comparison with compu
   );
 
   assert.equal(result.summary, 'AI summary');
-  assert.equal(result.intensity, 'easy');
+  assert.equal(result.intensity, 'moderate');
   assert.equal(result.recoveryHours, 12);
   assert.match(result.comparisonToAverage, /30s\/km faster than historical average/);
   assert.equal(result.suggestions[0], 'keep going');
@@ -1498,6 +1498,35 @@ test('does not downgrade excellent easy execution because warnings exist', () =>
   assert.equal(analysis.intensity, 'easy');
   assert.equal(analysis.executionQuality, 'excellent');
   assert.equal(analysis.warnings.length, 1);
+});
+
+test('does not let AI promote one local heart-rate peak above deterministic session intensity', () => {
+  const analysis = normalizeAIAnalysisForDisplay(
+    {
+      summary: '第5公里心率达到176bpm，因此整堂训练属于高强度。',
+      executionSummary: '局部心率峰值较高。',
+      intensity: 'hard',
+      recoveryHours: 48,
+      suggestions: [],
+      warnings: [],
+      paceZoneAnalysis: { zone: 'E', description: '轻松区间', appropriateness: 'appropriate' },
+      trainingLoadContext: '',
+      similarActivitiesInsight: '',
+      nextWorkoutSuggestion: '',
+    },
+    makeActivity({ distance: 10000, moving_time: 3900, average_heartrate: 142, max_heartrate: 176 }),
+    makeClassification({ workoutType: 'easy', intensity: 'easy', paceZone: 'E' }),
+    'zh',
+    makeProfile().paceZones,
+    {
+      avgHRDrift: 1,
+      hasHRDrift: false,
+      pacePattern: 'mixed',
+      hrZoneDistribution: { z1: 10, z2: 80, z3: 0, z4: 0, z5: 10 },
+    }
+  );
+
+  assert.equal(analysis.intensity, 'easy');
 });
 
 test('generateFallbackAnalysis uses training deficiencies for normal runs', () => {

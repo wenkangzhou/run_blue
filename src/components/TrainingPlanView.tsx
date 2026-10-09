@@ -18,9 +18,11 @@ import {
 } from '@/lib/trainingPlanExecution';
 import {
   calculatePaceZones,
+  formatTrainingDistance,
   getDistanceLabel,
   getDistanceLabelEn,
   getTrainingAbilityGroup,
+  roundTrainingDistance,
 } from '@/lib/trainingPlan';
 import { TrainingPlanCard } from './TrainingPlanCard';
 import { TrainingSessionEditor } from './TrainingSessionEditor';
@@ -164,16 +166,12 @@ function getSessionDescriptionLead(description: string) {
   return description.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
 }
 
-function formatDistance(distance: number) {
-  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
-}
-
 function getSessionVolumeLabel(session: TrainingSession, isZh: boolean) {
-  const total = `${formatDistance(session.distance)}km`;
+  const total = `${formatTrainingDistance(session.distance)}km`;
   if (!session.workDistance) {
     return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
   }
-  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  const work = `${formatTrainingDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
   return isZh ? `全课约 ${total} · 主训练 ${work}` : `~${total} total · ${work} quality`;
 }
 
@@ -237,7 +235,7 @@ function ClassSchedulePreview({
               <p className="mt-2 font-mono text-base font-black">{session ? getSessionShort(session, isZh) : '-'}</p>
               {session && session.type !== 'rest' && (
                 <p className="mt-1 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
-                  {session.distance > 0 ? `${session.distance}km` : session.duration}
+                  {session.distance > 0 ? `${formatTrainingDistance(session.distance)}km` : session.duration}
                 </p>
               )}
             </div>
@@ -261,7 +259,7 @@ export function TrainingPlanView({
     ? getDistanceLabel(plan.goal.distance)
     : getDistanceLabelEn(plan.goal.distance);
   const targetPaceSec = plan.goal.targetTimeSeconds / DISTANCE_KM[plan.goal.distance];
-  const totalDistance = plan.weeks.reduce((sum, week) => sum + week.totalDistance, 0);
+  const totalDistance = roundTrainingDistance(plan.weeks.reduce((sum, week) => sum + week.totalDistance, 0));
   const peakWeek = plan.weeks.reduce((best, week) => (
     week.totalDistance > best.totalDistance ? week : best
   ), plan.weeks[0]);
@@ -555,7 +553,7 @@ export function TrainingPlanView({
             <ExecutionMetric
               icon={<TrendingUp size={13} className="text-blue-600" />}
               label={t('trainingPlan.actualVsPlanned', '实际 / 计划')}
-              value={`${Math.round(execution.actualDueDistance)}/${Math.round(execution.plannedDueDistance)}km`}
+              value={`${formatTrainingDistance(execution.actualDueDistance)}/${formatTrainingDistance(execution.plannedDueDistance)}km`}
             />
           </div>
         ) : (
@@ -582,7 +580,7 @@ export function TrainingPlanView({
               </p>
             </div>
             <div className="shrink-0 text-right font-mono">
-              <p className="text-lg font-bold">{totalDistance}km</p>
+              <p className="text-lg font-bold">{formatTrainingDistance(totalDistance)}km</p>
               <p className="text-[10px] text-zinc-500">{t('trainingPlan.totalVolume', '总量')}</p>
             </div>
           </div>
@@ -596,7 +594,7 @@ export function TrainingPlanView({
                     currentWeek === week.week ? 'ring-2 ring-zinc-900 dark:ring-zinc-100' : '',
                   ].join(' ')}
                   style={{ height: `${Math.max(12, (week.totalDistance / maxWeekDistance) * 96)}px` }}
-                  title={`${t('trainingPlan.week', { week: week.week, defaultValue: `Week ${week.week}` })}: ${week.totalDistance}km`}
+                  title={`${t('trainingPlan.week', { week: week.week, defaultValue: `Week ${week.week}` })}: ${formatTrainingDistance(week.totalDistance)}km`}
                 />
                 <span className="font-mono text-[9px] text-zinc-400">{week.week}</span>
               </div>
@@ -634,7 +632,7 @@ export function TrainingPlanView({
             <div className="border border-zinc-100 px-3 py-3 dark:border-zinc-800">
               <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.peakWeek', '峰值周')}</p>
               <p className="mt-1 font-mono text-base font-bold">
-                {t('trainingPlan.week', { week: peakWeek.week, defaultValue: `Week ${peakWeek.week}` })} · {peakWeek.totalDistance}km
+                {t('trainingPlan.week', { week: peakWeek.week, defaultValue: `Week ${peakWeek.week}` })} · {formatTrainingDistance(peakWeek.totalDistance)}km
               </p>
             </div>
           </div>
@@ -649,7 +647,7 @@ export function TrainingPlanView({
                 {t('trainingPlan.thisWeekFocus', '本周重点')}
               </h3>
               <p className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                {t('trainingPlan.week', { week: currentWeekPlan.week, defaultValue: `Week ${currentWeekPlan.week}` })} · {phaseLabel[currentWeekPlan.phase]} · {currentWeekPlan.totalDistance}km
+                {t('trainingPlan.week', { week: currentWeekPlan.week, defaultValue: `Week ${currentWeekPlan.week}` })} · {phaseLabel[currentWeekPlan.phase]} · {formatTrainingDistance(currentWeekPlan.totalDistance)}km
               </p>
             </div>
             <LineChart size={18} className="text-blue-600 dark:text-blue-300" />
@@ -660,7 +658,7 @@ export function TrainingPlanView({
               <ExecutionMetric
                 icon={<TrendingUp size={13} className="text-blue-600" />}
                 label={t('trainingPlan.weekDistanceComparison')}
-                value={`${Math.round(currentWeekExecution.actualDueDistance)}/${Math.round(currentWeekExecution.plannedDueDistance)}km`}
+                value={`${formatTrainingDistance(currentWeekExecution.actualDueDistance)}/${formatTrainingDistance(currentWeekExecution.plannedDueDistance)}km`}
               />
               <ExecutionMetric
                 icon={<CheckCircle2 size={13} className="text-emerald-600" />}
@@ -692,7 +690,7 @@ export function TrainingPlanView({
                   {getSessionTitle(session, isZh, t)}
                 </p>
                 <p className="mt-1 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                  {session.distance > 0 ? `${session.distance}km` : session.duration}
+                  {session.distance > 0 ? `${formatTrainingDistance(session.distance)}km` : session.duration}
                   {session.paceZone ? ` · ${session.paceZone}` : ''}
                 </p>
               </div>
@@ -720,7 +718,7 @@ export function TrainingPlanView({
               {nextWeekAdjustment.suggestedDistance != null && (
                 <div className="shrink-0 text-right">
                   <p className="font-mono text-lg font-black text-zinc-950 dark:text-zinc-50">
-                    {nextWeekAdjustment.suggestedDistance}km
+                    {formatTrainingDistance(nextWeekAdjustment.suggestedDistance)}km
                   </p>
                   <p className="font-mono text-[9px] text-zinc-400">
                     {t('trainingPlan.suggestedNextWeek')}

@@ -3,7 +3,7 @@
 import React from 'react';
 import { CalendarClock, Check, Link2Off, RotateCcw, SkipForward, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { TrainingSessionExecutionOverride } from '@/lib/trainingPlan';
+import { formatTrainingDistance, type TrainingSessionExecutionOverride } from '@/lib/trainingPlan';
 import { inferActivityKind, type SessionExecution } from '@/lib/trainingPlanExecution';
 import { getActivityDate } from '@/lib/dates';
 import { formatPaceSeconds } from '@/lib/paceFormat';
@@ -161,7 +161,7 @@ export function TrainingSessionEditor({
               {execution.session.title}
             </h2>
             <p className="mt-1 font-mono text-[11px] text-zinc-500">
-              {dateFormatter.format(execution.date)} · {execution.session.distance}km
+              {dateFormatter.format(execution.date)} · {formatTrainingDistance(execution.session.distance)}km
               {execution.session.paceZone ? ` · ${execution.session.paceZone}` : ''}
             </p>
           </div>

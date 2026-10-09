@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import type { TrainingSession, WeeklyPlan } from '@/lib/trainingPlan';
+import { formatTrainingDistance, type TrainingSession, type WeeklyPlan } from '@/lib/trainingPlan';
 import type { SessionExecution, WeekActivityExecution, WeekExecution } from '@/lib/trainingPlanExecution';
 import { formatDuration, formatPace } from '@/lib/strava';
 import {
@@ -107,16 +107,12 @@ function getWeeklyTargetLabel(type: TrainingSession['type'] | 'workout', isZh: b
   return isZh ? '跑量' : 'volume';
 }
 
-function formatDistance(distance: number) {
-  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
-}
-
 function getSessionVolumeLabel(session: TrainingSession, isZh: boolean) {
-  const total = `${formatDistance(session.distance)}km`;
+  const total = `${formatTrainingDistance(session.distance)}km`;
   if (!session.workDistance) {
     return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
   }
-  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  const work = `${formatTrainingDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
   return isZh
     ? `全课约 ${total} · 主训练 ${work}`
     : `~${total} total · ${work} quality`;
@@ -158,7 +154,7 @@ function ActualActivityEntry({ execution }: { execution: WeekActivityExecution }
     execution.matchedSessionType ?? execution.inferredType,
     isZh
   );
-  const distance = `${formatDistance(activity.distance / 1000)}km`;
+  const distance = `${formatTrainingDistance(activity.distance / 1000)}km`;
   const pace = formatPace(activity.distance, activity.moving_time, 'min/km');
 
   return (
@@ -341,18 +337,18 @@ export function TrainingPlanCard({
               {week.focus || (keySessions.length > 0
                 ? t('trainingPlan.weekFocus', '{{count}} 个关键训练 · 长距离 {{distance}} km', {
                     count: keySessions.length,
-                    distance: longRun?.distance ?? 0,
+                    distance: formatTrainingDistance(longRun?.distance ?? 0),
                   })
                 : t('trainingPlan.weekRecoveryFocus', '恢复与基础有氧周'))}
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="font-mono text-lg font-bold text-zinc-950 dark:text-zinc-50">{week.totalDistance}</p>
+            <p className="font-mono text-lg font-bold text-zinc-950 dark:text-zinc-50">{formatTrainingDistance(week.totalDistance)}</p>
             <p className="font-mono text-[10px] text-zinc-500">km</p>
             {execution && execution.dueCount > 0 && (
               <p className="mt-1 font-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-300">
                 {execution.completedCount}/{execution.dueCount} {t('trainingPlan.doneShort', '完成')}
-                {' · '}{Math.round(execution.actualDistance * 10) / 10}/{week.totalDistance}km
+                {' · '}{formatTrainingDistance(execution.actualDistance)}/{formatTrainingDistance(week.totalDistance)}km
                 {execution.extraActivityCount > 0
                   ? ` · ${t('trainingPlan.extraRunsShort', { count: execution.extraActivityCount })}`
                   : ''}
@@ -372,7 +368,7 @@ export function TrainingPlanCard({
           </div>
           <div className="border border-zinc-100 px-2 py-2 dark:border-zinc-800">
             <p className="font-mono text-[10px] text-zinc-500">{t('trainingPlan.longestRun', '最长')}</p>
-            <p className="font-mono text-sm font-bold">{longRun?.distance ?? 0}km</p>
+            <p className="font-mono text-sm font-bold">{formatTrainingDistance(longRun?.distance ?? 0)}km</p>
           </div>
         </div>
       </button>
@@ -411,7 +407,7 @@ export function TrainingPlanCard({
                 <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
                   {t('trainingPlan.weeklyDistanceTarget', '跑量')}{' '}
                   <strong className="text-zinc-900 dark:text-zinc-100">
-                    {Math.round(execution.actualDistance * 10) / 10}/{week.totalDistance}km
+                    {formatTrainingDistance(execution.actualDistance)}/{formatTrainingDistance(week.totalDistance)}km
                   </strong>
                 </span>
               </div>

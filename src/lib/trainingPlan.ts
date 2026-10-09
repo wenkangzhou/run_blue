@@ -72,6 +72,18 @@ export class TrainingPlanInputError extends Error {
   }
 }
 
+export function roundTrainingDistance(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function formatTrainingDistance(value: number): string {
+  const rounded = roundTrainingDistance(value);
+  return Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 const STORAGE_KEY = 'runblue_training_plans';
 const TRAINING_PLAN_DB = 'run_blue_training_plan_cache';
 const TRAINING_PLAN_STORE = 'training_plans';
@@ -106,7 +118,11 @@ function getQualityWorkDistance(description: string): number | undefined {
 function normalizeStoredSession(session: TrainingSession): TrainingSession {
   if (session.paceZone === 'R') {
     if (session.workDistance && session.workDistance <= 1 && session.distance <= 5) {
-      return session;
+      return {
+        ...session,
+        distance: roundTrainingDistance(session.distance),
+        workDistance: roundTrainingDistance(session.workDistance),
+      };
     }
     const en = !/[\u3400-\u9fff]/.test(session.description);
     const lines = session.description.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -133,13 +149,19 @@ function normalizeStoredSession(session: TrainingSession): TrainingSession {
       ...session,
       title: en ? 'Speed Activation' : '速度激活',
       description,
-      distance: 4.2,
-      workDistance: 0.6,
+      distance: roundTrainingDistance(4.2),
+      workDistance: roundTrainingDistance(0.6),
     };
   }
 
   if (session.paceZone === 'I') {
-    if (session.workDistance && session.workDistance <= 4) return session;
+    if (session.workDistance && session.workDistance <= 4) {
+      return {
+        ...session,
+        distance: roundTrainingDistance(session.distance),
+        workDistance: roundTrainingDistance(session.workDistance),
+      };
+    }
     let description = session.description
       .replace(/800m×6/g, '800m×5')
       .replace(/6×800m/g, '5×800m')
@@ -156,12 +178,18 @@ function normalizeStoredSession(session: TrainingSession): TrainingSession {
     return {
       ...session,
       description,
-      distance: Math.min(session.distance, 7),
-      workDistance,
+      distance: roundTrainingDistance(Math.min(session.distance, 7)),
+      workDistance: roundTrainingDistance(workDistance),
     };
   }
 
-  return session;
+  return {
+    ...session,
+    distance: roundTrainingDistance(session.distance),
+    ...(session.workDistance === undefined
+      ? {}
+      : { workDistance: roundTrainingDistance(session.workDistance) }),
+  };
 }
 
 function migrateLegacyWeekendSchedule(week: WeeklyPlan): { week: WeeklyPlan; moved: boolean } {
@@ -173,7 +201,7 @@ function migrateLegacyWeekendSchedule(week: WeeklyPlan): { week: WeeklyPlan; mov
       week: {
         ...week,
         sessions: normalizedSessions,
-        totalDistance: Math.round(normalizedSessions.reduce((sum, session) => sum + session.distance, 0) * 10) / 10,
+        totalDistance: roundTrainingDistance(normalizedSessions.reduce((sum, session) => sum + session.distance, 0)),
       },
       moved: false,
     };
@@ -196,7 +224,7 @@ function migrateLegacyWeekendSchedule(week: WeeklyPlan): { week: WeeklyPlan; mov
       ...week,
       notes,
       sessions,
-      totalDistance: Math.round(sessions.reduce((sum, session) => sum + session.distance, 0) * 10) / 10,
+      totalDistance: roundTrainingDistance(sessions.reduce((sum, session) => sum + session.distance, 0)),
     },
     moved: true,
   };
@@ -1228,7 +1256,7 @@ export function generateFallbackTrainingPlan(
       }
     }
 
-    const totalDistance = sessions.reduce((sum, s) => sum + s.distance, 0);
+    const totalDistance = roundTrainingDistance(sessions.reduce((sum, s) => sum + s.distance, 0));
     const notes = buildWeekNotes(phase, w, weeks, distance, isRecoveryWeek, en);
     const focus = buildWeekFocus(actualPhase, w, weeks, distance, en);
 

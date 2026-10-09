@@ -40,11 +40,20 @@ const {
   getStoredTrainingPlans,
   estimatePlanWeeks,
   getRecommendedTargetTime,
+  formatTrainingDistance,
+  roundTrainingDistance,
   saveTrainingPlan,
   TrainingPlanInputError,
 } = require(path.join(tempDir, 'trainingPlan.js'));
 
 test.afterEach(cleanupBrowserStorage);
+
+test('normalizes training-plan distances to at most two decimals', () => {
+  assert.equal(roundTrainingDistance(0.1 + 0.2), 0.3);
+  assert.equal(roundTrainingDistance(1011.0000000000002), 1011);
+  assert.equal(formatTrainingDistance(12.345), '12.35');
+  assert.equal(formatTrainingDistance(12.3), '12.3');
+});
 
 test('generates a periodized training plan with seven sessions per week', async () => {
   const plan = await generateTrainingPlan('21k', 7200, 12, 1500, 35, '2026-10-18', 'zh', 180);
@@ -66,7 +75,10 @@ test('generates a periodized training plan with seven sessions per week', async 
     assert.deepEqual(week.sessions.map((session) => session.day), [0, 1, 2, 3, 4, 5, 6]);
     assert.equal(week.sessions.every((session) => session.title.trim().length > 0), true);
     assert.equal(week.sessions.every((session) => session.description.trim().length > 0), true);
-    assert.equal(week.totalDistance, week.sessions.reduce((sum, session) => sum + session.distance, 0));
+    assert.equal(
+      week.totalDistance,
+      roundTrainingDistance(week.sessions.reduce((sum, session) => sum + session.distance, 0))
+    );
   }
 
   const finalSession = plan.weeks.at(-1).sessions.at(-1);

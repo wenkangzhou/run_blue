@@ -138,7 +138,12 @@ function getLoadAdjustedSummary(
     : en
       ? `load density reached ${adjustment.activityTrainingLoadPerHour} points/hour`
       : `训练负荷密度达到 ${adjustment.activityTrainingLoadPerHour} 点/小时`;
-  const facts = [paceFact, heartRateFact, loadDensityFact, weatherFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
+  const volumeFact = adjustment.volumeContext && adjustment.volumeContext !== 'normal'
+    ? en
+      ? `${adjustment.distanceKilometers} km / ${adjustment.durationMinutes} min creates ${adjustment.volumeContext === 'very-long' ? 'very high' : 'high'} total volume cost`
+      : `${adjustment.distanceKilometers} 公里 / ${adjustment.durationMinutes} 分钟构成${adjustment.volumeContext === 'very-long' ? '很高' : '较高'}总量成本`
+    : '';
+  const facts = [paceFact, heartRateFact, volumeFact, loadDensityFact, weatherFact].filter(Boolean).join(en ? ', with ' : '，并叠加');
   const lead = en
     ? `${facts || 'The current-session evidence'} makes this session ${intensityLabel}; allow at least ${adjustment.minimumRecoveryHours}h recovery. Rolling load is a separate recovery-context conclusion.`
     : `${facts || '本次数据'}使本次单次强度应按${intensityLabel}解读；建议至少 ${adjustment.minimumRecoveryHours}h 恢复。滚动负荷只作为另一层累计恢复背景。`;

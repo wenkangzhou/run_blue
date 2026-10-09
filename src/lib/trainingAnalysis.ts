@@ -91,6 +91,11 @@ export interface ActivityLoadAdjustment {
   activityTrainingLoadPerHour: number | null;
   relativeEffort: number | null;
   averageHeartRatePercentMax: number | null;
+  highHeartRateSharePercent: number | null;
+  sustainedHighHeartRate: boolean;
+  distanceKilometers: number;
+  durationMinutes: number;
+  volumeContext: 'normal' | 'long' | 'very-long';
   consecutiveRunDays: number;
   minimumRecoveryHours: number;
 }

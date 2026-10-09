@@ -28,6 +28,7 @@ import {
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 import { AppBackButton } from '@/components/AppBackButton';
 import {
+  formatTrainingDistance,
   getDistanceLabel,
   getDistanceLabelEn,
   getStoredTrainingPlans,
@@ -342,7 +343,7 @@ export default function TrainingPlansListPage() {
                     {nextPlanSession.session.session.title}
                   </h2>
                   <p className="mt-1 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
-                    {nextPlanSession.session.session.distance}km
+                    {formatTrainingDistance(nextPlanSession.session.session.distance)}km
                     {nextPlanSession.session.session.paceZone ? ` · ${nextPlanSession.session.session.paceZone}` : ''}
                     {' · '}{t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: nextPlanSession.session.week })}
                   </p>
@@ -525,8 +526,8 @@ export default function TrainingPlansListPage() {
                                 ? t('trainingPlan.executionSummary', {
                                     completed: execution.completedCount,
                                     due: execution.dueCount,
-                                    actual: Math.round(execution.actualDueDistance),
-                                    planned: Math.round(execution.plannedDueDistance),
+                                    actual: formatTrainingDistance(execution.actualDueDistance),
+                                    planned: formatTrainingDistance(execution.plannedDueDistance),
                                   })
                                 : t('trainingPlan.noSessionsDue')}
                             </p>
@@ -555,7 +556,7 @@ export default function TrainingPlansListPage() {
                             {t('trainingPlan.nextWorkoutEntry')}
                           </p>
                           <p className="mt-1 truncate font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                            {nextSession.session.title} · {nextSession.session.distance}km
+                            {nextSession.session.title} · {formatTrainingDistance(nextSession.session.distance)}km
                           </p>
                         </div>
                         <div className="shrink-0 text-right">

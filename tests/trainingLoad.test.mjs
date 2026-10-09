@@ -36,6 +36,14 @@ test.after(() => { Module._load = originalLoad; });
 
 const { calculateActivityTrainingLoad, calculateTrainingLoadSummary } = require(path.join(tempDir, 'trainingLoad.js'));
 
+const paceZones = {
+  easy: { min: 330, max: 390, description: 'easy' },
+  marathon: { min: 285, max: 329, description: 'marathon' },
+  threshold: { min: 255, max: 284, description: 'threshold' },
+  interval: { min: 235, max: 254, description: 'interval' },
+  repetition: { min: 210, max: 234, description: 'repetition' },
+};
+
 function makeRun(daysAgo, overrides = {}) {
   const now = new Date('2026-07-02T12:00:00Z');
   const date = new Date(now);
@@ -58,6 +66,27 @@ test('activity load increases with duration and heart-rate intensity', () => {
   const easy = calculateActivityTrainingLoad(makeRun(0, { moving_time: 2400, average_heartrate: 130 }), 175);
   const hard = calculateActivityTrainingLoad(makeRun(0, { moving_time: 3600, average_heartrate: 170 }), 175);
   assert.ok(hard > easy);
+});
+
+test('activity load combines heart rate, pace and duration', () => {
+  const easyPace = calculateActivityTrainingLoad(
+    makeRun(0, { distance: 8000, moving_time: 3200, average_heartrate: 150 }),
+    175,
+    paceZones
+  );
+  const thresholdPace = calculateActivityTrainingLoad(
+    makeRun(0, { distance: 12000, moving_time: 3200, average_heartrate: 150 }),
+    175,
+    paceZones
+  );
+  const longerThreshold = calculateActivityTrainingLoad(
+    makeRun(0, { distance: 18000, moving_time: 4800, average_heartrate: 150 }),
+    175,
+    paceZones
+  );
+
+  assert.ok(thresholdPace > easyPace);
+  assert.ok(longerThreshold > thresholdPace);
 });
 
 test('training load summary builds four weeks and flags a sharp recent increase', () => {

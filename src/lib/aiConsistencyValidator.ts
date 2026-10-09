@@ -33,24 +33,10 @@ interface AIConsistencyContext {
   streamAnalysis?: StreamAnalysis | null;
 }
 
-const INTENSITY_RANK: Record<AIAnalysis['intensity'], number> = {
-  easy: 0,
-  moderate: 1,
-  hard: 2,
-  extreme: 3,
-};
-
 function getFinalIntensity(
-  candidate: AIAnalysis['intensity'] | undefined,
-  classification: ActivityClassification,
-  activity?: StravaActivity
+  classification: ActivityClassification
 ): AIAnalysis['intensity'] {
-  if (classification.isRace) return 'extreme';
-  const parsed = candidate && candidate in INTENSITY_RANK ? candidate : 'moderate';
-  const minimum = activity && activity.distance >= 20_000
-    ? 'moderate'
-    : classification.loadAdjustment?.applied ? classification.intensity : 'easy';
-  return INTENSITY_RANK[minimum] > INTENSITY_RANK[parsed] ? minimum : parsed;
+  return classification.isRace ? 'extreme' : classification.intensity;
 }
 
 function formatBlockPace(secondsPerKm: number): string {
@@ -376,10 +362,14 @@ function normalizeLoadCostText(
   finalIntensity: AIAnalysis['intensity'],
   locale: string
 ): string {
-  if (!text || !classification.loadAdjustment?.applied) return text;
+  if (!text) return text;
   if (locale.startsWith('en')) {
-    return text
-      .replace(/(?:overall|actual|session) intensity (?:was|is) (?:easy|light)/gi, `overall intensity was ${finalIntensity}`)
+    const intensityText = text.replace(
+      /(?:overall|actual|session) intensity (?:was|is) (?:easy|light|moderate|hard|extreme)/gi,
+      `overall intensity was ${finalIntensity}`
+    );
+    if (!classification.loadAdjustment?.applied) return intensityText;
+    return intensityText
       .replace(/(?:recovery cost|training load) (?:was|is) (?:low|minimal)/gi, 'recovery cost was elevated by the conditions and effort')
       .replace(/(?:no|little) recovery (?:is )?(?:needed|required)/gi, 'meaningful recovery is still required');
   }
@@ -390,8 +380,12 @@ function normalizeLoadCostText(
     hard: '高强度',
     extreme: '极限',
   } as const)[finalIntensity];
-  return text
-    .replace(/(?:综合|实际|本次单次)(?:训练)?强度(?:为|是|属于)?\s*(?:轻松|低强度)/g, `综合强度为${intensityLabel}`)
+  const intensityText = text.replace(
+    /(?:综合|实际|本次单次)(?:训练)?强度(?:为|是|属于)?\s*(?:轻松|低强度|适中|中等|高强度|极限)/g,
+    `综合强度为${intensityLabel}`
+  );
+  if (!classification.loadAdjustment?.applied) return intensityText;
+  return intensityText
     .replace(/(?:恢复成本|训练负荷)(?:很|较)?低/g, '恢复成本已被天气与本次努力抬高')
     .replace(/无需(?:额外)?恢复/g, '仍需要充分恢复');
 }
@@ -432,7 +426,7 @@ export function validateAIAnalysisConsistency(
 ): AIConsistencyResult {
   const { classification, locale, streamAnalysis } = context;
   const correctedRules = new Set<AIConsistencyRule>();
-  const finalIntensity = getFinalIntensity(analysis.intensity, classification, context.activity);
+  const finalIntensity = getFinalIntensity(classification);
   const minimumRecoveryHours = classification.loadAdjustment?.minimumRecoveryHours ?? 0;
   const finalRecoveryHours = Math.max(analysis.recoveryHours || 0, minimumRecoveryHours);
   const longRunAssessment = context.activity ? getLongRunAssessment(context.activity) : null;

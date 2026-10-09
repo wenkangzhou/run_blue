@@ -2,6 +2,10 @@ import type { StravaActivity } from '@/types';
 import type { TrainingPlan, TrainingSession } from '@/lib/trainingPlan';
 import { getActivityDate } from '@/lib/dates';
 
+function roundExecutionDistance(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export type SessionExecutionStatus = 'completed' | 'partial' | 'missed' | 'upcoming' | 'rest' | 'skipped';
 
 export interface SessionExecution {
@@ -416,20 +420,20 @@ export function calculateTrainingPlanExecution(
         })
         .sort((left, right) => left.date.getTime() - right.date.getTime()
           || left.activity.start_date.localeCompare(right.activity.start_date)),
-      plannedDistance: weekSessions.reduce((sum, session) => sum + (
+      plannedDistance: roundExecutionDistance(weekSessions.reduce((sum, session) => sum + (
         session.session.type === 'rest' ? 0 : session.session.distance
-      ), 0),
-      actualDistance: weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0),
+      ), 0)),
+      actualDistance: roundExecutionDistance(weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0)),
       extraActivityCount: extraActivities.length,
-      extraDistance: extraActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0),
+      extraDistance: roundExecutionDistance(extraActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0)),
       completedCount: dueSessions.filter((session) => session.status === 'completed').length,
       partialCount: dueSessions.filter((session) => session.status === 'partial').length,
       missedCount: dueSessions.filter((session) => session.status === 'missed').length,
       skippedCount: dueSessions.filter((session) => session.status === 'skipped').length,
       dueCount: dueSessions.length,
-      plannedDueDistance: dueSessions.reduce((sum, session) => sum + session.session.distance, 0),
+      plannedDueDistance: roundExecutionDistance(dueSessions.reduce((sum, session) => sum + session.session.distance, 0)),
       actualDueDistance: isStarted
-        ? weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0)
+        ? roundExecutionDistance(weekActivities.reduce((sum, { activity }) => sum + activity.distance / 1000, 0))
         : 0,
       plannedKeyCount: dueKeySessions.length,
       completedKeyCount: dueKeySessions.filter((session) =>
@@ -458,8 +462,8 @@ export function calculateTrainingPlanExecution(
     missedCount,
     skippedCount,
     dueCount: dueSessions.length,
-    plannedDueDistance: dueSessions.reduce((sum, session) => sum + session.session.distance, 0),
-    actualDueDistance: weeks.reduce((sum, week) => sum + week.actualDueDistance, 0),
+    plannedDueDistance: roundExecutionDistance(dueSessions.reduce((sum, session) => sum + session.session.distance, 0)),
+    actualDueDistance: roundExecutionDistance(weeks.reduce((sum, week) => sum + week.actualDueDistance, 0)),
     completionRate: dueSessions.length > 0
       ? Math.round(((completedCount + partialCount * 0.5) / dueSessions.length) * 100)
       : 0,

@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDashed, Target } from 'lucide-react';
 import type { StravaActivity } from '@/types';
 import type { TrainingPlan } from '@/lib/trainingPlan';
-import { getStoredTrainingPlans } from '@/lib/trainingPlan';
+import { formatTrainingDistance, getStoredTrainingPlans } from '@/lib/trainingPlan';
 import { getGuestTrainingPlans } from '@/lib/guestMode';
 import { getActivityTrainingPlanContext } from '@/lib/trainingPlanExecution';
 
@@ -23,14 +23,10 @@ function getFirstDescriptionLine(description: string) {
     .find(Boolean) ?? '';
 }
 
-function formatDistance(distance: number) {
-  return Number.isInteger(distance) ? String(distance) : distance.toFixed(1);
-}
-
 function getSessionVolumeLabel(session: TrainingPlan['weeks'][number]['sessions'][number], isZh: boolean) {
-  const total = `${formatDistance(session.distance)}km`;
+  const total = `${formatTrainingDistance(session.distance)}km`;
   if (!session.workDistance) return `${total}${session.paceZone ? ` · ${session.paceZone}` : ''}`;
-  const work = `${formatDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
+  const work = `${formatTrainingDistance(session.workDistance)}km${session.paceZone ? ` ${session.paceZone}` : ''}`;
   return isZh ? `全课约 ${total} · 主训练 ${work}` : `~${total} total · ${work} quality`;
 }
 
@@ -157,7 +153,7 @@ export function ActivityTrainingPlanCard({
             <p className="mt-1 font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
               {t('trainingPlan.planWeekSession', '第 {{week}} 周', { week: matchedSession.week })}
               {' · '}{getSessionVolumeLabel(matchedSession.session, isZh)}
-              {' · '}{t('trainingPlan.actualDistance', '实际 {{distance}} km', { distance: (activity.distance / 1000).toFixed(1) })}
+              {' · '}{t('trainingPlan.actualDistance', '实际 {{distance}} km', { distance: formatTrainingDistance(activity.distance / 1000) })}
             </p>
           </div>
         )}

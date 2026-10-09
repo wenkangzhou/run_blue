@@ -550,6 +550,16 @@ export function buildProfessionalPrompt(
         ? `\n- Average HR was ${loadAdjustment.averageHeartRatePercentMax}% of profile max HR`
         : `\n- 平均心率达到档案最大心率的 ${loadAdjustment.averageHeartRatePercentMax}%`;
     }
+    if (typeof loadAdjustment.highHeartRateSharePercent === 'number') {
+      prompt += en
+        ? `\n- Sustained HR evidence: ${loadAdjustment.highHeartRateSharePercent}% of analyzed kilometers in Z4-Z5; isolated peaks do not determine whole-session intensity`
+        : `\n- 持续心率证据：分析覆盖的公里中有 ${loadAdjustment.highHeartRateSharePercent}% 处于 Z4-Z5；孤立峰值不能代表全程强度`;
+    }
+    if (loadAdjustment.volumeContext && loadAdjustment.volumeContext !== 'normal') {
+      prompt += en
+        ? `\n- Volume evidence: ${loadAdjustment.distanceKilometers} km / ${loadAdjustment.durationMinutes} min (${loadAdjustment.volumeContext}); volume raises total session cost, not threshold intensity by itself`
+        : `\n- 总量证据：${loadAdjustment.distanceKilometers} km / ${loadAdjustment.durationMinutes} 分钟（${loadAdjustment.volumeContext === 'very-long' ? '超长距离' : '长距离'}）；总量会抬高整堂课成本，但不能单独证明阈值强度`;
+    }
     if (typeof loadAdjustment.activityTrainingLoadPerHour === 'number') {
       prompt += en
         ? `\n- Current-session load density: ${loadAdjustment.activityTrainingLoadPerHour} points/hour`
@@ -1000,7 +1010,7 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n  "executionSummary": "Directly answer how well the workout was executed in 2 complete sentences: give an overall verdict, one evidence-backed strength, and the main limitation or caution. Do NOT restate workout type, classification confidence, or recognition evidence. For intervals, assess work-rep consistency, recovery contrast, and late-session fade.",`
       : `\n  "executionSummary": "用2个完整句子直接回答完成得怎么样：先给好/一般/需改进的明确结论，再用数据说明一个做得好的地方和最主要的问题或注意点。禁止复述训练类型、识别置信度或判定依据；间歇训练重点评价快段稳定性、快慢对比和后程是否掉速。",`;
-    prompt += `\n  "intensity": "easy|moderate|hard|extreme",`;
+    prompt += `\n  "intensity": "${classification.intensity}",`;
     prompt += en ? `\n  "recoveryHours": number,` : `\n  "recoveryHours": 数字,`;
     prompt += en
       ? `\n  "comparisonToAverage": "system-generated, can be empty",`
@@ -1050,6 +1060,9 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Keep intensity and execution quality separate: intensity describes physiological effort, while execution quality describes how well the workout intent was fulfilled. An easy session can be excellently executed, and a hard session can also be excellently executed. Warnings or high rolling load must not automatically turn good execution into poor execution.`
     : `\n- 强度与完成质量必须分开表达：强度描述身体付出，完成质量描述训练目的执行得如何。轻松强度可以完成得很到位，高强度也可以完成得很到位；注意事项或累计负荷偏高不得自动把良好执行改写成“完成不好”。`;
+  prompt += en
+    ? `\n- The deterministic intensity result is ${classification.intensity}. Return exactly this value. A single high-HR kilometer or instantaneous peak may be noted, but must not relabel the whole session without sustained HR or pace evidence.`
+    : `\n- 系统确定的综合强度为 ${classification.intensity}，intensity 必须原样返回。单个高心率公里或瞬时峰值可以作为注意点，但没有持续心率或配速证据时，不得据此改判整堂训练。`;
   prompt += en
     ? `\n- Use a clear execution verdict consistent with one of four levels: right on target, good, some deviation, or needs improvement. Then explain the strongest evidence and the main limitation.`
     : `\n- executionSummary 的结论统一使用四档语义：到位、良好、有偏差、需改进。先给明确结论，再说明最强证据和主要不足；不要混用“需要注意”“强度高”来替代完成质量结论。`;

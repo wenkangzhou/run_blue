@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
       mergedPBs,
       lthr
     );
+    const baseClassification = classifyActivity(
+      currentActivity,
+      trainingProfile.paceZones,
+      trainingProfile.estimatedPBs.reliability,
+      lthr
+    );
+    const avgPaceSecPerKm = currentActivity.distance > 0
+      ? currentActivity.moving_time / currentActivity.distance * 1000
+      : 0;
+    const streamAnalysisRaw = lthr || maxHeartRate
+      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, baseClassification.isRace, maxHeartRate)
+      : null;
     const loadActivities = [
       currentActivity,
       ...historyActivities.filter((item) => item.id !== currentActivity.id),
@@ -90,32 +102,29 @@ export async function POST(request: NextRequest) {
     const trainingLoadSummary = calculateTrainingLoadSummary(
       loadActivities,
       lthr,
-      new Date(getActivityTimestamp(currentActivity) + 1000)
+      new Date(getActivityTimestamp(currentActivity) + 1000),
+      trainingProfile.paceZones
     );
-    const activityTrainingLoad = calculateActivityTrainingLoad(currentActivity, lthr);
+    const activityTrainingLoad = calculateActivityTrainingLoad(
+      currentActivity,
+      lthr,
+      trainingProfile.paceZones
+    );
     
     // Classify the current activity
     const classification = adjustClassificationForTrainingStress(
       currentActivity,
       trainingProfile,
-      classifyActivity(
-        currentActivity,
-        trainingProfile.paceZones,
-        trainingProfile.estimatedPBs.reliability,
-        lthr
-      ),
+      baseClassification,
       {
         activityLoad: activityTrainingLoad,
         summary: trainingLoadSummary,
         maxHeartRate,
+        streamAnalysis: streamAnalysisRaw,
       }
     );
     
     // Stream analysis: segment HR + pace by km
-    const avgPaceSecPerKm = currentActivity.moving_time / currentActivity.distance * 1000;
-    const streamAnalysisRaw = lthr || maxHeartRate
-      ? analyzeActivityStreams(streams, lthr, avgPaceSecPerKm, classification.isRace, maxHeartRate)
-      : null;
     const streamAnalysisText = streamAnalysisRaw
       ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr, locale, maxHeartRate)
       : undefined;
