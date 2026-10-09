@@ -4,7 +4,8 @@ import type { ActivityClassification, TrainingProfile } from './trainingAnalysis
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext, getThermalContext } from './weather';
-import { getLongRunAssessment } from './activityHighlights';
+import { getLongRunAssessment, type LongRunAssessment } from './activityHighlights';
+import { formatRaceExecutionSummary, getRaceExecutionAssessment } from './raceExecution';
 
 function getZoneDescription(
   zone: ActivityClassification['paceZone'],
@@ -46,6 +47,44 @@ function getZoneDescription(
   return en
     ? `${zoneMap.fallback} (${formatPace(min)}-${formatPace(max)}/km)`
     : `${zoneMap.fallback}（${formatPace(min)}-${formatPace(max)}/km）`;
+}
+
+function formatKm(value: number): string {
+  return Math.abs(value - Math.round(value)) < 0.05
+    ? String(Math.round(value))
+    : value.toFixed(1);
+}
+
+function getLongRunStructureText(assessment: LongRunAssessment, locale: string): string {
+  const en = locale.startsWith('en');
+  if (assessment.analysisMethod === 'adaptive-phases') {
+    const phases = assessment.phases.map((phase) =>
+      `${formatKm(phase.startKm)}–${formatKm(phase.endKm)}km ${formatPace(phase.averagePaceSecondsPerKm)}/km${phase.averageHeartRate !== undefined ? `、${Math.round(phase.averageHeartRate)} bpm` : ''}`
+    ).join(en ? '; ' : '；');
+    return en
+      ? `Detected phases from sustained pace changes: ${phases}`
+      : `根据持续配速变化识别出的阶段：${phases}`;
+  }
+  if (assessment.analysisMethod === 'whole-run' && assessment.averagePaceSecondsPerKm !== undefined) {
+    const spread = Math.round(assessment.paceSpreadSecondsPerKm ?? 0);
+    return en
+      ? `No clear breakpoint; whole-run pace averaged ${formatPace(assessment.averagePaceSecondsPerKm)}/km with about ${spread}s/km of typical variation`
+      : `没有检测到明确变化点，全程均配 ${formatPace(assessment.averagePaceSecondsPerKm)}/km，主体公里配速波动约 ${spread} 秒`;
+  }
+  if (
+    assessment.analysisMethod === 'early-late'
+    && assessment.comparisonWindowKm !== undefined
+    && assessment.earlyPaceSecondsPerKm !== undefined
+    && assessment.latePaceSecondsPerKm !== undefined
+  ) {
+    const window = formatKm(assessment.comparisonWindowKm);
+    return en
+      ? `No fixed phase was forced; opening ${window}km averaged ${formatPace(assessment.earlyPaceSecondsPerKm)}/km and closing ${window}km averaged ${formatPace(assessment.latePaceSecondsPerKm)}/km`
+      : `没有强行套用固定分段；开头约 ${window} 公里均配 ${formatPace(assessment.earlyPaceSecondsPerKm)}/km，末尾约 ${window} 公里均配 ${formatPace(assessment.latePaceSecondsPerKm)}/km`;
+  }
+  return en
+    ? 'Continuous kilometer-split coverage is insufficient to verify the workout structure'
+    : '逐公里分段覆盖或连续性不足，暂时无法可靠判断训练结构';
 }
 
 export function buildExecutionSummary(
@@ -94,13 +133,11 @@ export function buildExecutionSummary(
     const assessment = getLongRunAssessment(activity);
     if (!assessment) {
       return en
-        ? 'There is not enough block data to assess long-run execution.'
+        ? 'There is not enough continuous split data to assess long-run execution.'
         : '分段数据不足，暂时无法判断长距离执行质量。';
     }
-    const { blocks, blockSizeKm, pattern, paceChangeSecondsPerKm, heartRateChange } = assessment;
-    const blockText = blocks.map((block) =>
-      `${block.startKm}–${block.endKm}km ${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `、${Math.round(block.averageHeartRate)} bpm` : ''}`
-    ).join(en ? '; ' : '；');
+    const { pattern, paceChangeSecondsPerKm, heartRateChange } = assessment;
+    const structureText = getLongRunStructureText(assessment, locale);
     const paceDelta = Math.abs(Math.round(paceChangeSecondsPerKm ?? 0));
     const hrDelta = Math.round(heartRateChange ?? 0);
     const verdict = en
@@ -110,21 +147,21 @@ export function buildExecutionSummary(
           'intentional-slowdown': `The later section was ${paceDelta}s/km slower while HR fell ${Math.abs(hrDelta)} bpm, which looks intentional rather than a bonk.`,
           'fatigue-fade': `The later section was ${paceDelta}s/km slower while HR stayed high, indicating a fatigue fade.`,
           'slowing-unclear': `The later section slowed ${paceDelta}s/km, but HR evidence is insufficient to distinguish intent from fatigue.`,
-          mixed: 'The block pacing varied without a clear steady or progressive strategy.',
-          unknown: 'There are not enough complete blocks to verify the pacing structure.',
+          mixed: 'The pacing varied without a clear steady or progressive strategy.',
+          unknown: 'There is not enough continuous split evidence to verify the pacing structure.',
         } as const)[pattern]
       : ({
           'negative-split': `后程比前段快 ${paceDelta} 秒/公里，前慢后快的节奏分配很出色。`,
-          steady: '全程分段配速基本均匀，长距离节奏控制良好。',
+          steady: '全程配速基本均匀，长距离节奏控制良好。',
           'intentional-slowdown': `后程比前段慢 ${paceDelta} 秒/公里，同时心率下降 ${Math.abs(hrDelta)} bpm，更像主动降速而非跑崩。`,
           'fatigue-fade': `后程比前段慢 ${paceDelta} 秒/公里，心率却维持高位，符合疲劳性掉速。`,
           'slowing-unclear': `后程比前段慢 ${paceDelta} 秒/公里，但心率证据不足，暂不能区分主动降速与跑崩。`,
-          mixed: '各分段有起伏，未形成清晰的匀速或后程提速策略。',
-          unknown: '完整分段不足，暂时无法核验配速结构。',
+          mixed: '全程有起伏，未形成清晰的匀速或后程提速策略。',
+          unknown: '连续分段证据不足，暂时无法核验配速结构。',
         } as const)[pattern];
     return en
-      ? `${blockText ? `Complete ${blockSizeKm} km blocks: ${blockText}. ${verdict}` : `Complete ${blockSizeKm} km blocks are unavailable; pacing structure cannot be verified.`}`
-      : `${blockText ? `完整 ${blockSizeKm} 公里分段：${blockText}。${verdict}` : `缺少完整的 ${blockSizeKm} 公里分段，无法核验配速结构。`}`;
+      ? `${structureText}. ${verdict}`
+      : `${structureText}。${verdict}`;
   }
 
   if (classification.workoutType === 'easy' || classification.workoutType === 'recovery') {
@@ -163,13 +200,18 @@ export function generateFallbackAnalysis(
     : null;
 
   if (classification.isRace) {
+    const raceAssessment = getRaceExecutionAssessment(activity);
+    const raceExecution = raceAssessment
+      ? formatRaceExecutionSummary(raceAssessment, locale)
+      : (en
+          ? 'Detailed splits are unavailable, so pacing execution cannot be assessed reliably.'
+          : '缺少完整分段，暂时无法可靠评价比赛配速执行。');
     return {
       summary: en
-        ? `🎉 ${classification.raceType || 'Race'} completed! Pace ${paceStr}/km — fantastic effort out there! You pushed through and got it done. Be proud of this performance.`
-        : `🎉 ${classification.raceType || '比赛'}完成！配速${paceStr}/km——太棒了！你坚持了下来并完成了挑战，为这份努力感到骄傲！`,
-      executionSummary: en
-        ? 'The race was completed with a full competitive effort. Review pacing stability and late-race fade to refine the next race execution.'
-        : '比赛顺利完成，也完成了应有的竞赛强度。接下来重点复盘配速稳定性和后程掉速情况，用于优化下一次比赛执行。',
+        ? `${classification.raceType || 'Race'} completed at ${paceStr}/km. ${raceExecution}`
+        : `${classification.raceType || '比赛'}完赛，均配 ${paceStr}/km。${raceExecution}`,
+      executionSummary: raceExecution,
+      executionQuality: raceAssessment?.quality ?? 'good',
       intensity: 'extreme',
       recoveryHours: activity.distance > 40000 ? 168 : 48,
       comparisonToAverage: fallbackComparison?.comparisonToAverage || (en ? 'Excellent race performance' : '比赛表现优异'),

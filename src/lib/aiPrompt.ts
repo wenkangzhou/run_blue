@@ -15,6 +15,7 @@ import {
   getLongRunAssessment,
 } from './activityHighlights';
 import { getHRZones } from './heartRateZones';
+import { getRaceExecutionAssessment } from './raceExecution';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -38,6 +39,12 @@ function getDistanceLabel(distanceMeters: number, en: boolean): string {
   if (km < 3) return `短距离(~${Math.round(km)}km)`;
   if (km < 7) return `中距离(~${Math.round(km)}km)`;
   return `长距离(~${Math.round(km)}km)`;
+}
+
+function formatKm(value: number): string {
+  return Math.abs(value - Math.round(value)) < 0.05
+    ? String(Math.round(value))
+    : value.toFixed(1);
 }
 
 function getConfidenceLabel(confidence: 'low' | 'medium' | 'high', en: boolean): string {
@@ -270,6 +277,7 @@ export function buildProfessionalPrompt(
   const marathonPaceCeiling = trainingProfile.paceZones.marathon.max;
   const keySustainedEffort = getKeySustainedEffort(activity, marathonPaceCeiling);
   const longRunAssessment = getLongRunAssessment(activity);
+  const raceAssessment = classification.isRace ? getRaceExecutionAssessment(activity) : null;
   const weatherInfo = buildActivityWeatherContext(activity, streams);
   const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
   const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
@@ -301,8 +309,32 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Avg Pace: ${paceStr} /km`
     : `\n- 平均配速: ${paceStr} /km`;
-  if (activity.distance >= 20_000 && longRunAssessment) {
-    const { blocks: longRunBlocks, blockSizeKm, pattern: blockPattern } = longRunAssessment;
+  if (raceAssessment) {
+    const racePatternLabel = ({
+      'negative-split': '负分割',
+      'even-split': '前后半程近似均速',
+      'controlled-positive-split': '控制良好的正分割',
+      'isolated-disruption': '局部中断后恢复',
+      'late-fade': '后程明显掉速',
+      'likely-bonk': '高度疑似跑崩',
+      unknown: '证据不足',
+    } as const)[raceAssessment.pattern];
+    prompt += en
+      ? `\n- RACE SPLIT: first half ${formatTime(Math.round(raceAssessment.firstHalfTimeSeconds))} at ${formatPace(raceAssessment.firstHalfPaceSecondsPerKm)}/km; second half ${formatTime(Math.round(raceAssessment.secondHalfTimeSeconds))} at ${formatPace(raceAssessment.secondHalfPaceSecondsPerKm)}/km; difference ${raceAssessment.splitDifferenceSeconds >= 0 ? '+' : '-'}${formatTime(Math.round(Math.abs(raceAssessment.splitDifferenceSeconds)))}; verdict ${raceAssessment.pattern}.`
+      : `\n- 比赛前后半程：前半程 ${formatTime(Math.round(raceAssessment.firstHalfTimeSeconds))}（${formatPace(raceAssessment.firstHalfPaceSecondsPerKm)}/km），后半程 ${formatTime(Math.round(raceAssessment.secondHalfTimeSeconds))}（${formatPace(raceAssessment.secondHalfPaceSecondsPerKm)}/km），后半程相对前半程 ${raceAssessment.splitDifferenceSeconds >= 0 ? '慢' : '快'} ${formatTime(Math.round(Math.abs(raceAssessment.splitDifferenceSeconds)))}；系统判定为${racePatternLabel}。`;
+    if (raceAssessment.startedTooFast) {
+      prompt += en
+        ? `\n- The first-half pace was ${Math.round(raceAssessment.firstHalfFasterThanAverageSecondsPerKm)}s/km faster than the overall average, evidence that the opening was too aggressive.`
+        : `\n- 前半程配速比全程均配快 ${Math.round(raceAssessment.firstHalfFasterThanAverageSecondsPerKm)} 秒/公里，说明前段配速明显过快。`;
+    }
+    raceAssessment.anomalies.forEach((anomaly) => {
+      prompt += en
+        ? `\n- Kilometer ${anomaly.kilometer} was ${Math.round(anomaly.slowerThanAverageSecondsPerKm)}s/km slower than average${anomaly.recoveredAfterward ? ', then pace recovered: treat it as an isolated stop/walk, cramp or wall episode, not a continuous fade' : ''}.`
+        : `\n- 第 ${anomaly.kilometer} 公里比均配慢 ${Math.round(anomaly.slowerThanAverageSecondsPerKm)} 秒/公里${anomaly.recoveredAfterward ? '，随后配速恢复：应视为可能的停走、抽筋或撞墙短暂中断，而不是持续性掉速' : ''}。`;
+    });
+  }
+  if (!classification.isRace && activity.distance >= 20_000 && longRunAssessment) {
+    const { phases: longRunPhases, pattern: blockPattern } = longRunAssessment;
     const blockPatternLabel = ({
       'negative-split': '前慢后快',
       steady: '全程匀速',
@@ -313,28 +345,36 @@ export function buildProfessionalPrompt(
       unknown: '无法判断',
     } as const)[blockPattern];
     prompt += en
-      ? `\n- HIGH-VOLUME ${longRunAssessment.tier === 'race-simulation' ? 'VERY LONG RUN / LIKELY RACE-SPECIFIC SIMULATION' : 'LONG RUN'}: ${distanceKm} km is substantial total session load even if the external pace is easy. Do not label the overall session "easy"; distinguish easy pace from high total load. The intensity field must be at least moderate, without claiming threshold effort solely from distance.`
-      : `\n- 高总量${longRunAssessment.tier === 'race-simulation' ? '超长距离（大概率为比赛专项模拟）' : '长距离'}：${distanceKm} 公里本身构成较大单次总负荷，即使外部配速处于 E 区，也不能将整堂课评价为“轻松”。区分轻松配速与高总负荷；intensity 至少为 moderate，但不能仅凭距离宣称阈值强度。`;
-    if (longRunBlocks.length) {
-      longRunBlocks.forEach((block) => {
+      ? `\n- HIGH-VOLUME ${longRunAssessment.tier === 'very-long-run' ? 'VERY LONG RUN' : 'LONG RUN'}: ${distanceKm} km is substantial total session load even if the external pace is easy. Distance alone does not prove a race simulation or any specific workout structure. Do not label the overall session "easy"; distinguish easy pace from high total load. The intensity field must be at least moderate, without claiming threshold effort solely from distance.`
+      : `\n- 高总量${longRunAssessment.tier === 'very-long-run' ? '超长距离' : '长距离'}：${distanceKm} 公里本身构成较大单次总负荷，但距离本身不能证明这是比赛模拟，也不能预设训练结构。即使外部配速处于 E 区，也不能将整堂课评价为“轻松”；intensity 至少为 moderate，但不能仅凭距离宣称阈值强度。`;
+    if (longRunAssessment.analysisMethod === 'adaptive-phases') {
+      longRunPhases.forEach((phase) => {
         prompt += en
-          ? `\n- ${block.startKm}–${block.endKm} km: ${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `, avg HR ${Math.round(block.averageHeartRate)} bpm` : ', HR unavailable'}`
-          : `\n- ${block.startKm}–${block.endKm} 公里：${formatPace(block.averagePaceSecondsPerKm)}/km${block.averageHeartRate !== undefined ? `，平均心率 ${Math.round(block.averageHeartRate)} bpm` : '，心率缺失'}`;
+          ? `\n- Adaptive phase ${formatKm(phase.startKm)}–${formatKm(phase.endKm)} km: ${formatPace(phase.averagePaceSecondsPerKm)}/km${phase.averageHeartRate !== undefined ? `, avg HR ${Math.round(phase.averageHeartRate)} bpm` : ', HR unavailable'}`
+          : `\n- 自适应阶段 ${formatKm(phase.startKm)}–${formatKm(phase.endKm)} 公里：${formatPace(phase.averagePaceSecondsPerKm)}/km${phase.averageHeartRate !== undefined ? `，平均心率 ${Math.round(phase.averageHeartRate)} bpm` : '，心率缺失'}`;
       });
       prompt += en
-        ? `\n- Complete ${blockSizeKm} km block pattern: ${blockPattern}. Make this whole-run structure the primary execution assessment; treat the remaining partial distance separately.`
-        : `\n- 完整 ${blockSizeKm} 公里分段结构：${blockPatternLabel}。把全程结构放在执行评价首位，末尾不足 ${blockSizeKm} 公里的部分单独看。`;
+        ? `\n- Sustained pace changes support an adaptive phase pattern of ${blockPattern}. These boundaries come from the activity itself, not fixed 5 km or 10 km blocks.`
+        : `\n- 持续配速变化支持“${blockPatternLabel}”结构；阶段边界来自本次训练本身，不是固定套用 5 公里或 10 公里模板。`;
+    } else if (longRunAssessment.analysisMethod === 'whole-run') {
+      prompt += en
+        ? `\n- No reliable pace breakpoint was detected. Analyze the run as a whole: average pace ${formatPace(longRunAssessment.averagePaceSecondsPerKm ?? 0)}/km, typical kilometer variation about ${Math.round(longRunAssessment.paceSpreadSecondsPerKm ?? 0)}s/km; pattern ${blockPattern}.`
+        : `\n- 没有检测到可靠的配速变化点，应按全程整体分析：均配 ${formatPace(longRunAssessment.averagePaceSecondsPerKm ?? 0)}/km，主体公里配速波动约 ${Math.round(longRunAssessment.paceSpreadSecondsPerKm ?? 0)} 秒；结构为${blockPatternLabel}。`;
+    } else if (longRunAssessment.analysisMethod === 'early-late') {
+      prompt += en
+        ? `\n- No reliable breakpoint was forced. Compare broad opening/closing windows instead: opening ${formatKm(longRunAssessment.comparisonWindowKm ?? 0)} km ${formatPace(longRunAssessment.earlyPaceSecondsPerKm ?? 0)}/km; closing window ${formatPace(longRunAssessment.latePaceSecondsPerKm ?? 0)}/km; pattern ${blockPattern}.`
+        : `\n- 没有强行切出固定阶段，改用宽泛首尾窗口比较：开头约 ${formatKm(longRunAssessment.comparisonWindowKm ?? 0)} 公里 ${formatPace(longRunAssessment.earlyPaceSecondsPerKm ?? 0)}/km，末尾同等距离 ${formatPace(longRunAssessment.latePaceSecondsPerKm ?? 0)}/km；结构为${blockPatternLabel}。`;
     } else {
       prompt += en
-        ? `\n- Complete ${blockSizeKm} km splits unavailable: do not invent block paces or a progression claim.`
-        : `\n- 缺少完整 ${blockSizeKm} 公里分段：不得编造各段配速或全程结构。`;
+        ? `\n- Continuous kilometer-split coverage is insufficient: do not invent phases, paces, or a progression claim.`
+        : `\n- 逐公里分段覆盖或连续性不足：不得编造阶段、分段配速或渐进结构。`;
     }
     prompt += en
       ? `\n- Execution rubric: steady pacing and a negative split are successful long-run outcomes. If pace slows late, compare HR: a clear HR drop supports an intentional ease-down; pace slowing while HR stays high supports a fatigue fade. Never call a steady or negative-split run a deviation merely because it carries high load.`
       : `\n- 执行评价规则：全程匀速与前慢后快都属于完成良好；若后程掉速，必须结合心率区分——心率同步明显下降更像主动降速，心率维持高位才支持疲劳性跑崩。不得因为总负荷高，就把匀速或前慢后快判为“有偏差”。`;
     prompt += en
-      ? `\n- Summary priority: whole-run distance, ${blockSizeKm} km blocks, pacing structure, and HR alongside pace. A short fast patch is too small a share of this run to be the headline.`
-      : `\n- summary 优先写全程距离、每 ${blockSizeKm} 公里结构，并结合心率与配速判断完成质量；局部短距离快段不能取代全程结论。`;
+      ? `\n- Summary priority: first identify the whole-run structure, then use the matching evidence mode (whole-run stability, adaptive phases, or broad opening/closing comparison) with HR. Never force fixed 5 km or 10 km blocks. A short fast patch is too small a share of this run to be the headline.`
+      : `\n- summary 必须先识别全程结构，再选择对应证据方式（全程稳定性、自适应阶段或宽泛首尾比较），并结合心率判断完成质量；禁止强套固定 5 公里或 10 公里模板，局部短距离快段也不能取代全程结论。`;
   }
   prompt += en
     ? `\n- Elevation: ${Math.round(activity.total_elevation_gain)} m`
@@ -836,6 +876,12 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n5. Next workout: easy recovery runs or rest after the race, NOT intensity workouts.`
       : `\n5. 下次训练建议：比赛后应该安排轻松恢复跑，不是强度训练`;
+    prompt += en
+      ? `\n6. Race execution is the main conclusion. A negative split is excellent. Nearly even halves are excellent. For a marathon, a second half up to about 5 minutes slower can still be an excellent controlled finish. Larger fade must be explained from first-half pace versus overall average and HR, not from a generic template.`
+      : `\n6. “完成得怎么样”必须以比赛执行为主结论：负分割应明确表扬；前后半程近似均速应明确表扬；全马后半程只慢约 5 分钟仍属于非常出色的控制。更大的掉速必须结合前半程相对均配是否过快及心率变化解释，禁止套用长距离训练模板。`;
+    prompt += en
+      ? `\n7. If one kilometer is 2-3 minutes slower than average and later pace recovers, call out that isolated disruption separately. It may reflect stopping, walking, cramp or hitting the wall, but do not invent the exact cause.`
+      : `\n7. 如果某一公里比均配慢 2–3 分钟，而后续重新提速，必须单独指出这个中断点；它可能是停走、抽筋或撞墙，但不得臆断具体原因，也不要误写成全程持续跑崩。`;
     if (isTrailRun) {
       prompt += en
         ? `\n\n⚠️ TRAIL RACE SPECIAL RULES:`

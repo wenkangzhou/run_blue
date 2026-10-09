@@ -21,7 +21,7 @@ export interface SustainedEffortHighlight {
   officialBestEffortMovingSeconds?: number;
 }
 
-export interface LongRunBlock {
+export interface LongRunPhase {
   startKm: number;
   endKm: number;
   distanceMeters: number;
@@ -39,11 +39,21 @@ export type LongRunExecutionPattern =
   | 'mixed'
   | 'unknown';
 
+export type LongRunAnalysisMethod =
+  | 'whole-run'
+  | 'adaptive-phases'
+  | 'early-late'
+  | 'insufficient';
+
 export interface LongRunAssessment {
-  tier: 'long-run' | 'race-simulation';
-  blockSizeKm: 5 | 10;
-  blocks: LongRunBlock[];
+  tier: 'long-run' | 'very-long-run';
+  analysisMethod: LongRunAnalysisMethod;
+  phases: LongRunPhase[];
   pattern: LongRunExecutionPattern;
+  analyzedDistanceMeters: number;
+  averagePaceSecondsPerKm?: number;
+  averageHeartRate?: number;
+  comparisonWindowKm?: number;
   earlyPaceSecondsPerKm?: number;
   latePaceSecondsPerKm?: number;
   paceChangeSecondsPerKm?: number;
@@ -53,56 +63,106 @@ export interface LongRunAssessment {
   paceSpreadSecondsPerKm?: number;
 }
 
-/** Complete blocks from consecutive metric splits. A short tail is not
- * compared with full blocks, and missing/irregular splits are not extrapolated. */
-export function getLongRunBlocks(
-  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>,
-  blockSizeMeters: 5_000 | 10_000
-): LongRunBlock[] {
-  if (activity.distance < 20_000) return [];
-  const splits = getValidSplits(activity.splits_metric);
-  const splitsPerBlock = blockSizeMeters / 1000;
-  const fullBlockCount = Math.floor(activity.distance / blockSizeMeters);
-  const blocks: LongRunBlock[] = [];
-  for (let blockIndex = 0; blockIndex < fullBlockCount; blockIndex += 1) {
-    const window = splits.slice(blockIndex * splitsPerBlock, blockIndex * splitsPerBlock + splitsPerBlock);
-    if (window.length !== splitsPerBlock || window.some((split, index) =>
-      split.split !== blockIndex * splitsPerBlock + index + 1 ||
-      Math.abs(split.distance - 1000) > 25
-    )) return [];
-    const distanceMeters = window.reduce((sum, split) => sum + split.distance, 0);
-    const movingTimeSeconds = window.reduce((sum, split) => sum + split.moving_time, 0);
-    const hasHeartRate = window.every((split) => isPositiveFinite(split.average_heartrate));
-    blocks.push({
-      startKm: blockIndex * splitsPerBlock,
-      endKm: (blockIndex + 1) * splitsPerBlock,
-      distanceMeters,
-      movingTimeSeconds,
-      averagePaceSecondsPerKm: movingTimeSeconds / distanceMeters * 1000,
-      averageHeartRate: hasHeartRate
-        ? window.reduce((sum, split) => sum + (split.average_heartrate ?? 0) * split.moving_time, 0) / movingTimeSeconds
-        : undefined,
-    });
-  }
-  return blocks;
-}
-
-export function getLongRunTenKilometerBlocks(
-  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
-): LongRunBlock[] {
-  return getLongRunBlocks(activity, 10_000);
-}
-
 function average(values: number[]): number | undefined {
   return values.length > 0
     ? values.reduce((sum, value) => sum + value, 0) / values.length
     : undefined;
 }
 
+function percentile(values: number[], ratio: number): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.round((sorted.length - 1) * ratio)];
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function getContinuousKilometerSplits(
+  activity: Pick<StravaActivity, 'distance' | 'splits_metric'>
+): ActivitySplit[] {
+  const splits = getValidSplits(activity.splits_metric)
+    .filter((split) => split.distance >= 800 && split.distance <= 1_200);
+  if (splits.length < 6) return [];
+  const hasGap = splits[0]?.split !== 1 || splits.some((split, index) =>
+    index > 0 && split.split !== splits[index - 1].split + 1
+  );
+  const coveredDistance = splits.reduce((sum, split) => sum + split.distance, 0);
+  if (hasGap || coveredDistance < activity.distance * 0.95) return [];
+  return splits;
+}
+
+function getSmoothedPaces(splits: ActivitySplit[]): number[] {
+  const paces = splits.map((split) => split.moving_time / split.distance * 1000);
+  return paces.map((_, index) => median(paces.slice(
+    Math.max(0, index - 1),
+    Math.min(paces.length, index + 2)
+  )));
+}
+
+function buildAdaptiveLongRunPhases(
+  splits: ActivitySplit[],
+  averagePaceSecondsPerKm: number
+): LongRunPhase[] {
+  const minPhaseLength = splits.length >= 30 ? 5 : 4;
+  if (splits.length < minPhaseLength * 2) return [];
+
+  const paces = getSmoothedPaces(splits);
+  const comparisonWidth = Math.min(4, minPhaseLength);
+  const meaningfulChange = Math.max(12, averagePaceSecondsPerKm * 0.035);
+  const candidates: Array<{ cut: number; score: number }> = [];
+  for (let cut = minPhaseLength; cut <= splits.length - minPhaseLength; cut += 1) {
+    const left = average(paces.slice(cut - comparisonWidth, cut));
+    const right = average(paces.slice(cut, cut + comparisonWidth));
+    if (left === undefined || right === undefined) continue;
+    const score = Math.abs(right - left);
+    if (score >= meaningfulChange) candidates.push({ cut, score });
+  }
+
+  const cuts: number[] = [];
+  candidates
+    .sort((a, b) => b.score - a.score)
+    .forEach((candidate) => {
+      if (cuts.length >= 3) return;
+      if (cuts.every((cut) => Math.abs(cut - candidate.cut) >= minPhaseLength)) {
+        cuts.push(candidate.cut);
+      }
+    });
+  cuts.sort((a, b) => a - b);
+  if (cuts.length === 0) return [];
+
+  const boundaries = [0, ...cuts, splits.length];
+  let distanceCursor = 0;
+  return boundaries.slice(0, -1).map((startIndex, phaseIndex) => {
+    const endIndex = boundaries[phaseIndex + 1];
+    const window = splits.slice(startIndex, endIndex);
+    const startKm = distanceCursor / 1000;
+    const distanceMeters = window.reduce((sum, split) => sum + split.distance, 0);
+    const movingTimeSeconds = window.reduce((sum, split) => sum + split.moving_time, 0);
+    const hasHeartRate = window.every((split) => isPositiveFinite(split.average_heartrate));
+    distanceCursor += distanceMeters;
+    return {
+      startKm,
+      endKm: distanceCursor / 1000,
+      distanceMeters,
+      movingTimeSeconds,
+      averagePaceSecondsPerKm: movingTimeSeconds / distanceMeters * 1000,
+      averageHeartRate: hasHeartRate
+        ? window.reduce((sum, split) => sum + (split.average_heartrate ?? 0) * split.moving_time, 0) / movingTimeSeconds
+        : undefined,
+    };
+  });
+}
+
 /**
- * Evaluates long-run execution from broad blocks instead of promoting a short
- * fast patch. Runs around 20 km use 5 km blocks; 30 km+ runs use 10 km blocks
- * because they are usually race-specific simulations. A late slowdown only
+ * Evaluates long-run execution after identifying the workout's own structure.
+ * Stable runs are judged as a whole; sustained pace changes create adaptive
+ * phases; gradual trends use broad early/late windows. A late slowdown only
  * becomes a fatigue fade when heart rate stays high instead of falling with it.
  */
 export function getLongRunAssessment(
@@ -110,43 +170,62 @@ export function getLongRunAssessment(
 ): LongRunAssessment | null {
   if (activity.distance < 20_000) return null;
 
-  const raceSimulation = activity.distance >= 30_000;
-  const blockSizeMeters = raceSimulation ? 10_000 : 5_000;
-  const blocks = getLongRunBlocks(activity, blockSizeMeters);
+  const veryLongRun = activity.distance >= 30_000;
+  const splits = getContinuousKilometerSplits(activity);
   const base: LongRunAssessment = {
-    tier: raceSimulation ? 'race-simulation' : 'long-run',
-    blockSizeKm: raceSimulation ? 10 : 5,
-    blocks,
+    tier: veryLongRun ? 'very-long-run' : 'long-run',
+    analysisMethod: 'insufficient',
+    phases: [],
     pattern: 'unknown',
+    analyzedDistanceMeters: 0,
   };
-  if (blocks.length < 2) return base;
+  if (splits.length < 6) return base;
 
-  const comparisonBlockCount = Math.max(1, Math.floor(blocks.length / 3));
-  const earlyBlocks = blocks.slice(0, comparisonBlockCount);
-  const lateBlocks = blocks.slice(-comparisonBlockCount);
-  const earlyPaceSecondsPerKm = average(earlyBlocks.map((block) => block.averagePaceSecondsPerKm));
-  const latePaceSecondsPerKm = average(lateBlocks.map((block) => block.averagePaceSecondsPerKm));
+  const analyzedDistanceMeters = splits.reduce((sum, split) => sum + split.distance, 0);
+  const analyzedTimeSeconds = splits.reduce((sum, split) => sum + split.moving_time, 0);
+  const averagePaceSecondsPerKm = analyzedTimeSeconds / analyzedDistanceMeters * 1000;
+  const hasHeartRate = splits.every((split) => isPositiveFinite(split.average_heartrate));
+  const averageHeartRate = hasHeartRate
+    ? splits.reduce((sum, split) => sum + (split.average_heartrate ?? 0) * split.moving_time, 0) / analyzedTimeSeconds
+    : undefined;
+  const comparisonWindowCount = Math.max(3, Math.min(8, Math.floor(splits.length * 0.2)));
+  const earlySplits = splits.slice(0, comparisonWindowCount);
+  const lateSplits = splits.slice(-comparisonWindowCount);
+  const earlyPaceSecondsPerKm = average(earlySplits.map((split) => split.moving_time / split.distance * 1000));
+  const latePaceSecondsPerKm = average(lateSplits.map((split) => split.moving_time / split.distance * 1000));
   if (earlyPaceSecondsPerKm === undefined || latePaceSecondsPerKm === undefined) return base;
 
-  const earlyHeartRates = earlyBlocks.map((block) => block.averageHeartRate).filter(isPositiveFinite);
-  const lateHeartRates = lateBlocks.map((block) => block.averageHeartRate).filter(isPositiveFinite);
-  const earlyHeartRate = earlyHeartRates.length === earlyBlocks.length ? average(earlyHeartRates) : undefined;
-  const lateHeartRate = lateHeartRates.length === lateBlocks.length ? average(lateHeartRates) : undefined;
+  const earlyHeartRates = earlySplits.map((split) => split.average_heartrate).filter(isPositiveFinite);
+  const lateHeartRates = lateSplits.map((split) => split.average_heartrate).filter(isPositiveFinite);
+  const earlyHeartRate = earlyHeartRates.length === earlySplits.length ? average(earlyHeartRates) : undefined;
+  const lateHeartRate = lateHeartRates.length === lateSplits.length ? average(lateHeartRates) : undefined;
   const paceChangeSecondsPerKm = latePaceSecondsPerKm - earlyPaceSecondsPerKm;
   const heartRateChange = earlyHeartRate !== undefined && lateHeartRate !== undefined
     ? lateHeartRate - earlyHeartRate
     : undefined;
-  const paces = blocks.map((block) => block.averagePaceSecondsPerKm);
-  const paceSpreadSecondsPerKm = Math.max(...paces) - Math.min(...paces);
+  const paces = getSmoothedPaces(splits);
+  const pace10 = percentile(paces, 0.1);
+  const pace90 = percentile(paces, 0.9);
+  const paceSpreadSecondsPerKm = pace10 !== undefined && pace90 !== undefined ? pace90 - pace10 : 0;
   const meaningfulPaceChange = Math.max(12, earlyPaceSecondsPerKm * 0.03);
   const steadySpread = Math.max(15, earlyPaceSecondsPerKm * 0.04);
+  const thirdSize = Math.max(2, Math.floor(splits.length / 3));
+  const earlyThirdPace = average(paces.slice(0, thirdSize)) ?? earlyPaceSecondsPerKm;
+  const middleStart = Math.floor((splits.length - thirdSize) / 2);
+  const middleThirdPace = average(paces.slice(middleStart, middleStart + thirdSize)) ?? averagePaceSecondsPerKm;
+  const lateThirdPace = average(paces.slice(-thirdSize)) ?? latePaceSecondsPerKm;
+  const trendTolerance = meaningfulPaceChange * 0.6;
+  const progressesConsistently = middleThirdPace <= earlyThirdPace + trendTolerance
+    && lateThirdPace <= middleThirdPace + trendTolerance;
+  const fadesConsistently = middleThirdPace >= earlyThirdPace - trendTolerance
+    && lateThirdPace >= middleThirdPace - trendTolerance;
 
   let pattern: LongRunExecutionPattern;
   if (paceSpreadSecondsPerKm <= steadySpread && Math.abs(paceChangeSecondsPerKm) < meaningfulPaceChange) {
     pattern = 'steady';
-  } else if (paceChangeSecondsPerKm <= -meaningfulPaceChange) {
+  } else if (paceChangeSecondsPerKm <= -meaningfulPaceChange && progressesConsistently) {
     pattern = 'negative-split';
-  } else if (paceChangeSecondsPerKm >= meaningfulPaceChange) {
+  } else if (paceChangeSecondsPerKm >= meaningfulPaceChange && fadesConsistently) {
     if (heartRateChange === undefined) pattern = 'slowing-unclear';
     else if (heartRateChange <= -5) pattern = 'intentional-slowdown';
     else if (heartRateChange >= -2) pattern = 'fatigue-fade';
@@ -155,9 +234,22 @@ export function getLongRunAssessment(
     pattern = 'mixed';
   }
 
+  const phases = buildAdaptiveLongRunPhases(splits, averagePaceSecondsPerKm);
+  const analysisMethod: LongRunAnalysisMethod = pattern === 'steady'
+    ? 'whole-run'
+    : phases.length >= 2
+      ? 'adaptive-phases'
+      : 'early-late';
+
   return {
     ...base,
+    analysisMethod,
+    phases,
     pattern,
+    analyzedDistanceMeters,
+    averagePaceSecondsPerKm,
+    averageHeartRate,
+    comparisonWindowKm: earlySplits.reduce((sum, split) => sum + split.distance, 0) / 1000,
     earlyPaceSecondsPerKm,
     latePaceSecondsPerKm,
     paceChangeSecondsPerKm,

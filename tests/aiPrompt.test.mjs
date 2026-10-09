@@ -28,6 +28,7 @@ function compileLibFile(sourceFile, outputFile) {
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
+compileLibFile('src/lib/raceExecution.ts', 'raceExecution.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
@@ -100,7 +101,7 @@ test.after(() => {
 
 const { buildProfessionalPrompt } = require(path.join(tempDir, 'aiPrompt.js'));
 
-test('32 km prompt treats the full-block negative split as successful race-simulation execution', () => {
+test('32 km prompt uses detected phases without assuming a race simulation', () => {
   const splits = Array.from({ length: 32 }, (_, index) => {
     const pace = index < 10 ? 360 : index < 20 ? 345 : index < 30 ? 330 : 285;
     return {
@@ -126,12 +127,95 @@ test('32 km prompt treats the full-block negative split as successful race-simul
   );
   assert.match(prompt, /0–10 公里：6'00"\/km/);
   assert.match(prompt, /10–20 公里：5'45"\/km/);
-  assert.match(prompt, /20–30 公里：5'30"\/km/);
-  assert.match(prompt, /高总量超长距离（大概率为比赛专项模拟）/);
-  assert.match(prompt, /完整 10 公里分段结构：前慢后快/);
+  assert.match(prompt, /自适应阶段 20–32 公里：5'23"\/km/);
+  assert.match(prompt, /高总量超长距离/);
+  assert.match(prompt, /距离本身不能证明这是比赛模拟/);
+  assert.match(prompt, /持续配速变化支持“前慢后快”结构/);
   assert.match(prompt, /全程匀速与前慢后快都属于完成良好/);
   assert.match(prompt, /不能将整堂课评价为“轻松”/);
-  assert.match(prompt, /局部短距离快段不能取代全程结论/);
+  assert.match(prompt, /局部短距离快段也不能取代全程结论/);
+  assert.doesNotMatch(prompt, /大概率为比赛专项模拟|完整 10 公里分段结构/);
+});
+
+test('long-run prompt follows non-round phase boundaries from the workout data', () => {
+  const splits = Array.from({ length: 31 }, (_, index) => {
+    const pace = index < 7 ? 360 : index < 22 ? 340 : 320;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_speed: 1000 / pace,
+      average_heartrate: index < 7 ? 142 : index < 22 ? 150 : 158,
+    };
+  });
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      name: 'Adaptive long run',
+      distance: 31_000,
+      moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+      splits_metric: splits,
+    }),
+    null,
+    makeProfile(),
+    makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
+    'zh'
+  );
+
+  assert.match(prompt, /自适应阶段 0–7 公里/);
+  assert.match(prompt, /自适应阶段 7–22 公里/);
+  assert.match(prompt, /自适应阶段 22–31 公里/);
+  assert.doesNotMatch(prompt, /自适应阶段 0–10 公里/);
+});
+
+test('marathon race prompt uses race splits and never falls back to the 30 km training template', () => {
+  const splits = Array.from({ length: 42 }, (_, index) => {
+    const firstHalf = index < 21;
+    const pace = firstHalf ? 295 : 309;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_speed: 1000 / pace,
+      average_heartrate: firstHalf ? 158 : 164,
+    };
+  });
+  splits.push({
+    split: 43,
+    distance: 666,
+    moving_time: 199,
+    elapsed_time: 199,
+    average_speed: 666 / 199,
+    average_heartrate: 164,
+  });
+  const prompt = buildProfessionalPrompt(
+    makeActivity({
+      id: 16399915541,
+      name: '2025湖州马拉松',
+      workout_type: 1,
+      distance: 42_666,
+      moving_time: 12_883,
+      elapsed_time: 12_883,
+      average_heartrate: 161.2,
+      max_heartrate: 169,
+      splits_metric: splits,
+    }),
+    null,
+    makeProfile(),
+    makeClassification({
+      isRace: true,
+      raceType: '马拉松',
+      workoutType: 'race',
+      intensity: 'extreme',
+    }),
+    'zh'
+  );
+
+  assert.match(prompt, /比赛前后半程/);
+  assert.match(prompt, /控制良好的正分割/);
+  assert.match(prompt, /全马后半程只慢约 5 分钟仍属于非常出色的控制/);
+  assert.doesNotMatch(prompt, /高总量超长距离|长距离训练模板.*执行评价/);
 });
 
 function makeActivity(overrides = {}) {

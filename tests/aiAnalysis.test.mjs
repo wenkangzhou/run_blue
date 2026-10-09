@@ -30,6 +30,7 @@ compileLibFile('src/lib/aiComparison.ts', 'aiComparison.js');
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
+compileLibFile('src/lib/raceExecution.ts', 'raceExecution.js');
 compileLibFile('src/lib/aiConsistencyValidator.ts', 'aiConsistencyValidator.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
@@ -97,8 +98,175 @@ const { generateFallbackAnalysis } = require(path.join(tempDir, 'aiFallbackAnaly
 const {
   getKeySustainedEffort,
   getLongRunAssessment,
-  getLongRunTenKilometerBlocks,
 } = require(path.join(tempDir, 'activityHighlights.js'));
+const {
+  formatRaceExecutionSummary,
+  getRaceExecutionAssessment,
+} = require(path.join(tempDir, 'raceExecution.js'));
+
+function makeHuzhouMarathonActivity() {
+  const splits = Array.from({ length: 42 }, (_, index) => {
+    const firstHalf = index < 21;
+    const pace = firstHalf ? 295 : 309;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: firstHalf ? 158 : 164,
+    };
+  });
+  splits.push({
+    split: 43,
+    distance: 666,
+    moving_time: 199,
+    elapsed_time: 199,
+    average_heartrate: 164,
+  });
+  return makeActivity({
+    id: 16399915541,
+    name: '2025湖州马拉松',
+    workout_type: 1,
+    distance: 42_666,
+    moving_time: 12_883,
+    elapsed_time: 12_883,
+    average_heartrate: 161.2,
+    max_heartrate: 169,
+    splits_metric: splits,
+  });
+}
+
+test('activity 16399915541 is assessed as a race with an excellent controlled positive split', () => {
+  const activity = makeHuzhouMarathonActivity();
+  const assessment = getRaceExecutionAssessment(activity);
+  assert.equal(assessment.pattern, 'controlled-positive-split');
+  assert.equal(assessment.quality, 'excellent');
+
+  const result = parseAIResponse(
+    JSON.stringify({
+      summary: '这是一场42公里长距离训练，整体按长距离模板分析。',
+      executionSummary: '比赛顺利完成。',
+      executionQuality: 'fair',
+      intensity: 'extreme',
+      recoveryHours: 168,
+    }),
+    activity,
+    makeProfile({ similarStats: null }),
+    makeClassification({
+      isRace: true,
+      raceType: '马拉松',
+      workoutType: 'race',
+      workoutTypeConfidence: 'high',
+      intensity: 'extreme',
+    }),
+    'zh'
+  );
+
+  assert.equal(result.executionQuality, 'excellent');
+  assert.match(result.executionSummary, /前半程/);
+  assert.match(result.executionSummary, /后半程只比前半程慢 4:47/);
+  assert.match(result.executionSummary, /完成非常出色/);
+  assert.doesNotMatch(result.executionSummary, /长距离训练|比赛顺利完成/);
+  assert.match(result.summary, /控制很好的正分割/);
+  assert.doesNotMatch(result.summary, /长距离训练|长距离模板/);
+});
+
+test('race negative split is always recognized as excellent execution', () => {
+  const splits = Array.from({ length: 10 }, (_, index) => {
+    const pace = index < 5 ? 300 : 285;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: index < 5 ? 158 : 165,
+    };
+  });
+  const assessment = getRaceExecutionAssessment(makeActivity({
+    workout_type: 1,
+    distance: 10_000,
+    moving_time: 2925,
+    splits_metric: splits,
+  }));
+  assert.equal(assessment.pattern, 'negative-split');
+  assert.equal(assessment.quality, 'excellent');
+  assert.match(formatRaceExecutionSummary(assessment, 'zh'), /负分割/);
+  assert.match(formatRaceExecutionSummary(assessment, 'zh'), /非常出色/);
+});
+
+test('race that opens far above average and slows with high HR is identified as a bonk', () => {
+  const splits = Array.from({ length: 42 }, (_, index) => {
+    const firstHalf = index < 21;
+    const pace = firstHalf ? 280 : 340;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: firstHalf ? 160 : 162,
+    };
+  });
+  const assessment = getRaceExecutionAssessment(makeActivity({
+    workout_type: 1,
+    distance: 42_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  }));
+  assert.equal(assessment.pattern, 'likely-bonk');
+  assert.equal(assessment.quality, 'poor');
+  assert.equal(assessment.startedTooFast, true);
+  assert.match(formatRaceExecutionSummary(assessment, 'zh'), /前段跑得过快/);
+  assert.match(formatRaceExecutionSummary(assessment, 'zh'), /高度疑似跑崩/);
+});
+
+test('race slowdown without heart-rate evidence is not overclaimed as a bonk', () => {
+  const splits = Array.from({ length: 42 }, (_, index) => {
+    const pace = index < 21 ? 280 : 340;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+    };
+  });
+  const assessment = getRaceExecutionAssessment(makeActivity({
+    workout_type: 1,
+    distance: 42_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  }));
+  assert.equal(assessment.pattern, 'late-fade');
+  assert.doesNotMatch(formatRaceExecutionSummary(assessment, 'zh'), /高度疑似跑崩/);
+  assert.match(formatRaceExecutionSummary(assessment, 'zh'), /不能直接定性为跑崩/);
+});
+
+test('an isolated very slow race kilometer followed by recovery is called out separately', () => {
+  const paces = [270, 270, 270, 270, 270, 270, 270, 450, 275, 270];
+  const splits = paces.map((pace, index) => ({
+    split: index + 1,
+    distance: 1000,
+    moving_time: pace,
+    elapsed_time: pace,
+    average_heartrate: 165,
+  }));
+  const assessment = getRaceExecutionAssessment(makeActivity({
+    workout_type: 1,
+    distance: 10_000,
+    moving_time: paces.reduce((sum, pace) => sum + pace, 0),
+    splits_metric: splits,
+  }));
+  assert.equal(assessment.pattern, 'isolated-disruption');
+  assert.equal(assessment.quality, 'good');
+  assert.equal(assessment.anomalies[0].kilometer, 8);
+  assert.equal(assessment.anomalies[0].recoveredAfterward, true);
+  const summary = formatRaceExecutionSummary(assessment, 'zh');
+  assert.match(summary, /第 8 公里/);
+  assert.match(summary, /随后能够恢复配速/);
+  assert.match(summary, /这一点值得肯定/);
+  assert.match(summary, /停走、抽筋或撞墙/);
+  assert.match(summary, /而不是持续性掉速/);
+  assert.doesNotMatch(summary, /高度疑似跑崩/);
+});
 
 function makeProgressive32k() {
   const splits = Array.from({ length: 32 }, (_, index) => {
@@ -124,9 +292,9 @@ function makeProgressive32k() {
 
 test('32 km negative split is praised as excellent execution instead of marked as a deviation', () => {
   const activity = makeProgressive32k();
-  const blocks = getLongRunTenKilometerBlocks(activity);
-  assert.equal(blocks.length, 3);
-  assert.equal(getLongRunAssessment(activity).pattern, 'negative-split');
+  const assessment = getLongRunAssessment(activity);
+  assert.equal(assessment.pattern, 'negative-split');
+  assert.equal(assessment.analysisMethod, 'adaptive-phases');
   assert.equal(getKeySustainedEffort(activity, 310), null);
   const result = parseAIResponse(
     JSON.stringify({
@@ -147,13 +315,13 @@ test('32 km negative split is praised as excellent execution instead of marked a
   assert.match(result.summary, /高总量负荷/);
   assert.match(result.summary, /0–10 km 6'00"\/km/);
   assert.match(result.summary, /10–20 km 5'45"\/km/);
-  assert.match(result.summary, /20–30 km 5'30"\/km/);
-  assert.match(result.summary, /20–30 km 5'30"\/km、156 bpm/);
+  assert.match(result.summary, /20–32 km 5'23"\/km/);
   assert.match(result.summary, /全程平均心率 149 bpm/);
   assert.match(result.summary, /前慢后快/);
-  assert.match(result.executionSummary, /完整 10 公里分段/);
+  assert.match(result.executionSummary, /持续配速变化自动识别/);
   assert.match(result.executionSummary, /前慢后快/);
   assert.match(result.executionSummary, /完成到位/);
+  assert.doesNotMatch(result.executionSummary, /完整 10 公里分段/);
   assert.doesNotMatch(result.executionSummary, /最后3公里/);
   assert.doesNotMatch(result.executionSummary, /有偏差|局部 3 公里/);
   const displayed = normalizeAIAnalysisForDisplay(
@@ -166,7 +334,7 @@ test('32 km negative split is praised as excellent execution instead of marked a
   assert.equal((displayed.summary.match(/高总量负荷/g) ?? []).length, 1);
 });
 
-test('20 km long run uses 5 km blocks and recognizes steady pacing as good execution', () => {
+test('20 km steady long run is assessed as a whole instead of forced into 5 km blocks', () => {
   const paces = [320, 324, 318, 322];
   const splits = Array.from({ length: 20 }, (_, index) => ({
     split: index + 1,
@@ -181,7 +349,8 @@ test('20 km long run uses 5 km blocks and recognizes steady pacing as good execu
     splits_metric: splits,
   });
   const assessment = getLongRunAssessment(activity);
-  assert.equal(assessment.blockSizeKm, 5);
+  assert.equal(assessment.analysisMethod, 'whole-run');
+  assert.equal(assessment.phases.length, 0);
   assert.equal(assessment.pattern, 'steady');
 
   const result = parseAIResponse(
@@ -192,8 +361,78 @@ test('20 km long run uses 5 km blocks and recognizes steady pacing as good execu
     'zh'
   );
   assert.equal(result.executionQuality, 'good');
-  assert.match(result.executionSummary, /完整 5 公里分段/);
+  assert.match(result.executionSummary, /没有检测到明确的配速阶段变化/);
   assert.match(result.executionSummary, /节奏控制良好/);
+  assert.doesNotMatch(result.executionSummary, /完整 5 公里分段/);
+});
+
+test('long-run phases follow sustained changes instead of fixed 10 km boundaries', () => {
+  const splits = Array.from({ length: 31 }, (_, index) => {
+    const pace = index < 7 ? 360 : index < 22 ? 340 : 320;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: index < 7 ? 142 : index < 22 ? 150 : 158,
+    };
+  });
+  const assessment = getLongRunAssessment(makeActivity({
+    distance: 31_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  }));
+
+  assert.equal(assessment.analysisMethod, 'adaptive-phases');
+  assert.equal(assessment.pattern, 'negative-split');
+  assert.deepEqual(
+    assessment.phases.map((phase) => [phase.startKm, phase.endKm]),
+    [[0, 7], [7, 22], [22, 31]]
+  );
+});
+
+test('one isolated surge does not manufacture a long-run phase', () => {
+  const splits = Array.from({ length: 30 }, (_, index) => {
+    const pace = index === 14 ? 280 : 340;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: index === 14 ? 162 : 148,
+    };
+  });
+  const assessment = getLongRunAssessment(makeActivity({
+    distance: 30_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  }));
+
+  assert.equal(assessment.analysisMethod, 'whole-run');
+  assert.equal(assessment.pattern, 'steady');
+  assert.equal(assessment.phases.length, 0);
+});
+
+test('gradual progression without a breakpoint uses broad early-late evidence', () => {
+  const splits = Array.from({ length: 30 }, (_, index) => {
+    const pace = 360 - index * 2;
+    return {
+      split: index + 1,
+      distance: 1000,
+      moving_time: pace,
+      elapsed_time: pace,
+      average_heartrate: 140 + index * 0.6,
+    };
+  });
+  const assessment = getLongRunAssessment(makeActivity({
+    distance: 30_000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    splits_metric: splits,
+  }));
+
+  assert.equal(assessment.analysisMethod, 'early-late');
+  assert.equal(assessment.pattern, 'negative-split');
+  assert.equal(assessment.phases.length, 0);
 });
 
 test('late slowdown with a clear heart-rate drop is treated as intentional, not a bonk', () => {
@@ -256,7 +495,7 @@ test('late slowdown with heart rate staying high is identified as a fatigue fade
 test('long-run analysis does not invent a 10 km progression when splits are missing', () => {
   const activity = makeProgressive32k();
   activity.splits_metric = activity.splits_metric.filter((split) => split.split !== 15);
-  assert.deepEqual(getLongRunTenKilometerBlocks(activity), []);
+  assert.equal(getLongRunAssessment(activity).analysisMethod, 'insufficient');
   const result = parseAIResponse(
     JSON.stringify({ summary: '本次为轻松跑。', intensity: 'easy', suggestions: [], warnings: [] }),
     activity,
@@ -264,7 +503,8 @@ test('long-run analysis does not invent a 10 km progression when splits are miss
     makeClassification({ workoutType: 'long-run', intensity: 'moderate', paceZone: 'E' }),
     'zh'
   );
-  assert.match(result.summary, /缺少完整的 10 公里分段/);
+  assert.match(result.summary, /覆盖或连续性不足/);
+  assert.doesNotMatch(result.summary, /10 公里分段/);
   assert.doesNotMatch(result.summary, /逐段渐快/);
   assert.equal(result.intensity, 'moderate');
 });
@@ -1025,8 +1265,27 @@ test('generateFallbackAnalysis handles marathon race recovery conservatively', (
   assert.equal(result.isFallback, true);
   assert.equal(result.intensity, 'extreme');
   assert.equal(result.recoveryHours, 168);
-  assert.match(result.summary, /马拉松完成/);
+  assert.match(result.summary, /马拉松完赛/);
+  assert.match(result.executionSummary, /缺少完整分段/);
   assert.ok(result.warnings.length > 0);
+});
+
+test('race fallback uses the same split-based execution assessment', () => {
+  const result = generateFallbackAnalysis(
+    makeHuzhouMarathonActivity(),
+    makeProfile(),
+    makeClassification({
+      isRace: true,
+      raceType: '马拉松',
+      workoutType: 'race',
+      intensity: 'extreme',
+    }),
+    'zh'
+  );
+
+  assert.equal(result.executionQuality, 'excellent');
+  assert.match(result.executionSummary, /后半程只比前半程慢 4:47/);
+  assert.match(result.summary, /控制很好的正分割/);
 });
 
 test('does not describe low-zone heart rate as stable when second-half drift is large', () => {
