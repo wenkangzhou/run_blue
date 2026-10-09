@@ -50,17 +50,6 @@ export interface MapActivity {
   color: string;
 }
 
-export interface SegmentItem {
-  id: number;
-  name: string;
-  distance: number;
-  avg_grade: number;
-  climb: number;
-  effort_count: number;
-  athlete_count: number;
-  points: string; // encoded polyline
-}
-
 interface RouteMapProps {
   activities: MapActivity[];
   selectedId: number | null;
@@ -68,7 +57,6 @@ interface RouteMapProps {
   onShowPopup: (activity: MapActivity | null) => void;
   sidebarOpen: boolean;
   isDark?: boolean;
-  segments?: SegmentItem[];
   initialView?: RouteMapViewportState | null;
   onViewStateChange?: (state: RouteMapViewState) => void;
   onViewportChange?: (state: RouteMapViewportState) => void;
@@ -415,7 +403,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
     onShowPopup,
     sidebarOpen,
     isDark = false,
-    segments,
     initialView,
     onViewStateChange,
     onViewportChange,
@@ -439,9 +426,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
   const lastRouteTouchOpenAtRef = useRef(0);
   const lastRouteSelectionOpenAtRef = useRef(0);
   const viewportRenderFrameRef = useRef<number | null>(null);
-  const segmentsLayerRef = useRef<LayerGroup | null>(null);
-  const segmentsRef = useRef<SegmentItem[] | undefined>(segments);
-  useEffect(() => { segmentsRef.current = segments; });
   const { layer } = useMapTileLayer();
   const isDarkRef = useRef(isDark);
   const layerRef = useRef(layer);
@@ -685,16 +669,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // Render when segments change
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    (async () => {
-      const L = (await import('leaflet')).default;
-      renderSegments(map, L);
-    })();
-  }, [segments]);
-
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -802,7 +776,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
       // 2. Then render layers against correct view
       renderViewportLayers(map, L, currentActs);
-      renderSegments(map, L);
       publishViewportState(map);
     } catch (e) {
       console.error('renderAll failed:', e);
@@ -918,49 +891,6 @@ export const RouteMap = React.forwardRef(function RouteMap(
 
     updateClusterVisibility(map);
     return clusters.length;
-  }
-
-  function renderSegments(map: LeafletMap, L: LeafletModule) {
-    if (segmentsLayerRef.current) {
-      map.removeLayer(segmentsLayerRef.current);
-      segmentsLayerRef.current = null;
-    }
-    const segs = segmentsRef.current;
-    if (!segs || segs.length === 0) return;
-    const group = L.layerGroup().addTo(map);
-    segmentsLayerRef.current = group;
-
-    segs.forEach((seg) => {
-      if (!seg.points) return;
-      const pts = decodePolyline(seg.points);
-      if (pts.length < 2) return;
-      const latLngs = pts.map((p: [number, number]) => L.latLng(p[0], p[1]));
-      L.polyline(latLngs, {
-        color: '#b7791f',
-        weight: 2.8,
-        opacity: 0.72,
-        dashArray: '6, 4',
-        lineJoin: 'round',
-        className: 'heatmap-segment-line',
-      }).addTo(group);
-
-      // Label at midpoint
-      const midIdx = Math.floor(pts.length / 2);
-      const mid = pts[midIdx];
-      const label = L.divIcon({
-        className: 'heatmap-segment-label',
-        html: `<div style="
-          font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-          font-size:9px;font-weight:bold;color:#8a5a12;
-          background:rgba(255,255,255,0.88);padding:2px 5px;
-          border-radius:999px;white-space:nowrap;pointer-events:none;
-          box-shadow:0 1px 6px rgba(54,45,34,0.12);
-        ">${escapeHtml(seg.name)}</div>`,
-        iconSize: [120, 14],
-        iconAnchor: [60, 7],
-      });
-      L.marker(L.latLng(mid[0], mid[1]), { icon: label, interactive: false, zIndexOffset: 100 }).addTo(group);
-    });
   }
 
   function openActivitiesNearPoint(
@@ -1416,6 +1346,3 @@ export const RouteMap = React.forwardRef(function RouteMap(
   );
 });
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

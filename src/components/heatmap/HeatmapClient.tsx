@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useActivitiesStore } from '@/store/activities';
 import { useSettingsStore } from '@/store/settings';
 import { RouteMap } from './RouteMap';
-import type { RouteMapHandle, RouteMapViewState, RouteMapViewportState, SegmentItem } from './RouteMap';
+import type { RouteMapHandle, RouteMapViewState, RouteMapViewportState } from './RouteMap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActivityHistorySync } from '@/hooks/useActivityHistorySync';
@@ -21,11 +21,9 @@ import {
   ChevronLeft,
   Download,
   Filter,
-  Layers,
   List,
   Loader2,
   LocateFixed,
-  Route,
   Search,
   X,
   ArrowLeft,
@@ -43,7 +41,6 @@ interface HeatmapPageState {
   sidebarOpen?: boolean;
   filterOpen?: boolean;
   selectedId?: number | null;
-  showSegments?: boolean;
   mapView?: RouteMapViewportState | null;
   savedAt?: number;
 }
@@ -110,7 +107,6 @@ function isHeatmapPageState(value: unknown): value is HeatmapPageState {
     && (state.sidebarOpen === undefined || typeof state.sidebarOpen === 'boolean')
     && (state.filterOpen === undefined || typeof state.filterOpen === 'boolean')
     && (state.selectedId === undefined || state.selectedId === null || isFiniteNumber(state.selectedId))
-    && (state.showSegments === undefined || typeof state.showSegments === 'boolean')
     && (state.mapView === undefined || state.mapView === null || isHeatmapViewportState(state.mapView))
     && (state.savedAt === undefined || isFiniteNumber(state.savedAt));
 }
@@ -129,9 +125,6 @@ export function HeatmapClient() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>({ years: [], types: ['Run'] });
-  const [segments, setSegments] = useState<SegmentItem[]>([]);
-  const [showSegments, setShowSegments] = useState(false);
-  const [loadingSegments, setLoadingSegments] = useState(false);
   const [listQuery, setListQuery] = useState('');
   const [listLimit, setListLimit] = useState(80);
   const [mapViewState, setMapViewState] = useState<RouteMapViewState>({
@@ -204,7 +197,6 @@ export function HeatmapClient() {
       if (savedState.selectedId === null || typeof savedState.selectedId === 'number') {
         setSelectedId(savedState.selectedId);
       }
-      if (typeof savedState.showSegments === 'boolean') setShowSegments(savedState.showSegments);
       if (savedState.mapView) {
         setInitialMapView(savedState.mapView);
         setCurrentMapView(savedState.mapView);
@@ -222,7 +214,6 @@ export function HeatmapClient() {
       sidebarOpen,
       filterOpen,
       selectedId,
-      showSegments,
       mapView: currentMapView,
       savedAt: Date.now(),
     });
@@ -234,7 +225,6 @@ export function HeatmapClient() {
     listQuery,
     pageStateHydrated,
     selectedId,
-    showSegments,
     sidebarOpen,
   ]);
 
@@ -374,34 +364,6 @@ export function HeatmapClient() {
     }
   }, [accessToken, loadingMore, syncHistory]);
 
-  const loadSegments = useCallback(async () => {
-    if (loadingSegments || !accessToken) return;
-    setLoadingSegments(true);
-    try {
-      // Get current map bounds from the map ref if available, otherwise use default Shanghai bounds
-      let bounds = '31.10,121.30,31.35,121.60'; // default Shanghai
-      if (mapRef.current?.getBounds) {
-        const b = mapRef.current.getBounds();
-        if (b) {
-          bounds = `${b.getSouthWest().lat.toFixed(4)},${b.getSouthWest().lng.toFixed(4)},${b.getNorthEast().lat.toFixed(4)},${b.getNorthEast().lng.toFixed(4)}`;
-        }
-      }
-      const res = await fetch(`/api/segments/explore?bounds=${bounds}`);
-      if (!res.ok) throw new Error('Failed to load segments');
-      const data = (await res.json()) as { segments?: SegmentItem[] };
-      setSegments(data.segments || []);
-    } catch (err) {
-      console.error('Load segments failed:', err);
-    } finally {
-      setLoadingSegments(false);
-    }
-  }, [accessToken, loadingSegments]);
-
-  useEffect(() => {
-    if (!pageStateHydrated || !showSegments || segments.length > 0 || !accessToken) return;
-    loadSegments();
-  }, [accessToken, loadSegments, pageStateHydrated, segments.length, showSegments]);
-
   return (
     <div className="relative flex h-[100dvh] w-full overflow-hidden bg-[#edf3f5] text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       {/* Map Area */}
@@ -413,7 +375,6 @@ export function HeatmapClient() {
           onSelect={handleSelect}
           onShowPopup={handleShowPopup}
           sidebarOpen={sidebarOpen}
-          segments={showSegments ? segments : []}
           initialView={initialMapView}
           onViewStateChange={setMapViewState}
           onViewportChange={handleViewportChange}
@@ -458,25 +419,6 @@ export function HeatmapClient() {
                 </span>
               )}
             </button>
-            {accessToken && (
-              <button
-                onClick={() => {
-                  if (!showSegments && segments.length === 0) {
-                    loadSegments();
-                  }
-                  setShowSegments(!showSegments);
-                }}
-                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-mono text-xs font-bold transition-colors ${
-                  showSegments
-                    ? 'bg-amber-500 text-white shadow-sm'
-                    : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900'
-                }`}
-                title={showSegments ? t('heatmap.hideSegments') : t('heatmap.showSegments')}
-              >
-                {loadingSegments ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
-                {t('heatmap.segments')}
-              </button>
-            )}
             <button
               type="button"
               onClick={() => mapRef.current?.fitOverview()}
@@ -673,37 +615,6 @@ export function HeatmapClient() {
               </div>
             ) : (
               <>
-                {showSegments && segments.length > 0 && (
-                  <div className="border-b border-zinc-100 dark:border-zinc-900">
-                    <div className="flex items-center justify-between bg-amber-50 px-4 py-2 dark:bg-amber-950/20">
-                      <div className="flex items-center gap-1.5">
-                        <Route size={12} className="text-orange-500" />
-                        <span className="font-mono text-[11px] font-bold">{t('heatmap.nearbySegments')}</span>
-                      </div>
-                      <span className="font-mono text-[9px] text-zinc-400">{segments.length}</span>
-                    </div>
-                    <div>
-                      {segments.map(seg => (
-                        <a
-                          key={seg.id}
-                          href={`https://www.strava.com/segments/${seg.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                        >
-                          <span className="w-1 h-1 rounded-full flex-shrink-0 bg-orange-400" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-mono text-[10px] truncate">{seg.name}</p>
-                            <p className="font-mono text-[9px] text-zinc-400">
-                              {(seg.distance / 1000).toFixed(1)} km · {seg.avg_grade?.toFixed(1) ?? 0}% · {seg.effort_count} {t('heatmap.efforts')}
-                            </p>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {grouped.map(({ year, items }) => (
                   <div key={year} className="border-b border-zinc-100 dark:border-zinc-900 last:border-b-0">
                     <div className="sticky top-0 z-10 flex items-center justify-between bg-zinc-50/95 px-4 py-2 backdrop-blur dark:bg-zinc-900/90">

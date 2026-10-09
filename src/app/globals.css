@@ -119,13 +119,6 @@ body {
   z-index: 1 !important;
 }
 
-/* Heatmap segment label */
-.heatmap-segment-label {
-  outline: none !important;
-  border: none !important;
-  pointer-events: none !important;
-}
-
 /* Heatmap cluster marker: remove focus outline / border artifacts */
 .heatmap-cluster-marker,
 .heatmap-cluster-marker:focus,
@@ -244,10 +237,6 @@ body {
 
 .heatmap-map .heatmap-polyline-selected {
   filter: drop-shadow(0 2px 4px rgba(249, 115, 22, 0.20));
-}
-
-.heatmap-map .heatmap-segment-line {
-  stroke-linecap: round;
 }
 
 .heatmap-map .leaflet-control-zoom {
