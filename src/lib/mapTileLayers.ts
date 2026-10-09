@@ -1,4 +1,4 @@
-export type TileLayerKey = 'osm' | 'maptiler' | 'cartodb';
+export type TileLayerKey = 'osm' | 'maptiler';
 
 export interface TileLayerConfig {
   key: TileLayerKey;
@@ -26,19 +26,11 @@ export const TILE_LAYERS: Record<TileLayerKey, TileLayerConfig> = {
       : '',
     attribution: '© MapTiler © OpenStreetMap',
   },
-  cartodb: {
-    key: 'cartodb',
-    name: 'CartoDB',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '© CartoDB © OpenStreetMap',
-    subdomains: 'abcd',
-  },
 };
 
 export const TILE_LAYER_OPTIONS: TileLayerConfig[] = [
   TILE_LAYERS.osm,
   TILE_LAYERS.maptiler,
-  TILE_LAYERS.cartodb,
 ];
 
 const STORAGE_KEY = 'run_blue_map_tile_layer';

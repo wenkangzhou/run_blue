@@ -139,8 +139,7 @@ interface RouteGeometry {
 const routeGeometryCache = new Map<number, RouteGeometry>();
 
 function addTileLayer(map: LeafletMap, layerKey: string, isDark: boolean, L: LeafletModule): TileLayer | null {
-  const effectiveLayerKey = layerKey === 'osm' ? 'cartodb' : layerKey;
-  const config = TILE_LAYERS[effectiveLayerKey as keyof typeof TILE_LAYERS] || TILE_LAYERS.cartodb;
+  const config = TILE_LAYERS[layerKey as keyof typeof TILE_LAYERS] || TILE_LAYERS.osm;
   if (!config.url) return null;
   const options: TileLayerOptions = {
     opacity: isDark ? 0.7 : 1,
