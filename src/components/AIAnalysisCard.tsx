@@ -9,6 +9,7 @@ import {
   ArrowRight, ShieldCheck,
 } from 'lucide-react';
 import { getWorkoutTypeLabel, type ActivityClassification } from '@/lib/trainingAnalysis';
+import { getTrainingStressEvidenceLabel } from '@/lib/trainingStressEvidence';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 
 interface AIAnalysisCardProps {
@@ -288,6 +289,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   function formatEvidence(evidence: string) {
     if (i18n.language.startsWith('en')) return evidence;
 
+    const trainingStressLabel = getTrainingStressEvidenceLabel(evidence, i18n.language);
+    if (trainingStressLabel) return trainingStressLabel;
+
     if (evidence === 'Strava workout_type=1') return 'Strava 将本次活动标记为比赛';
     if (evidence === 'Strava workout_type=3') return 'Strava 将本次活动标记为训练';
     if (evidence === 'activity name matches race keywords') return '活动名称包含比赛关键词';
@@ -320,7 +324,6 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     if (evidence === 'lap structure has low pace contrast, analyze reps rather than average pace') return '各圈配速对比不强，重点看分段结构而不是全程均配';
     if (evidence === 'heat and recent volume raise internal training load') return '高温高湿、个人配速位置与近期跑量共同抬高了内部训练负荷';
     if (evidence === 'heat, pace, and rolling training load raise internal load') return '高温高湿、个人配速位置与滚动训练负荷共同抬高了内部训练成本';
-    if (evidence === 'heat and pace raise current-session effort') return '高温与本次配速共同抬高了单次训练强度';
 
     let match = evidence.match(/^(\d+) laps with (\d+) short reps$/);
     if (match) return `${match[1]} 圈中包含 ${match[2]} 个短重复段`;

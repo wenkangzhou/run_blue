@@ -24,12 +24,14 @@ function compileLibFile(sourceFile, outputFile) {
 }
 
 compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/trainingStressEvidence.ts', 'trainingStressEvidence.js');
 compileLibFile('src/lib/trainingStress.ts', 'trainingStress.js');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types') return {};
   if (request === './weather') return require(path.join(tempDir, 'weather.js'));
+  if (request === './trainingStressEvidence') return require(path.join(tempDir, 'trainingStressEvidence.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -38,6 +40,24 @@ test.after(() => {
 });
 
 const { adjustClassificationForTrainingStress } = require(path.join(tempDir, 'trainingStress.js'));
+const {
+  TRAINING_STRESS_EVIDENCE,
+  getTrainingStressEvidenceLabel,
+} = require(path.join(tempDir, 'trainingStressEvidence.js'));
+
+test('localizes every training-stress evidence item in Chinese', () => {
+  const labels = Object.values(TRAINING_STRESS_EVIDENCE).map((evidence) =>
+    getTrainingStressEvidenceLabel(evidence, 'zh-CN')
+  );
+
+  assert.deepEqual(labels, [
+    '平均心率抬高了本次训练强度',
+    '单位时间训练负荷抬高了本次训练强度',
+    '距离或时长增加了本次训练的总体负荷',
+    '高温与本次配速共同抬高了单次训练强度',
+  ]);
+  assert.ok(labels.every((label) => label && !/[A-Za-z]/.test(label)));
+});
 
 function makeActivity(paceSeconds, overrides = {}) {
   return {

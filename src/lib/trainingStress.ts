@@ -2,6 +2,7 @@ import type { StravaActivity } from '@/types';
 import { buildActivityWeatherContext } from './weather';
 import type { StreamAnalysis } from './streamAnalysis';
 import type { TrainingLoadSummary } from './trainingLoad';
+import { TRAINING_STRESS_EVIDENCE } from './trainingStressEvidence';
 import type {
   ActivityClassification,
   ActivityLoadAdjustment,
@@ -281,10 +282,10 @@ export function adjustClassificationForTrainingStress(
     workoutTypeEvidence: applied
       ? [
           ...classification.workoutTypeEvidence,
-          ...(heartRateIntensityFloor ? ['average heart rate raises current-session effort'] : []),
-          ...(loadDensityIntensityFloor ? ['activity load density raises current-session effort'] : []),
-          ...(volumeIntensityFloor ? ['distance or duration raises total session cost'] : []),
-          ...(thermalPacePressure ? ['heat and pace raise current-session effort'] : []),
+          ...(heartRateIntensityFloor ? [TRAINING_STRESS_EVIDENCE.averageHeartRate] : []),
+          ...(loadDensityIntensityFloor ? [TRAINING_STRESS_EVIDENCE.loadDensity] : []),
+          ...(volumeIntensityFloor ? [TRAINING_STRESS_EVIDENCE.volume] : []),
+          ...(thermalPacePressure ? [TRAINING_STRESS_EVIDENCE.heatAndPace] : []),
         ]
       : classification.workoutTypeEvidence,
     loadAdjustment,
