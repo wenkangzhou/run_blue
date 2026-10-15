@@ -13,7 +13,7 @@ const RIEGEL_EXPONENT = 1.06;
 
 export type PerformanceDistance = '5k' | '10k' | '21k' | '42k';
 export type PerformanceConfidence = 'low' | 'medium' | 'high';
-export type PerformanceEvidenceSource = 'best-effort' | 'race' | 'quality-block' | 'distance-effort';
+export type PerformanceEvidenceSource = 'best-effort' | 'race' | 'quality-block' | 'distance-effort' | 'long-run';
 
 export interface PerformanceEvidence {
   activityId: number;
@@ -98,6 +98,9 @@ const MIN_RELEVANT_EVIDENCE_METERS: Record<PerformanceDistance, number> = {
   '21k': 9_500,
   '42k': 20_000,
 };
+
+const MARATHON_LONG_RUN_MIN_METERS = 28_000;
+const MARATHON_LONG_RUN_MIN_SECONDS = 2 * 60 * 60;
 
 function isRun(activity: StravaActivity): boolean {
   return activity.type === 'Run'
@@ -277,7 +280,8 @@ function getFallbackFiveKSeconds(activities: StravaActivity[]): number | null {
 function extractActivityEvidence(
   activity: StravaActivity,
   qualityPaceCeilingSecondsPerKm: number | null,
-  referenceVDOT: number | null
+  referenceVDOT: number | null,
+  heartRateProfile: { maxHeartRate?: number | null; lthr?: number | null }
 ): PerformanceEvidence[] {
   if (!isRun(activity) || activity.manual || activity.flagged) return [];
   const candidates: PerformanceEvidence[] = [];
@@ -317,21 +321,58 @@ function extractActivityEvidence(
   const standardDistance = findDistance(activity.distance);
   const qualifiesByPace = qualityPaceCeilingSecondsPerKm !== null
     && activityPace <= qualityPaceCeilingSecondsPerKm;
+  const isMarathonLongRun = activity.distance >= MARATHON_LONG_RUN_MIN_METERS
+    && activity.moving_time >= MARATHON_LONG_RUN_MIN_SECONDS;
+  const averageHeartRate = activity.average_heartrate;
+  const lthrRatio = isPositiveFinite(averageHeartRate) && isPositiveFinite(heartRateProfile.lthr)
+    ? averageHeartRate / heartRateProfile.lthr
+    : null;
+  const maxHeartRateRatio = isPositiveFinite(averageHeartRate) && isPositiveFinite(heartRateProfile.maxHeartRate)
+    ? averageHeartRate / heartRateProfile.maxHeartRate
+    : null;
+  const longRunHasStrongCardiacEvidence = (lthrRatio !== null && lthrRatio >= 0.86)
+    || (maxHeartRateRatio !== null && maxHeartRateRatio >= 0.82);
+  const longRunConfidence = longRunHasStrongCardiacEvidence
+    ? 0.8
+    : qualifiesByPace
+      ? 0.74
+      : 0.62;
+  const longRunMinimumVDOT = referenceVDOT === null ? null : referenceVDOT - 2;
 
   if (
     isPositiveFinite(activity.distance)
     && isPositiveFinite(activity.moving_time)
     && activity.distance >= 2_850
     && !isTrailRun(activity)
-    && (race || (standardDistance && qualifiesByPace) || (activity.workout_type === 3 && qualifiesByPace))
+    && (
+      race
+      || (standardDistance && qualifiesByPace)
+      || (activity.workout_type === 3 && qualifiesByPace)
+      || isMarathonLongRun
+    )
   ) {
+    const source: PerformanceEvidenceSource = race
+      ? 'race'
+      : isMarathonLongRun
+        ? 'long-run'
+        : 'distance-effort';
     const evidence = createEvidence({
       activity,
-      source: race ? 'race' : 'distance-effort',
+      source,
       distanceMeters: activity.distance,
       durationSeconds: activity.moving_time,
-      confidence: race ? 0.97 : activity.workout_type === 3 ? 0.72 : 0.64,
-      minimumVDOT: race ? null : qualityFloorVDOT,
+      confidence: race
+        ? 0.97
+        : isMarathonLongRun
+          ? longRunConfidence
+          : activity.workout_type === 3
+            ? 0.72
+            : 0.64,
+      minimumVDOT: race
+        ? null
+        : isMarathonLongRun
+          ? longRunMinimumVDOT
+          : qualityFloorVDOT,
     });
     if (evidence) candidates.push(evidence);
   }
@@ -367,6 +408,7 @@ function selectOneEvidencePerActivity(evidence: PerformanceEvidence[]): Performa
     'best-effort': 4,
     race: 3,
     'quality-block': 2,
+    'long-run': 1.5,
     'distance-effort': 1,
   };
 
@@ -483,6 +525,14 @@ function buildSnapshots(evidence: PerformanceEvidence[], endTimestamp: number): 
   return snapshots;
 }
 
+function isEvidenceRelevantForDistance(
+  evidence: PerformanceEvidence,
+  distance: PerformanceDistance
+): boolean {
+  if (evidence.source === 'long-run') return distance === '42k';
+  return evidence.distanceMeters >= MIN_RELEVANT_EVIDENCE_METERS[distance];
+}
+
 function getDirectRecordCandidates(activity: StravaActivity): PerformanceRecordEvent[] {
   if (!isRun(activity) || activity.manual || activity.flagged) return [];
   const timestamp = getTimestamp(activity);
@@ -582,10 +632,14 @@ function buildRecords(
 export function calculatePerformanceTrend({
   activities,
   profilePBs,
+  maxHeartRate,
+  lthr,
   now = new Date(),
 }: {
   activities: StravaActivity[];
   profilePBs?: Partial<UserProfilePBs> | null;
+  maxHeartRate?: number | null;
+  lthr?: number | null;
   now?: Date;
 }): PerformanceTrend {
   const runs = activities.filter(isRun);
@@ -598,7 +652,12 @@ export function calculatePerformanceTrend({
     ? calculateSemanticPaceZones(referenceFiveKSeconds).marathon.max
     : null;
   const evidence = runs
-    .flatMap((activity) => extractActivityEvidence(activity, qualityPaceCeiling, referenceVDOT))
+    .flatMap((activity) => extractActivityEvidence(
+      activity,
+      qualityPaceCeiling,
+      referenceVDOT,
+      { maxHeartRate, lthr }
+    ))
     .sort((a, b) => a.timestamp - b.timestamp);
   const { recordEvents, records } = buildRecords(runs, profilePBs);
 
@@ -608,7 +667,7 @@ export function calculatePerformanceTrend({
     (Object.keys(PERFORMANCE_DISTANCES) as PerformanceDistance[]).map((distance) => [
       distance,
       buildSnapshots(
-        evidence.filter((item) => item.distanceMeters >= MIN_RELEVANT_EVIDENCE_METERS[distance]),
+        evidence.filter((item) => isEvidenceRelevantForDistance(item, distance)),
         endTimestamp
       ),
     ])
@@ -676,7 +735,11 @@ export function getActivityPerformanceImpact(
   const activityEvidence = trend.evidence
     .filter((item) => item.activityId === activityId)
     .sort((a, b) => b.confidence - a.confidence || b.vdot - a.vdot)[0];
-  if (!activityEvidence || activityEvidence.source === 'distance-effort') return null;
+  if (
+    !activityEvidence
+    || activityEvidence.source === 'distance-effort'
+    || activityEvidence.source === 'long-run'
+  ) return null;
 
   const previousEvidence = trend.evidence.filter((item) => (
     item.timestamp < activityEvidence.timestamp

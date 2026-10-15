@@ -113,8 +113,10 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
   const trend = useMemo(() => calculatePerformanceTrend({
     activities,
     profilePBs: profile?.pbs,
+    maxHeartRate: profile?.maxHeartRate,
+    lthr: profile?.lthr,
     now,
-  }), [activities, now, profile?.pbs]);
+  }), [activities, now, profile?.lthr, profile?.maxHeartRate, profile?.pbs]);
   const selectedSnapshots = trend.distanceSnapshots[distance];
   const rangeDays = RANGES.find((item) => item.value === range)?.days ?? 180;
   const rangeStart = now.getTime() - rangeDays * DAY_MS;

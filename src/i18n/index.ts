@@ -473,7 +473,7 @@ const resources = {
         performanceProfileOnly: 'Blue is estimated ability; profile PB is shown separately because it has no date',
         performanceNoRelevantEvidence: 'No sufficiently long evidence in the latest 84 days; current ability is not estimated',
         performanceEmptyTitle: 'No ability curve yet',
-        performanceEmptyHint: 'The curve starts after syncing a race, best effort, or a continuous quality block at marathon pace or faster.',
+        performanceEmptyHint: 'The curve starts after syncing a race, best effort, marathon-specific long run, or a continuous quality block at marathon pace or faster.',
         performanceDistance: {
           '5k': '5K',
           '10k': '10K',
@@ -495,6 +495,7 @@ const resources = {
           race: 'Race result',
           'quality-block': 'Qualified quality block',
           'distance-effort': 'Sustained distance effort',
+          'long-run': 'Marathon-specific long run',
         },
         trainingZones: 'Training Zones',
         trainingZonesHint: 'Duration-weighted distribution estimated from each activity average.',
@@ -1538,7 +1539,7 @@ const resources = {
         performanceProfileOnly: '蓝线为能力估算；档案 PB 因缺少日期单独显示',
         performanceNoRelevantEvidence: '近 84 天暂无足够距离的有效依据，暂不估算当前能力',
         performanceEmptyTitle: '还没有形成能力曲线',
-        performanceEmptyHint: '同步比赛、最佳成绩或达到个人 M 区以上的连续质量段后，这里会开始记录变化。',
+        performanceEmptyHint: '同步比赛、最佳成绩、马拉松专项长距离或达到个人 M 区以上的连续质量段后，这里会开始记录变化。',
         performanceDistance: {
           '5k': '5K',
           '10k': '10K',
@@ -1560,6 +1561,7 @@ const resources = {
           race: '比赛成绩',
           'quality-block': '有效连续质量段',
           'distance-effort': '持续距离表现',
+          'long-run': '马拉松专项长距离',
         },
         trainingZones: '训练区间',
         trainingZonesHint: '按训练时长统计；当前使用每次活动的平均值估算区间分布。',

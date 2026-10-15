@@ -162,6 +162,34 @@ test('distance trends require evidence that is long enough for the target event'
   assert.equal(trend.distanceSnapshots['42k'].length, 0);
 });
 
+test('a recent 32km training run becomes marathon-specific evidence', () => {
+  const activity = makeActivity(20400849331, '2026-10-01', {
+    distance: 32_240,
+    moving_time: 2 * 3600 + 49 * 60 + 2,
+    elapsed_time: 2 * 3600 + 49 * 60 + 19,
+    average_heartrate: 159,
+    max_heartrate: 180,
+  });
+  const trend = calculatePerformanceTrend({
+    activities: [activity],
+    profilePBs: { '5k': 1276 },
+    maxHeartRate: 182,
+    lthr: 176,
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  const evidence = trend.evidence.find((item) => item.activityId === activity.id);
+  const marathonSnapshot = trend.distanceSnapshots['42k'].at(-1);
+
+  assert.equal(evidence?.source, 'long-run');
+  assert.equal(evidence?.distanceMeters, 32_240);
+  assert.equal(evidence?.confidence, 0.8);
+  assert.ok(marathonSnapshot?.evidence.some((item) => item.activityId === activity.id));
+  assert.equal(trend.distanceSnapshots['21k'].length, 0);
+  assert.equal(trend.distanceSnapshots['10k'].length, 0);
+  assert.equal(trend.distanceSnapshots['5k'].length, 0);
+});
+
 test('a snapshot exposes every evidence item counted in its total', () => {
   const activities = [
     makeActivity(14, '2026-08-08', {
