@@ -12,7 +12,15 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Activity, BadgeCheck, ChartNoAxesCombined, Flame, Trophy } from 'lucide-react';
+import {
+  Activity,
+  BadgeCheck,
+  ChartNoAxesCombined,
+  ChevronDown,
+  CircleCheck,
+  CircleX,
+  Trophy,
+} from 'lucide-react';
 import type { StravaActivity } from '@/types';
 import { getUserProfile, type UserProfile } from '@/lib/userProfile';
 import {
@@ -22,6 +30,7 @@ import {
   predictTimeFromVDOT,
   type PerformanceConfidence,
   type PerformanceDistance,
+  type PerformanceExclusionReason,
   type PerformanceEvidenceSource,
 } from '@/lib/performanceTrend';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
@@ -67,12 +76,17 @@ function formatCompactDate(dateKey: string, locale: string): string {
 }
 
 function formatEvidenceDistance(distanceMeters: number): string {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return '—';
   const kilometers = distanceMeters / 1000;
   return `${kilometers >= 10 ? kilometers.toFixed(1) : kilometers.toFixed(2)} km`;
 }
 
 function getEvidenceLabel(source: PerformanceEvidenceSource, t: ReturnType<typeof useTranslation>['t']): string {
   return t(`stats.performanceEvidence.${source}`);
+}
+
+function getExclusionLabel(reason: PerformanceExclusionReason, t: ReturnType<typeof useTranslation>['t']): string {
+  return t(`stats.performanceExclusion.${reason}`);
 }
 
 function getConfidenceTone(confidence: PerformanceConfidence): string {
@@ -117,7 +131,9 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
     lthr: profile?.lthr,
     now,
   }), [activities, now, profile?.lthr, profile?.maxHeartRate, profile?.pbs]);
-  const selectedSnapshots = trend.distanceSnapshots[distance];
+  const selectedSnapshots = distance === '42k'
+    ? trend.speedSnapshots
+    : trend.distanceSnapshots[distance];
   const rangeDays = RANGES.find((item) => item.value === range)?.days ?? 180;
   const rangeStart = now.getTime() - rangeDays * DAY_MS;
   const snapshots = selectedSnapshots.filter((snapshot) => snapshot.timestamp >= rangeStart);
@@ -125,13 +141,16 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
   const current = latestSnapshot && now.getTime() - latestSnapshot.timestamp <= 8 * DAY_MS
     ? latestSnapshot
     : null;
-  const currentEstimate = current ? predictTimeFromVDOT(current.vdot, distance) : null;
+  const marathonProjection = distance === '42k' ? trend.marathonProjection : null;
+  const currentEstimate = marathonProjection?.estimatedSeconds
+    ?? (current ? predictTimeFromVDOT(current.vdot, distance) : null);
+  const currentConfidence = marathonProjection?.confidence ?? current?.confidence ?? null;
   const comparisonTimestamp = (current?.timestamp ?? now.getTime()) - 28 * DAY_MS;
   const comparison = current
     ? [...selectedSnapshots].reverse().find((snapshot) => snapshot.timestamp <= comparisonTimestamp) ?? null
     : null;
   const comparisonEstimate = comparison ? predictTimeFromVDOT(comparison.vdot, distance) : null;
-  const improvementSeconds = currentEstimate && comparisonEstimate
+  const improvementSeconds = distance !== '42k' && currentEstimate && comparisonEstimate
     ? comparisonEstimate - currentEstimate
     : null;
   const record = trend.records[distance];
@@ -156,7 +175,9 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
     };
   });
   const isCurrentStale = current ? current.latestEvidenceDays > 28 : true;
-  const currentEvidence = current?.evidence ?? [];
+  const currentAudit = trend.audits[distance];
+  const currentEvidence = currentAudit.included;
+  const hasCurrentEstimate = currentEstimate !== null;
 
   return (
     <section id="performance-trend" className="scroll-mt-28 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
@@ -170,7 +191,7 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
               </h2>
             </div>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-              {t('stats.performanceTrendHint', '真实 PB 保留原始成绩；各距离只采用最近 84 天内、距离要求匹配的有效表现。')}
+              {t('stats.performanceTrendHint', '真实 PB 保留原始成绩；短距离采用匹配证据，全马则拆分速度潜力与耐力准备度。')}
             </p>
           </div>
 
@@ -208,9 +229,9 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
               <span className="font-mono text-4xl font-black leading-none text-zinc-950 dark:text-zinc-50">
                 {formatPerformanceTime(currentEstimate)}
               </span>
-              {current && (
-                <span className={`rounded-md border px-2 py-1 font-mono text-[10px] font-bold ${getConfidenceTone(current.confidence)}`}>
-                  {t(`stats.performanceConfidence.${current.confidence}`)}
+              {currentConfidence && (
+                <span className={`rounded-md border px-2 py-1 font-mono text-[10px] font-bold ${getConfidenceTone(currentConfidence)}`}>
+                  {t(`stats.performanceConfidence.${currentConfidence}`)}
                 </span>
               )}
             </div>
@@ -222,8 +243,10 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-amber-600 dark:text-amber-400'
             }`}>
-              {current === null
+              {!hasCurrentEstimate
                 ? t('stats.performanceEstimateUnavailable', '暂无足够依据，暂不估算')
+                : marathonProjection
+                ? t('stats.marathonCompositeEstimate', '已结合速度潜力与耐力准备度')
                 : improvementSeconds === null
                 ? t('stats.performanceNoComparison', '等待形成四周对比')
                 : Math.abs(improvementSeconds) < 2
@@ -232,6 +255,41 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                     ? t('stats.performanceImproved', '较四周前提升约 {{value}}', { value: formatPerformanceTime(improvementSeconds) })
                     : t('stats.performanceDeclined', '较四周前回落约 {{value}}', { value: formatPerformanceTime(Math.abs(improvementSeconds)) })}
             </p>
+
+            {marathonProjection && (
+              <div className="mt-4 space-y-2 border-t border-zinc-100 pt-3 font-mono text-[11px] dark:border-zinc-800">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {t('stats.speedPotential', '速度潜力')}
+                  </span>
+                  <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatPerformanceTime(marathonProjection.speedPotentialSeconds)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {t('stats.enduranceAdjustment', '耐力修正')}
+                  </span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">
+                    +{formatPerformanceTime(marathonProjection.enduranceAdjustmentSeconds)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {t('stats.marathonReadiness', '耐力准备度')}
+                  </span>
+                  <span className="font-bold text-blue-600 dark:text-blue-300">
+                    {marathonProjection.readiness.score}/100 · {t(`stats.marathonReadinessStatus.${marathonProjection.readiness.status}`)}
+                  </span>
+                </div>
+                <p className="pt-1 text-[10px] leading-4 text-zinc-400">
+                  {t('stats.marathonEstimateRange', '合理区间 {{lower}}–{{upper}}', {
+                    lower: formatPerformanceTime(marathonProjection.lowerSeconds),
+                    upper: formatPerformanceTime(marathonProjection.upperSeconds),
+                  })}
+                </p>
+              </div>
+            )}
 
             <div className="mt-5 space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
               <div className="flex items-center justify-between gap-3">
@@ -249,7 +307,7 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                   {t('stats.validEvidence', '近期有效证据')}
                 </span>
                 <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  {current?.evidenceCount ?? 0} {t('stats.itemsUnit', '项')}
+                  {currentEvidence.length} {t('stats.itemsUnit', '项')}
                 </span>
               </div>
               {currentEvidence.slice(0, 3).map((item) => (
@@ -259,13 +317,12 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                   className="block rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-blue-800 dark:hover:bg-blue-950/25"
                 >
                   <span className="block font-mono text-[10px] text-zinc-400">
-                    {getEvidenceLabel(item.source, t)} · {formatEvidenceDistance(item.distanceMeters)} · {formatPerformanceTime(item.durationSeconds)}
+                    {item.source ? getEvidenceLabel(item.source, t) : null}
+                    {item.source ? ' · ' : null}
+                    {formatEvidenceDistance(item.distanceMeters)} · {formatPerformanceTime(item.durationSeconds)}
                   </span>
                   <span className="mt-1 block truncate font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
                     {item.activityName}
-                    {item.heatAdjusted && (
-                      <Flame size={12} className="ml-1.5 inline text-orange-500" />
-                    )}
                   </span>
                 </Link>
               ))}
@@ -282,7 +339,7 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
               <div className="flex min-w-0 items-start gap-2">
                 <BadgeCheck size={15} className="mt-0.5 shrink-0 text-orange-500" />
                 <p className="min-w-0 font-mono text-[10px] leading-4 text-zinc-500 dark:text-zinc-400">
-                  {current === null
+                  {!hasCurrentEstimate
                     ? t('stats.performanceNoRelevantEvidence', '近 84 天暂无足够距离的有效依据，暂不估算当前能力')
                     : isCurrentStale
                     ? t('stats.performanceStale', '近期缺少有效质量数据，当前估算置信度有限')
@@ -385,6 +442,126 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
               </div>
             )}
           </div>
+
+          <details className="group border-t border-zinc-100 lg:col-span-2 dark:border-zinc-800">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 sm:px-5">
+              <span className="inline-flex min-w-0 items-center gap-2 font-mono text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                <BadgeCheck size={15} className="shrink-0 text-blue-500" />
+                {t('stats.evidenceAudit', '计算依据')}
+                <span className="font-normal text-zinc-400">
+                  {t('stats.evidenceAuditCounts', '{{included}} 条纳入 · 可查看排除规则', {
+                    included: currentAudit.included.length,
+                  })}
+                </span>
+              </span>
+              <ChevronDown size={16} className="shrink-0 text-zinc-400 transition-transform group-open:rotate-180" />
+            </summary>
+
+            <div className="border-t border-zinc-100 dark:border-zinc-800">
+              {marathonProjection && (
+                <div className="grid grid-cols-2 gap-px bg-zinc-100 sm:grid-cols-4 dark:bg-zinc-800">
+                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                    <p className="text-[10px] text-zinc-400">{t('stats.recentWeeklyVolume', '近 8 周周均')}</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                      {marathonProjection.readiness.recentWeeklyKm.toFixed(1)} km
+                    </p>
+                  </div>
+                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                    <p className="text-[10px] text-zinc-400">{t('stats.longRunCoverage', '专项长距离')}</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                      {marathonProjection.readiness.longRunCount} {t('stats.timesUnit', '次')} · {formatEvidenceDistance(marathonProjection.readiness.maxLongRunMeters)}
+                    </p>
+                  </div>
+                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                    <p className="text-[10px] text-zinc-400">{t('stats.longDurationCoverage', '90 分钟以上')}</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                      {marathonProjection.readiness.ninetyMinuteRunCount} {t('stats.timesUnit', '次')}
+                    </p>
+                  </div>
+                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                    <p className="text-[10px] text-zinc-400">{t('stats.lateRunDurability', '后程稳定性')}</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                      {marathonProjection.readiness.durabilityScore === null
+                        ? t('stats.noSample', '暂无样本')
+                        : `${marathonProjection.readiness.durabilityScore.toFixed(1)}/10`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-6 p-4 sm:p-5 lg:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <CircleCheck size={15} className="text-emerald-500" />
+                    <h3 className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                      {t('stats.includedEvidence', '已纳入')}
+                    </h3>
+                  </div>
+                  {currentAudit.included.length > 0 ? (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {currentAudit.included.slice(0, 6).map((item) => (
+                        <Link
+                          key={`included:${item.activityId}:${item.dimension}`}
+                          href={`/activities/${item.activityId}`}
+                          className="flex items-start justify-between gap-3 py-2.5 text-xs hover:text-blue-600 dark:hover:text-blue-300"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium text-zinc-800 dark:text-zinc-100">{item.activityName}</span>
+                            <span className="mt-0.5 block font-mono text-[10px] text-zinc-400">
+                              {formatCompactDate(item.date, i18n.language)} · {formatEvidenceDistance(item.distanceMeters)} · {formatPerformanceTime(item.durationSeconds)}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
+                            {item.dimension ? t(`stats.evidenceDimension.${item.dimension}`) : null}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-2 text-xs leading-5 text-zinc-400">
+                      {t('stats.noIncludedActivityEvidence', '当前仅使用跑者档案基线，暂无近期活动证据。')}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <CircleX size={15} className="text-zinc-400" />
+                    <h3 className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                      {t('stats.excludedEvidence', '未作为成绩证据（最近 {{count}} 条）', {
+                        count: Math.min(6, currentAudit.excluded.length),
+                      })}
+                    </h3>
+                  </div>
+                  {currentAudit.excluded.length > 0 ? (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {currentAudit.excluded.slice(0, 6).map((item) => (
+                        <Link
+                          key={`excluded:${item.activityId}`}
+                          href={`/activities/${item.activityId}`}
+                          className="block py-2.5 text-xs hover:text-blue-600 dark:hover:text-blue-300"
+                        >
+                          <span className="flex items-start justify-between gap-3">
+                            <span className="min-w-0 truncate font-medium text-zinc-700 dark:text-zinc-200">{item.activityName}</span>
+                            <span className="shrink-0 font-mono text-[10px] text-zinc-400">
+                              {formatEvidenceDistance(item.distanceMeters)}
+                            </span>
+                          </span>
+                          <span className="mt-1 block text-[10px] leading-4 text-zinc-400">
+                            {item.exclusionReason ? getExclusionLabel(item.exclusionReason, t) : null}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-2 text-xs leading-5 text-zinc-400">
+                      {t('stats.noExcludedEvidence', '没有需要说明的近期排除记录。')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       )}
     </section>

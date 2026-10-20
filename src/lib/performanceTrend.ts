@@ -14,6 +14,13 @@ const RIEGEL_EXPONENT = 1.06;
 export type PerformanceDistance = '5k' | '10k' | '21k' | '42k';
 export type PerformanceConfidence = 'low' | 'medium' | 'high';
 export type PerformanceEvidenceSource = 'best-effort' | 'race' | 'quality-block' | 'distance-effort' | 'long-run';
+export type PerformanceEvidenceDimension = 'speed' | 'endurance';
+export type PerformanceExclusionReason =
+  | 'outside-window'
+  | 'manual-or-flagged'
+  | 'trail-run'
+  | 'insufficient-distance'
+  | 'no-quality-signal';
 
 export interface PerformanceEvidence {
   activityId: number;
@@ -60,10 +67,56 @@ export interface PerformanceSnapshot {
   evidence: PerformanceEvidence[];
 }
 
+export interface PerformanceEvidenceAuditItem {
+  activityId: number;
+  activityName: string;
+  timestamp: number;
+  date: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  dimension: PerformanceEvidenceDimension | null;
+  source: PerformanceEvidenceSource | null;
+  exclusionReason: PerformanceExclusionReason | null;
+}
+
+export interface PerformanceEvidenceAudit {
+  included: PerformanceEvidenceAuditItem[];
+  excluded: PerformanceEvidenceAuditItem[];
+}
+
+export type MarathonReadinessStatus = 'ready' | 'solid' | 'building' | 'limited';
+
+export interface MarathonReadiness {
+  score: number;
+  status: MarathonReadinessStatus;
+  confidence: PerformanceConfidence;
+  adjustmentPercent: number;
+  recentWeeklyKm: number;
+  activeWeeks: number;
+  longRunCount: number;
+  maxLongRunMeters: number;
+  ninetyMinuteRunCount: number;
+  durabilitySampleCount: number;
+  durabilityScore: number | null;
+}
+
+export interface MarathonProjection {
+  speedPotentialSeconds: number;
+  enduranceAdjustmentSeconds: number;
+  estimatedSeconds: number;
+  lowerSeconds: number;
+  upperSeconds: number;
+  confidence: PerformanceConfidence;
+  readiness: MarathonReadiness;
+}
+
 export interface PerformanceTrend {
   snapshots: PerformanceSnapshot[];
+  speedSnapshots: PerformanceSnapshot[];
   distanceSnapshots: Record<PerformanceDistance, PerformanceSnapshot[]>;
   evidence: PerformanceEvidence[];
+  audits: Record<PerformanceDistance, PerformanceEvidenceAudit>;
+  marathonProjection: MarathonProjection | null;
   recordEvents: Record<PerformanceDistance, PerformanceRecordEvent[]>;
   records: Record<PerformanceDistance, PerformanceRecord | null>;
   profileFiveKSeconds: number | null;
@@ -101,6 +154,7 @@ const MIN_RELEVANT_EVIDENCE_METERS: Record<PerformanceDistance, number> = {
 
 const MARATHON_LONG_RUN_MIN_METERS = 28_000;
 const MARATHON_LONG_RUN_MIN_SECONDS = 2 * 60 * 60;
+const MARATHON_LONG_DURATION_MIN_METERS = 24_000;
 
 function isRun(activity: StravaActivity): boolean {
   return activity.type === 'Run'
@@ -116,6 +170,14 @@ function isTrailRun(activity: StravaActivity): boolean {
 
 function isPositiveFinite(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isMarathonLongRunActivity(activity: StravaActivity): boolean {
+  return activity.distance >= MARATHON_LONG_RUN_MIN_METERS
+    || (
+      activity.distance >= MARATHON_LONG_DURATION_MIN_METERS
+      && activity.moving_time >= MARATHON_LONG_RUN_MIN_SECONDS
+    );
 }
 
 function getTimestamp(activity: Pick<StravaActivity, 'start_date' | 'start_date_local'>): number {
@@ -321,8 +383,7 @@ function extractActivityEvidence(
   const standardDistance = findDistance(activity.distance);
   const qualifiesByPace = qualityPaceCeilingSecondsPerKm !== null
     && activityPace <= qualityPaceCeilingSecondsPerKm;
-  const isMarathonLongRun = activity.distance >= MARATHON_LONG_RUN_MIN_METERS
-    && activity.moving_time >= MARATHON_LONG_RUN_MIN_SECONDS;
+  const isMarathonLongRun = isMarathonLongRunActivity(activity);
   const averageHeartRate = activity.average_heartrate;
   const lthrRatio = isPositiveFinite(averageHeartRate) && isPositiveFinite(heartRateProfile.lthr)
     ? averageHeartRate / heartRateProfile.lthr
@@ -525,12 +586,302 @@ function buildSnapshots(evidence: PerformanceEvidence[], endTimestamp: number): 
   return snapshots;
 }
 
+function getCurrentSnapshot(
+  snapshots: PerformanceSnapshot[],
+  endTimestamp: number
+): PerformanceSnapshot | null {
+  const latest = snapshots.at(-1) ?? null;
+  return latest?.timestamp === endTimestamp ? latest : null;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function getDurabilityScore(activity: StravaActivity): number | null {
+  const splits = (activity.splits_metric ?? []).filter((split) => {
+    const duration = split.moving_time || split.elapsed_time;
+    const pace = duration / (split.distance / 1000);
+    return split.distance >= 500 && isPositiveFinite(duration) && pace >= 150 && pace <= 900;
+  });
+  if (splits.length < 6) return null;
+
+  const sampleSize = Math.max(2, Math.floor(splits.length / 3));
+  const first = splits.slice(0, sampleSize);
+  const last = splits.slice(-sampleSize);
+  const weightedPace = (items: typeof splits): number => {
+    const distance = items.reduce((sum, split) => sum + split.distance, 0);
+    const duration = items.reduce((sum, split) => sum + (split.moving_time || split.elapsed_time), 0);
+    return duration / (distance / 1000);
+  };
+  const weightedHeartRate = (items: typeof splits): number | null => {
+    const withHeartRate = items.filter((split) => isPositiveFinite(split.average_heartrate));
+    if (withHeartRate.length < Math.ceil(items.length * 0.6)) return null;
+    const duration = withHeartRate.reduce((sum, split) => sum + (split.moving_time || split.elapsed_time), 0);
+    return withHeartRate.reduce(
+      (sum, split) => sum + (split.average_heartrate ?? 0) * (split.moving_time || split.elapsed_time),
+      0
+    ) / duration;
+  };
+
+  const paceRatio = weightedPace(last) / weightedPace(first);
+  const firstHeartRate = weightedHeartRate(first);
+  const lastHeartRate = weightedHeartRate(last);
+  const heartRateDelta = firstHeartRate !== null && lastHeartRate !== null
+    ? lastHeartRate - firstHeartRate
+    : null;
+
+  if (paceRatio <= 0.98) return 10;
+  if (paceRatio <= 1.03) return 9;
+  if (paceRatio <= 1.06) return 7;
+  if (heartRateDelta !== null && heartRateDelta <= -5) return 7;
+  if (heartRateDelta !== null && heartRateDelta <= 2) return 5;
+  const fadePenalty = (paceRatio - 1.06) * 28 + Math.max(0, heartRateDelta ?? 4) * 0.08;
+  return Math.round(clamp(5 - fadePenalty, 1, 5) * 10) / 10;
+}
+
+function calculateMarathonReadiness(
+  activities: StravaActivity[],
+  endTimestamp: number
+): MarathonReadiness {
+  const windowStart = endTimestamp - EVIDENCE_WINDOW_DAYS * DAY_MS;
+  const runs = activities.filter((activity) => {
+    const timestamp = getTimestamp(activity);
+    return isRun(activity)
+      && !activity.manual
+      && !activity.flagged
+      && timestamp >= windowStart
+      && timestamp <= endTimestamp;
+  });
+
+  const recentEightWeekDistances = Array.from({ length: 8 }, () => 0);
+  for (const activity of runs) {
+    const ageWeeks = Math.floor((endTimestamp - getTimestamp(activity)) / WEEK_MS);
+    if (ageWeeks >= 0 && ageWeeks < recentEightWeekDistances.length) {
+      recentEightWeekDistances[ageWeeks] += activity.distance / 1000;
+    }
+  }
+  const recentWeeklyKm = recentEightWeekDistances.reduce((sum, value) => sum + value, 0) / 8;
+  const activeWeeks = recentEightWeekDistances.filter((value) => value >= 5).length;
+  const averageWeek = recentWeeklyKm;
+  const variance = recentEightWeekDistances.reduce(
+    (sum, value) => sum + Math.pow(value - averageWeek, 2),
+    0
+  ) / recentEightWeekDistances.length;
+  const variation = averageWeek > 0 ? Math.sqrt(variance) / averageWeek : 1;
+
+  const longRuns = runs.filter(isMarathonLongRunActivity);
+  const maxLongRun = [...runs].sort((a, b) => b.distance - a.distance)[0] ?? null;
+  const maxLongRunMeters = maxLongRun?.distance ?? 0;
+  const maxLongRunAgeDays = maxLongRun
+    ? Math.max(0, (endTimestamp - getTimestamp(maxLongRun)) / DAY_MS)
+    : EVIDENCE_WINDOW_DAYS;
+  const ninetyMinuteRuns = runs.filter((activity) => activity.moving_time >= 90 * 60);
+  const durabilitySamples = runs
+    .filter((activity) => activity.distance >= 20_000 || activity.moving_time >= 2 * 60 * 60)
+    .map((activity) => ({ score: getDurabilityScore(activity), timestamp: getTimestamp(activity) }))
+    .filter((sample): sample is { score: number; timestamp: number } => sample.score !== null)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 3);
+  const durabilityScores = durabilitySamples.map((sample) => sample.score);
+  const durabilityScore = durabilityScores.length > 0
+    ? durabilityScores.reduce((sum, value) => sum + value, 0) / durabilityScores.length
+    : null;
+
+  const weeklyVolumeScore = clamp(recentWeeklyKm / 55, 0, 1) * 25;
+  const longRunDistanceScore = maxLongRunMeters < 20_000
+    ? 0
+    : maxLongRunMeters < 24_000
+      ? 6 + (maxLongRunMeters - 20_000) / 4_000 * 6
+      : maxLongRunMeters < 28_000
+        ? 12 + (maxLongRunMeters - 24_000) / 4_000 * 10
+        : maxLongRunMeters < 32_000
+          ? 22 + (maxLongRunMeters - 28_000) / 4_000 * 9
+          : clamp(31 + (maxLongRunMeters - 32_000) / 3_000 * 2, 31, 33);
+  const recencyFactor = clamp(1 - Math.max(0, maxLongRunAgeDays - 21) / 210, 0.7, 1);
+  const longRunScore = clamp(
+    longRunDistanceScore * recencyFactor + Math.min(2, Math.max(0, longRuns.length - 1)) * 1.5,
+    0,
+    35
+  );
+  const durationScore = clamp(ninetyMinuteRuns.length / 4, 0, 1) * 12
+    + clamp(runs.filter((activity) => activity.moving_time >= 150 * 60).length, 0, 2) * 1.5;
+  const consistencyScore = activeWeeks / 8 * 10 + clamp(1 - variation, 0, 1) * 5;
+  const resolvedDurabilityScore = durabilityScore ?? (longRuns.length > 0 ? 6 : 4);
+  const score = Math.round(clamp(
+    weeklyVolumeScore + longRunScore + durationScore + consistencyScore + resolvedDurabilityScore,
+    0,
+    100
+  ));
+  const confidence: PerformanceConfidence = longRuns.length >= 2
+    && ninetyMinuteRuns.length >= 4
+    && durabilityScores.length >= 1
+    && activeWeeks >= 6
+    ? 'high'
+    : (longRuns.length >= 1 || ninetyMinuteRuns.length >= 2) && activeWeeks >= 4
+      ? 'medium'
+      : 'low';
+  const status: MarathonReadinessStatus = score >= 85
+    ? 'ready'
+    : score >= 70
+      ? 'solid'
+      : score >= 55
+        ? 'building'
+        : 'limited';
+
+  return {
+    score,
+    status,
+    confidence,
+    adjustmentPercent: clamp((90 - score) * 0.0015, 0, 0.09),
+    recentWeeklyKm: Math.round(recentWeeklyKm * 10) / 10,
+    activeWeeks,
+    longRunCount: longRuns.length,
+    maxLongRunMeters,
+    ninetyMinuteRunCount: ninetyMinuteRuns.length,
+    durabilitySampleCount: durabilityScores.length,
+    durabilityScore: durabilityScore === null ? null : Math.round(durabilityScore * 10) / 10,
+  };
+}
+
+function combineConfidence(
+  first: PerformanceConfidence,
+  second: PerformanceConfidence
+): PerformanceConfidence {
+  const values: Record<PerformanceConfidence, number> = { low: 0, medium: 1, high: 2 };
+  return values[first] <= values[second] ? first : second;
+}
+
+function buildMarathonProjection(
+  speedSnapshot: PerformanceSnapshot | null,
+  readiness: MarathonReadiness
+): MarathonProjection | null {
+  if (!speedSnapshot) return null;
+  const speedPotentialSeconds = predictTimeFromVDOT(speedSnapshot.vdot, '42k');
+  if (!speedPotentialSeconds) return null;
+  const enduranceAdjustmentSeconds = Math.round(speedPotentialSeconds * readiness.adjustmentPercent);
+  const estimatedSeconds = speedPotentialSeconds + enduranceAdjustmentSeconds;
+  const confidence = combineConfidence(speedSnapshot.confidence, readiness.confidence);
+  const rangePercent = confidence === 'high' ? 0.018 : confidence === 'medium' ? 0.03 : 0.05;
+
+  return {
+    speedPotentialSeconds,
+    enduranceAdjustmentSeconds,
+    estimatedSeconds,
+    lowerSeconds: Math.max(
+      speedPotentialSeconds,
+      Math.round(estimatedSeconds * (1 - rangePercent * 0.4))
+    ),
+    upperSeconds: Math.round(estimatedSeconds * (1 + rangePercent)),
+    confidence,
+    readiness,
+  };
+}
+
 function isEvidenceRelevantForDistance(
   evidence: PerformanceEvidence,
   distance: PerformanceDistance
 ): boolean {
   if (evidence.source === 'long-run') return distance === '42k';
   return evidence.distanceMeters >= MIN_RELEVANT_EVIDENCE_METERS[distance];
+}
+
+function toAuditItem(
+  evidence: PerformanceEvidence,
+  dimension: PerformanceEvidenceDimension
+): PerformanceEvidenceAuditItem {
+  return {
+    activityId: evidence.activityId,
+    activityName: evidence.activityName,
+    timestamp: evidence.timestamp,
+    date: evidence.date,
+    distanceMeters: evidence.distanceMeters,
+    durationSeconds: evidence.durationSeconds,
+    dimension,
+    source: evidence.source,
+    exclusionReason: null,
+  };
+}
+
+function buildEvidenceAudit({
+  activities,
+  evidence,
+  distanceSnapshot,
+  speedSnapshot,
+  distance,
+  endTimestamp,
+}: {
+  activities: StravaActivity[];
+  evidence: PerformanceEvidence[];
+  distanceSnapshot: PerformanceSnapshot | null;
+  speedSnapshot: PerformanceSnapshot | null;
+  distance: PerformanceDistance;
+  endTimestamp: number;
+}): PerformanceEvidenceAudit {
+  const includedEvidence = distance === '42k'
+    ? [
+      ...(speedSnapshot?.evidence ?? []).map((item) => ({ item, dimension: 'speed' as const })),
+      ...(distanceSnapshot?.evidence ?? [])
+        .filter((item) => item.source === 'long-run')
+        .map((item) => ({ item, dimension: 'endurance' as const })),
+    ]
+    : (distanceSnapshot?.evidence ?? []).map((item) => ({ item, dimension: 'speed' as const }));
+  const includedByActivity = new Map<number, PerformanceEvidenceAuditItem>();
+  for (const { item, dimension } of includedEvidence) {
+    if (item.activityId === 0) continue;
+    const existing = includedByActivity.get(item.activityId);
+    if (!existing || dimension === 'endurance' || item.confidence > (evidence.find((candidate) => (
+      candidate.activityId === existing.activityId && candidate.source === existing.source
+    ))?.confidence ?? 0)) {
+      includedByActivity.set(item.activityId, toAuditItem(item, dimension));
+    }
+  }
+
+  const windowStart = endTimestamp - EVIDENCE_WINDOW_DAYS * DAY_MS;
+  const excludedByActivity = new Map<number, PerformanceEvidenceAuditItem>();
+  const relevantEvidence = distance === '42k'
+    ? evidence
+    : evidence.filter((item) => isEvidenceRelevantForDistance(item, distance));
+  for (const item of relevantEvidence) {
+    if (includedByActivity.has(item.activityId) || item.timestamp > endTimestamp) continue;
+    excludedByActivity.set(item.activityId, {
+      ...toAuditItem(item, item.source === 'long-run' ? 'endurance' : 'speed'),
+      exclusionReason: item.timestamp < windowStart ? 'outside-window' : 'no-quality-signal',
+    });
+  }
+
+  const minimumCandidateDistance = distance === '42k'
+    ? 5_000
+    : Math.min(5_000, MIN_RELEVANT_EVIDENCE_METERS[distance]);
+  for (const activity of activities) {
+    if (includedByActivity.has(activity.id) || excludedByActivity.has(activity.id) || !isRun(activity)) continue;
+    const timestamp = getTimestamp(activity);
+    if (!timestamp || timestamp < windowStart || timestamp > endTimestamp) continue;
+    if (activity.distance < minimumCandidateDistance) continue;
+    const exclusionReason: PerformanceExclusionReason = activity.manual || activity.flagged
+      ? 'manual-or-flagged'
+      : isTrailRun(activity)
+        ? 'trail-run'
+        : activity.distance < MIN_RELEVANT_EVIDENCE_METERS[distance] && distance !== '42k'
+          ? 'insufficient-distance'
+          : 'no-quality-signal';
+    excludedByActivity.set(activity.id, {
+      activityId: activity.id,
+      activityName: activity.name,
+      timestamp,
+      date: formatDateKey(timestamp),
+      distanceMeters: activity.distance,
+      durationSeconds: activity.moving_time,
+      dimension: null,
+      source: null,
+      exclusionReason,
+    });
+  }
+
+  return {
+    included: [...includedByActivity.values()].sort((a, b) => b.timestamp - a.timestamp),
+    excluded: [...excludedByActivity.values()].sort((a, b) => b.timestamp - a.timestamp),
+  };
 }
 
 function getDirectRecordCandidates(activity: StravaActivity): PerformanceRecordEvent[] {
@@ -629,6 +980,39 @@ function buildRecords(
   return { recordEvents, records };
 }
 
+function createProfileFallbackSnapshot(
+  profileFiveKSeconds: number,
+  endTimestamp: number
+): PerformanceSnapshot | null {
+  const profileVDOT = calculateVDOT(5_000, profileFiveKSeconds);
+  if (profileVDOT === null) return null;
+  const fallbackEvidence: PerformanceEvidence = {
+    activityId: 0,
+    activityName: 'Runner profile',
+    timestamp: endTimestamp,
+    date: formatDateKey(endTimestamp),
+    source: 'distance-effort',
+    distanceMeters: 5_000,
+    durationSeconds: profileFiveKSeconds,
+    normalizedDurationSeconds: profileFiveKSeconds,
+    vdot: profileVDOT,
+    confidence: 0.5,
+    prRank: null,
+    heatAdjusted: false,
+  };
+  return {
+    timestamp: endTimestamp,
+    date: formatDateKey(endTimestamp),
+    vdot: Math.round(profileVDOT * 10) / 10,
+    confidence: 'low',
+    confidenceScore: 40,
+    evidenceCount: 1,
+    latestEvidenceDays: 0,
+    primaryEvidence: fallbackEvidence,
+    evidence: [fallbackEvidence],
+  };
+}
+
 export function calculatePerformanceTrend({
   activities,
   profilePBs,
@@ -663,6 +1047,10 @@ export function calculatePerformanceTrend({
 
   const endTimestamp = now.getTime();
   const snapshots = buildSnapshots(evidence, endTimestamp);
+  const speedSnapshots = buildSnapshots(
+    evidence.filter((item) => item.source !== 'long-run'),
+    endTimestamp
+  );
   const distanceSnapshots = Object.fromEntries(
     (Object.keys(PERFORMANCE_DISTANCES) as PerformanceDistance[]).map((distance) => [
       distance,
@@ -673,41 +1061,36 @@ export function calculatePerformanceTrend({
     ])
   ) as Record<PerformanceDistance, PerformanceSnapshot[]>;
 
-  if (snapshots.length === 0 && profileFiveKSeconds) {
-    const profileVDOT = calculateVDOT(5_000, profileFiveKSeconds);
-    if (profileVDOT !== null) {
-      const fallbackEvidence: PerformanceEvidence = {
-        activityId: 0,
-        activityName: 'Runner profile',
-        timestamp: endTimestamp,
-        date: formatDateKey(endTimestamp),
-        source: 'distance-effort',
-        distanceMeters: 5_000,
-        durationSeconds: profileFiveKSeconds,
-        normalizedDurationSeconds: profileFiveKSeconds,
-        vdot: profileVDOT,
-        confidence: 0.5,
-        prRank: null,
-        heatAdjusted: false,
-      };
-      snapshots.push({
-        timestamp: endTimestamp,
-        date: formatDateKey(endTimestamp),
-        vdot: Math.round(profileVDOT * 10) / 10,
-        confidence: 'low',
-        confidenceScore: 40,
-        evidenceCount: 1,
-        latestEvidenceDays: 0,
-        primaryEvidence: fallbackEvidence,
-        evidence: [fallbackEvidence],
-      });
-    }
+  if (profileFiveKSeconds) {
+    const fallbackSnapshot = createProfileFallbackSnapshot(profileFiveKSeconds, endTimestamp);
+    if (fallbackSnapshot && snapshots.length === 0) snapshots.push(fallbackSnapshot);
+    if (fallbackSnapshot && speedSnapshots.length === 0) speedSnapshots.push(fallbackSnapshot);
   }
+
+  const speedSnapshot = getCurrentSnapshot(speedSnapshots, endTimestamp);
+  const marathonReadiness = calculateMarathonReadiness(runs, endTimestamp);
+  const marathonProjection = buildMarathonProjection(speedSnapshot, marathonReadiness);
+  const audits = Object.fromEntries(
+    (Object.keys(PERFORMANCE_DISTANCES) as PerformanceDistance[]).map((distance) => [
+      distance,
+      buildEvidenceAudit({
+        activities: runs,
+        evidence,
+        distanceSnapshot: getCurrentSnapshot(distanceSnapshots[distance], endTimestamp),
+        speedSnapshot,
+        distance,
+        endTimestamp,
+      }),
+    ])
+  ) as Record<PerformanceDistance, PerformanceEvidenceAudit>;
 
   return {
     snapshots,
+    speedSnapshots,
     distanceSnapshots,
     evidence,
+    audits,
+    marathonProjection,
     recordEvents,
     records,
     profileFiveKSeconds,

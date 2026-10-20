@@ -188,6 +188,115 @@ test('a recent 32km training run becomes marathon-specific evidence', () => {
   assert.equal(trend.distanceSnapshots['21k'].length, 0);
   assert.equal(trend.distanceSnapshots['10k'].length, 0);
   assert.equal(trend.distanceSnapshots['5k'].length, 0);
+  assert.equal(trend.marathonProjection.readiness.longRunCount, 1);
+  assert.equal(trend.marathonProjection.readiness.maxLongRunMeters, 32_240);
+  assert.ok(trend.marathonProjection.estimatedSeconds > trend.marathonProjection.speedPotentialSeconds);
+  assert.ok(trend.audits['42k'].included.some((item) => (
+    item.activityId === activity.id && item.dimension === 'endurance'
+  )));
+});
+
+test('a 28km-plus run remains marathon-specific even when completed under two hours', () => {
+  const activity = makeActivity(20400849332, '2026-10-02', {
+    distance: 29_000,
+    moving_time: 1 * 3600 + 55 * 60,
+    average_heartrate: 160,
+  });
+  const trend = calculatePerformanceTrend({
+    activities: [activity],
+    profilePBs: { '5k': 1100 },
+    maxHeartRate: 190,
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  assert.equal(trend.evidence.find((item) => item.activityId === activity.id)?.source, 'long-run');
+  assert.equal(trend.marathonProjection.readiness.longRunCount, 1);
+});
+
+test('marathon endurance evidence reduces the adjustment without inflating speed potential', () => {
+  const speedEvidence = makeActivity(21, '2026-09-28', {
+    best_efforts: [{ name: '5K', distance: 5000, elapsed_time: 1260, moving_time: 1258, pr_rank: 1 }],
+  });
+  const supportRuns = Array.from({ length: 7 }, (_, index) => makeActivity(30 + index, `2026-0${8 + Math.floor(index / 4)}-${String(4 + (index % 4) * 7).padStart(2, '0')}`, {
+    distance: 10_000,
+    moving_time: 3600,
+  }));
+  const longRun = makeActivity(40, '2026-10-04', {
+    distance: 32_000,
+    moving_time: 10_800,
+    average_heartrate: 154,
+  });
+  const withoutLongRun = calculatePerformanceTrend({
+    activities: [speedEvidence, ...supportRuns],
+    profilePBs: { '5k': 1260 },
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+  const withLongRun = calculatePerformanceTrend({
+    activities: [speedEvidence, ...supportRuns, longRun],
+    profilePBs: { '5k': 1260 },
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  assert.equal(
+    withLongRun.marathonProjection.speedPotentialSeconds,
+    withoutLongRun.marathonProjection.speedPotentialSeconds
+  );
+  assert.ok(withLongRun.marathonProjection.readiness.score > withoutLongRun.marathonProjection.readiness.score);
+  assert.ok(withLongRun.marathonProjection.enduranceAdjustmentSeconds < withoutLongRun.marathonProjection.enduranceAdjustmentSeconds);
+});
+
+test('late pace fade with sustained high heart rate lowers marathon durability', () => {
+  const controlledSplits = Array.from({ length: 30 }, (_, index) => makeSplit(index, 330, {
+    average_heartrate: index < 10 ? 148 : 154,
+  }));
+  const fadedSplits = Array.from({ length: 30 }, (_, index) => makeSplit(index, index >= 20 ? 390 : 330, {
+    average_heartrate: index < 10 ? 148 : index >= 20 ? 166 : 154,
+  }));
+  const shared = {
+    distance: 30_000,
+    moving_time: 10_200,
+    average_heartrate: 154,
+  };
+  const controlled = calculatePerformanceTrend({
+    activities: [makeActivity(50, '2026-10-05', { ...shared, splits_metric: controlledSplits })],
+    profilePBs: { '5k': 1260 },
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+  const faded = calculatePerformanceTrend({
+    activities: [makeActivity(51, '2026-10-05', { ...shared, splits_metric: fadedSplits })],
+    profilePBs: { '5k': 1260 },
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  assert.ok(controlled.marathonProjection.readiness.durabilityScore >= 9);
+  assert.ok(faded.marathonProjection.readiness.durabilityScore <= 2);
+  assert.ok(controlled.marathonProjection.readiness.score > faded.marathonProjection.readiness.score);
+});
+
+test('evidence audit explains expired and ordinary runs', () => {
+  const expiredRace = makeActivity(60, '2026-06-01', {
+    distance: 10_000,
+    moving_time: 2700,
+    workout_type: 1,
+  });
+  const ordinaryRun = makeActivity(61, '2026-10-10', {
+    distance: 12_000,
+    moving_time: 4500,
+  });
+  const trend = calculatePerformanceTrend({
+    activities: [expiredRace, ordinaryRun],
+    profilePBs: { '5k': 1260 },
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  assert.equal(
+    trend.audits['42k'].excluded.find((item) => item.activityId === expiredRace.id)?.exclusionReason,
+    'outside-window'
+  );
+  assert.equal(
+    trend.audits['42k'].excluded.find((item) => item.activityId === ordinaryRun.id)?.exclusionReason,
+    'no-quality-signal'
+  );
 });
 
 test('a snapshot exposes every evidence item counted in its total', () => {
