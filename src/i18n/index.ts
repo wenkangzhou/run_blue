@@ -470,7 +470,8 @@ const resources = {
         performanceDeclined: 'About {{value}} slower vs four weeks ago',
         marathonCompositeEstimate: 'Combined from speed potential and endurance readiness',
         speedPotential: 'Speed potential',
-        enduranceAdjustment: 'Endurance adjustment',
+        enduranceAdjustment: 'Endurance time adjustment',
+        noEnduranceAdjustment: '0:00 · no adjustment needed',
         marathonReadiness: 'Marathon readiness',
         marathonEstimateRange: 'Likely range {{lower}}–{{upper}}',
         marathonReadinessStatus: {
@@ -1571,7 +1572,8 @@ const resources = {
         performanceDeclined: '较四周前回落约 {{value}}',
         marathonCompositeEstimate: '已结合速度潜力与耐力准备度',
         speedPotential: '速度潜力',
-        enduranceAdjustment: '耐力修正',
+        enduranceAdjustment: '耐力时间修正',
+        noEnduranceAdjustment: '0:00 · 无需修正',
         marathonReadiness: '耐力准备度',
         marathonEstimateRange: '合理区间 {{lower}}–{{upper}}',
         marathonReadinessStatus: {

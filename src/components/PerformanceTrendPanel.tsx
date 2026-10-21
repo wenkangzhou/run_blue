@@ -268,10 +268,12 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-zinc-500 dark:text-zinc-400">
-                    {t('stats.enduranceAdjustment', '耐力修正')}
+                    {t('stats.enduranceAdjustment', '耐力时间修正')}
                   </span>
                   <span className="font-bold text-amber-600 dark:text-amber-400">
-                    +{formatPerformanceTime(marathonProjection.enduranceAdjustmentSeconds)}
+                    {marathonProjection.enduranceAdjustmentSeconds > 0
+                      ? `+${formatPerformanceTime(marathonProjection.enduranceAdjustmentSeconds)}`
+                      : t('stats.noEnduranceAdjustment', '0:00 · 无需修正')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
