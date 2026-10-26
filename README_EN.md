@@ -245,6 +245,14 @@ http://localhost:6364/?demo=1
 
 Guest mode uses built-in sample data, will not request Strava, and will not write to your real activity cache. Guest mode automatically exits before logging into Strava.
 
+Representative AI workout-analysis scenarios are protected by semantic regression tests. The suite checks required facts, execution quality, and forbidden misinterpretations without freezing the complete generated prose:
+
+```bash
+npm run test:ai-regression
+```
+
+When a new misclassification is found, add its scenario and semantic contract to `tests/fixtures/aiSemanticRegressionCases.mjs` before changing the analysis logic. This keeps a fix for one workout from breaking earlier conclusions.
+
 ### 8. Production Deployment (Vercel Recommended)
 
 ```bash

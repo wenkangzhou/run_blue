@@ -245,6 +245,14 @@ http://localhost:6364/?demo=1
 
 游客模式使用内置示例数据，不会请求 Strava，也不会写入你的真实活动缓存。登录 Strava 前会自动退出游客模式。
 
+AI 训练分析的典型场景使用语义回归测试保护。测试只约束必须识别的事实、完成质量和禁止出现的误判，不固定整段生成文案：
+
+```bash
+npm run test:ai-regression
+```
+
+新增误判案例时，先在 `tests/fixtures/aiSemanticRegressionCases.mjs` 中补充场景与语义契约，再调整分析逻辑，避免修复当前场景时破坏已有结论。
+
 ### 8. 生产部署（Vercel 推荐）
 
 ```bash
