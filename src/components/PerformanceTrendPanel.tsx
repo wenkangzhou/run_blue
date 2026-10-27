@@ -32,6 +32,8 @@ import {
   type PerformanceDistance,
   type PerformanceExclusionReason,
   type PerformanceEvidenceSource,
+  type MarathonReadinessActivityRole,
+  type MarathonReadinessFactorKey,
 } from '@/lib/performanceTrend';
 import { useSessionPageState } from '@/hooks/useSessionPageState';
 
@@ -87,6 +89,26 @@ function getEvidenceLabel(source: PerformanceEvidenceSource, t: ReturnType<typeo
 
 function getExclusionLabel(reason: PerformanceExclusionReason, t: ReturnType<typeof useTranslation>['t']): string {
   return t(`stats.performanceExclusion.${reason}`);
+}
+
+function getReadinessRoleLabel(
+  role: MarathonReadinessActivityRole,
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  return t(`stats.marathonReadinessRole.${role}`);
+}
+
+function getEvidenceContextLabel(
+  source: PerformanceEvidenceSource | null,
+  roles: MarathonReadinessActivityRole[],
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  const visibleRoles = roles.filter((role) => !(source === 'long-run' && role === 'longRun'));
+  return [
+    source ? getEvidenceLabel(source, t) : null,
+    ...visibleRoles.map((role) => getReadinessRoleLabel(role, t)),
+  ].filter((label, index, labels): label is string => Boolean(label) && labels.indexOf(label) === index)
+    .join(' · ');
 }
 
 function getConfidenceTone(confidence: PerformanceConfidence): string {
@@ -178,6 +200,40 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
   const currentAudit = trend.audits[distance];
   const currentEvidence = currentAudit.included;
   const hasCurrentEstimate = currentEstimate !== null;
+  const readinessFactorRows = marathonProjection ? [
+    {
+      key: 'weeklyVolume' as MarathonReadinessFactorKey,
+      label: t('stats.recentWeeklyVolume', '近 8 周周均'),
+      detail: `${marathonProjection.readiness.recentWeeklyKm.toFixed(1)} km`,
+      color: 'bg-blue-500',
+    },
+    {
+      key: 'longRun' as MarathonReadinessFactorKey,
+      label: t('stats.longRunCoverage', '专项长距离'),
+      detail: `${marathonProjection.readiness.longRunCount} ${t('stats.timesUnit', '次')} · ${formatEvidenceDistance(marathonProjection.readiness.maxLongRunMeters)}`,
+      color: 'bg-emerald-500',
+    },
+    {
+      key: 'longDuration' as MarathonReadinessFactorKey,
+      label: t('stats.longDurationCoverage', '90 分钟以上'),
+      detail: `${marathonProjection.readiness.ninetyMinuteRunCount} ${t('stats.timesUnit', '次')}`,
+      color: 'bg-orange-500',
+    },
+    {
+      key: 'consistency' as MarathonReadinessFactorKey,
+      label: t('stats.trainingConsistency', '训练连续性'),
+      detail: `${marathonProjection.readiness.activeWeeks}/8 ${t('stats.weeksUnit', '周')}`,
+      color: 'bg-cyan-500',
+    },
+    {
+      key: 'durability' as MarathonReadinessFactorKey,
+      label: t('stats.lateRunDurability', '后程稳定性'),
+      detail: marathonProjection.readiness.durabilityScore === null
+        ? t('stats.noSample', '暂无样本')
+        : `${marathonProjection.readiness.durabilityScore.toFixed(1)}/10 · ${marathonProjection.readiness.durabilitySampleCount} ${t('stats.samplesUnit', '个样本')}`,
+      color: 'bg-rose-500',
+    },
+  ] : [];
 
   return (
     <section id="performance-trend" className="scroll-mt-28 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-200/60 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/20">
@@ -319,9 +375,11 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                   className="block rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-blue-800 dark:hover:bg-blue-950/25"
                 >
                   <span className="block font-mono text-[10px] text-zinc-400">
-                    {item.source ? getEvidenceLabel(item.source, t) : null}
-                    {item.source ? ' · ' : null}
-                    {formatEvidenceDistance(item.distanceMeters)} · {formatPerformanceTime(item.durationSeconds)}
+                    {[
+                      getEvidenceContextLabel(item.source, item.readinessRoles, t),
+                      formatEvidenceDistance(item.distanceMeters),
+                      formatPerformanceTime(item.durationSeconds),
+                    ].filter(Boolean).join(' · ')}
                   </span>
                   <span className="mt-1 block truncate font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
                     {item.activityName}
@@ -461,32 +519,50 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
 
             <div className="border-t border-zinc-100 dark:border-zinc-800">
               {marathonProjection && (
-                <div className="grid grid-cols-2 gap-px bg-zinc-100 sm:grid-cols-4 dark:bg-zinc-800">
-                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                    <p className="text-[10px] text-zinc-400">{t('stats.recentWeeklyVolume', '近 8 周周均')}</p>
-                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                      {marathonProjection.readiness.recentWeeklyKm.toFixed(1)} km
-                    </p>
+                <div className="bg-zinc-50 px-4 py-4 sm:px-5 dark:bg-zinc-950/60">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                        {t('stats.marathonReadinessBreakdown', '耐力准备度构成')}
+                      </h3>
+                      <p className="mt-1 text-[10px] leading-4 text-zinc-400">
+                        {t('stats.marathonReadinessBreakdownHint', '五项得分相加形成耐力准备度；活动链接列在下方。')}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-sm font-black text-blue-600 dark:text-blue-300">
+                      {marathonProjection.readiness.score}/100
+                    </span>
                   </div>
-                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                    <p className="text-[10px] text-zinc-400">{t('stats.longRunCoverage', '专项长距离')}</p>
-                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                      {marathonProjection.readiness.longRunCount} {t('stats.timesUnit', '次')} · {formatEvidenceDistance(marathonProjection.readiness.maxLongRunMeters)}
-                    </p>
-                  </div>
-                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                    <p className="text-[10px] text-zinc-400">{t('stats.longDurationCoverage', '90 分钟以上')}</p>
-                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                      {marathonProjection.readiness.ninetyMinuteRunCount} {t('stats.timesUnit', '次')}
-                    </p>
-                  </div>
-                  <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                    <p className="text-[10px] text-zinc-400">{t('stats.lateRunDurability', '后程稳定性')}</p>
-                    <p className="mt-1 font-mono text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                      {marathonProjection.readiness.durabilityScore === null
-                        ? t('stats.noSample', '暂无样本')
-                        : `${marathonProjection.readiness.durabilityScore.toFixed(1)}/10`}
-                    </p>
+                  <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-5">
+                    {readinessFactorRows.map((item) => {
+                      const factor = marathonProjection.readiness.factors[item.key];
+                      const percentage = factor.maximum > 0
+                        ? Math.min(100, factor.score / factor.maximum * 100)
+                        : 0;
+                      return (
+                        <div key={item.key} className="min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[10px] leading-4 text-zinc-500 dark:text-zinc-400">{item.label}</span>
+                            <span className="shrink-0 font-mono text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
+                              {factor.score}/{factor.maximum}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate font-mono text-[10px] text-zinc-400" title={item.detail}>
+                            {item.detail}
+                          </p>
+                          <div
+                            className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+                            role="progressbar"
+                            aria-label={item.label}
+                            aria-valuemin={0}
+                            aria-valuemax={factor.maximum}
+                            aria-valuenow={factor.score}
+                          >
+                            <div className={`h-full ${item.color}`} style={{ width: `${percentage}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -513,8 +589,12 @@ export function PerformanceTrendPanel({ activities }: PerformanceTrendPanelProps
                               {formatCompactDate(item.date, i18n.language)} · {formatEvidenceDistance(item.distanceMeters)} · {formatPerformanceTime(item.durationSeconds)}
                             </span>
                           </span>
-                          <span className="shrink-0 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
-                            {item.dimension ? t(`stats.evidenceDimension.${item.dimension}`) : null}
+                          <span className="max-w-[48%] text-right font-mono text-[10px] leading-4 text-emerald-600 dark:text-emerald-400">
+                            {[
+                              item.dimension ? t(`stats.evidenceDimension.${item.dimension}`) : null,
+                              ...item.readinessRoles.map((role) => getReadinessRoleLabel(role, t)),
+                            ].filter((label, index, labels) => Boolean(label) && labels.indexOf(label) === index)
+                              .join(' · ')}
                           </span>
                         </Link>
                       ))}

@@ -190,10 +190,50 @@ test('a recent 32km training run becomes marathon-specific evidence', () => {
   assert.equal(trend.distanceSnapshots['5k'].length, 0);
   assert.equal(trend.marathonProjection.readiness.longRunCount, 1);
   assert.equal(trend.marathonProjection.readiness.maxLongRunMeters, 32_240);
+  assert.deepEqual(
+    trend.marathonProjection.readiness.supportingActivities[0].roles,
+    ['longRun', 'longDuration']
+  );
+  assert.equal(trend.marathonProjection.readiness.factors.weeklyVolume.maximum, 25);
+  assert.equal(trend.marathonProjection.readiness.factors.longRun.maximum, 35);
+  assert.equal(trend.marathonProjection.readiness.factors.longDuration.maximum, 15);
+  assert.equal(trend.marathonProjection.readiness.factors.consistency.maximum, 15);
+  assert.equal(trend.marathonProjection.readiness.factors.durability.maximum, 10);
+  const componentTotal = Object.values(trend.marathonProjection.readiness.factors)
+    .reduce((sum, factor) => sum + factor.score, 0);
+  assert.equal(Math.round(componentTotal), trend.marathonProjection.readiness.score);
   assert.ok(trend.marathonProjection.estimatedSeconds > trend.marathonProjection.speedPotentialSeconds);
-  assert.ok(trend.audits['42k'].included.some((item) => (
-    item.activityId === activity.id && item.dimension === 'endurance'
-  )));
+  const auditItem = trend.audits['42k'].included.find((item) => item.activityId === activity.id);
+  assert.equal(auditItem?.dimension, 'endurance');
+  assert.deepEqual(auditItem?.readinessRoles, ['longRun', 'longDuration']);
+});
+
+test('a 90-minute run is visible as marathon endurance support without becoming speed evidence', () => {
+  const activity = makeActivity(20400849340, '2026-10-03', {
+    distance: 18_000,
+    moving_time: 95 * 60,
+    elapsed_time: 96 * 60,
+    average_heartrate: 143,
+  });
+  const trend = calculatePerformanceTrend({
+    activities: [activity],
+    profilePBs: { '5k': 1276 },
+    maxHeartRate: 182,
+    now: new Date('2026-10-15T00:00:00Z'),
+  });
+
+  assert.equal(trend.evidence.some((item) => item.activityId === activity.id), false);
+  assert.deepEqual(
+    trend.marathonProjection.readiness.supportingActivities[0].roles,
+    ['longDuration']
+  );
+  const auditItem = trend.audits['42k'].included.find((item) => item.activityId === activity.id);
+  assert.equal(auditItem?.dimension, 'endurance');
+  assert.deepEqual(auditItem?.readinessRoles, ['longDuration']);
+  assert.equal(
+    trend.audits['42k'].excluded.some((item) => item.activityId === activity.id),
+    false
+  );
 });
 
 test('a 28km-plus run remains marathon-specific even when completed under two hours', () => {

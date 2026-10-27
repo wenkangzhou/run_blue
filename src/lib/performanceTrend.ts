@@ -77,6 +77,7 @@ export interface PerformanceEvidenceAuditItem {
   dimension: PerformanceEvidenceDimension | null;
   source: PerformanceEvidenceSource | null;
   exclusionReason: PerformanceExclusionReason | null;
+  readinessRoles: MarathonReadinessActivityRole[];
 }
 
 export interface PerformanceEvidenceAudit {
@@ -85,6 +86,29 @@ export interface PerformanceEvidenceAudit {
 }
 
 export type MarathonReadinessStatus = 'ready' | 'solid' | 'building' | 'limited';
+export type MarathonReadinessFactorKey =
+  | 'weeklyVolume'
+  | 'longRun'
+  | 'longDuration'
+  | 'consistency'
+  | 'durability';
+export type MarathonReadinessActivityRole = 'longRun' | 'longDuration' | 'durability';
+
+export interface MarathonReadinessFactor {
+  score: number;
+  maximum: number;
+}
+
+export interface MarathonReadinessActivity {
+  activityId: number;
+  activityName: string;
+  timestamp: number;
+  date: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  roles: MarathonReadinessActivityRole[];
+  durabilityScore: number | null;
+}
 
 export interface MarathonReadiness {
   score: number;
@@ -98,6 +122,8 @@ export interface MarathonReadiness {
   ninetyMinuteRunCount: number;
   durabilitySampleCount: number;
   durabilityScore: number | null;
+  factors: Record<MarathonReadinessFactorKey, MarathonReadinessFactor>;
+  supportingActivities: MarathonReadinessActivity[];
 }
 
 export interface MarathonProjection {
@@ -679,8 +705,8 @@ function calculateMarathonReadiness(
   const ninetyMinuteRuns = runs.filter((activity) => activity.moving_time >= 90 * 60);
   const durabilitySamples = runs
     .filter((activity) => activity.distance >= 20_000 || activity.moving_time >= 2 * 60 * 60)
-    .map((activity) => ({ score: getDurabilityScore(activity), timestamp: getTimestamp(activity) }))
-    .filter((sample): sample is { score: number; timestamp: number } => sample.score !== null)
+    .map((activity) => ({ activity, score: getDurabilityScore(activity), timestamp: getTimestamp(activity) }))
+    .filter((sample): sample is { activity: StravaActivity; score: number; timestamp: number } => sample.score !== null)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 3);
   const durabilityScores = durabilitySamples.map((sample) => sample.score);
@@ -728,6 +754,38 @@ function calculateMarathonReadiness(
       : score >= 55
         ? 'building'
         : 'limited';
+  const roundScore = (value: number) => Math.round(value * 10) / 10;
+  const factors: MarathonReadiness['factors'] = {
+    weeklyVolume: { score: roundScore(weeklyVolumeScore), maximum: 25 },
+    longRun: { score: roundScore(longRunScore), maximum: 35 },
+    longDuration: { score: roundScore(durationScore), maximum: 15 },
+    consistency: { score: roundScore(consistencyScore), maximum: 15 },
+    durability: { score: roundScore(resolvedDurabilityScore), maximum: 10 },
+  };
+  const durabilityByActivity = new Map(
+    durabilitySamples.map((sample) => [sample.activity.id, sample.score])
+  );
+  const supportingActivities = runs
+    .map((activity): MarathonReadinessActivity | null => {
+      const roles: MarathonReadinessActivityRole[] = [];
+      if (isMarathonLongRunActivity(activity)) roles.push('longRun');
+      if (activity.moving_time >= 90 * 60) roles.push('longDuration');
+      if (durabilityByActivity.has(activity.id)) roles.push('durability');
+      if (roles.length === 0) return null;
+      const timestamp = getTimestamp(activity);
+      return {
+        activityId: activity.id,
+        activityName: activity.name,
+        timestamp,
+        date: formatDateKey(timestamp),
+        distanceMeters: activity.distance,
+        durationSeconds: activity.moving_time,
+        roles,
+        durabilityScore: durabilityByActivity.get(activity.id) ?? null,
+      };
+    })
+    .filter((activity): activity is MarathonReadinessActivity => activity !== null)
+    .sort((a, b) => b.timestamp - a.timestamp);
 
   return {
     score,
@@ -741,6 +799,8 @@ function calculateMarathonReadiness(
     ninetyMinuteRunCount: ninetyMinuteRuns.length,
     durabilitySampleCount: durabilityScores.length,
     durabilityScore: durabilityScore === null ? null : Math.round(durabilityScore * 10) / 10,
+    factors,
+    supportingActivities,
   };
 }
 
@@ -800,6 +860,7 @@ function toAuditItem(
     dimension,
     source: evidence.source,
     exclusionReason: null,
+    readinessRoles: [],
   };
 }
 
@@ -810,6 +871,7 @@ function buildEvidenceAudit({
   speedSnapshot,
   distance,
   endTimestamp,
+  marathonReadiness,
 }: {
   activities: StravaActivity[];
   evidence: PerformanceEvidence[];
@@ -817,6 +879,7 @@ function buildEvidenceAudit({
   speedSnapshot: PerformanceSnapshot | null;
   distance: PerformanceDistance;
   endTimestamp: number;
+  marathonReadiness: MarathonReadiness;
 }): PerformanceEvidenceAudit {
   const includedEvidence = distance === '42k'
     ? [
@@ -834,6 +897,23 @@ function buildEvidenceAudit({
       candidate.activityId === existing.activityId && candidate.source === existing.source
     ))?.confidence ?? 0)) {
       includedByActivity.set(item.activityId, toAuditItem(item, dimension));
+    }
+  }
+  if (distance === '42k') {
+    for (const activity of marathonReadiness.supportingActivities) {
+      const existing = includedByActivity.get(activity.activityId);
+      includedByActivity.set(activity.activityId, {
+        activityId: activity.activityId,
+        activityName: activity.activityName,
+        timestamp: activity.timestamp,
+        date: activity.date,
+        distanceMeters: activity.distanceMeters,
+        durationSeconds: activity.durationSeconds,
+        dimension: 'endurance',
+        source: activity.roles.includes('longRun') ? 'long-run' : existing?.source ?? null,
+        exclusionReason: null,
+        readinessRoles: activity.roles,
+      });
     }
   }
 
@@ -875,6 +955,7 @@ function buildEvidenceAudit({
       dimension: null,
       source: null,
       exclusionReason,
+      readinessRoles: [],
     });
   }
 
@@ -1080,6 +1161,7 @@ export function calculatePerformanceTrend({
         speedSnapshot,
         distance,
         endTimestamp,
+        marathonReadiness,
       }),
     ])
   ) as Record<PerformanceDistance, PerformanceEvidenceAudit>;
