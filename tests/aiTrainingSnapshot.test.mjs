@@ -20,6 +20,7 @@ function compileLibFile(sourceFile, outputFile) {
 
 compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
+compileLibFile('src/lib/trailAnalysis.ts', 'trailAnalysis.js');
 compileLibFile('src/lib/aiTrainingSnapshot.ts', 'aiTrainingSnapshot.js');
 
 const originalLoad = Module._load;
@@ -27,6 +28,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@/types' || request === '@/lib/trainingAnalysis' || request === '@/lib/aiTypes') return {};
   if (request === '@/lib/weather') return require(path.join(tempDir, 'weather.js'));
   if (request === '@/lib/activityAchievements') return require(path.join(tempDir, 'activityAchievements.js'));
+  if (request === '@/lib/trailAnalysis') return require(path.join(tempDir, 'trailAnalysis.js'));
   return originalLoad.call(this, request, parent, isMain);
 };
 test.after(() => { Module._load = originalLoad; });
@@ -97,7 +99,7 @@ test('AI training snapshot excludes identity, route, device, and raw stream data
     assert.equal(serialized.includes(forbidden), false, `snapshot leaked ${forbidden}`);
   }
   assert.equal(snapshot.profile.recentLoad.length, 4);
-  assert.equal(snapshot.schemaVersion, '9');
+  assert.equal(snapshot.schemaVersion, '10');
   assert.equal(snapshot.maxHeartRate, 182);
   assert.equal(snapshot.hasStreamEvidence, true);
   assert.equal(snapshot.workout.weatherContext.temperatureC, 27);

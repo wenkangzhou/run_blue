@@ -29,6 +29,7 @@ compileLibFile('src/lib/dates.ts', 'dates.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/trainingZones.ts', 'trainingZones.js');
 compileLibFile('src/lib/weather.ts', 'weather.js');
+compileLibFile('src/lib/trailAnalysis.ts', 'trailAnalysis.js');
 compileLibFile('src/lib/trainingAnalysis.ts', 'trainingAnalysis.js');
 
 const originalLoad = Module._load;
@@ -46,6 +47,20 @@ const {
   calculatePaceZones,
   classifyActivity,
 } = require(path.join(tempDir, 'trainingAnalysis.js'));
+
+test('user-confirmed 20991619385 is treated as a trail race even when Strava says Run', () => {
+  const classification = classifyActivity(makeActivity(20991619385, {
+    name: '秋季越野挑战',
+    sport_type: 'Run',
+    type: 'Run',
+    workout_type: undefined,
+    distance: 24_000,
+    total_elevation_gain: 850,
+  }));
+  assert.equal(classification.isRace, true);
+  assert.equal(classification.isTrail, true);
+  assert.equal(classification.raceType, '越野赛');
+});
 
 function makeLap(index, distance, movingTime, overrides = {}) {
   return {

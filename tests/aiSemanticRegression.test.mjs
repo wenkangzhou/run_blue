@@ -29,6 +29,7 @@ function compileLibFile(sourceFile, outputFile) {
   'heartRateZones',
   'trainingZones',
   'weather',
+  'trailAnalysis',
   'trainingAnalysis',
   'trainingStressEvidence',
   'trainingStress',

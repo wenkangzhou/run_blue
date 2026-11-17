@@ -2,7 +2,7 @@ import type { ActivityStream, StravaActivity } from '@/types';
 import type { UserProfile } from '@/lib/userProfile';
 import { buildActivityWeatherContext } from '@/lib/weather';
 
-export const AI_ANALYSIS_CACHE_VERSION = 'v44';
+export const AI_ANALYSIS_CACHE_VERSION = 'v45';
 const AI_ANALYSIS_LEGACY_CACHE_VERSIONS: string[] = [];
 const AI_ANALYSIS_WORKOUT_TYPE_LEGACY_CACHE_VERSIONS: string[] = [];
 
@@ -170,6 +170,9 @@ function getStreamFingerprint(streams: Record<string, ActivityStream> | null): s
         resolution: stream.resolution,
         seriesType: stream.series_type,
         sample: getStreamSampleFingerprint(stream),
+        terrainHash: (key === 'distance' || key === 'altitude') && Array.isArray(stream.data)
+          ? hashString(JSON.stringify(stream.data))
+          : null,
       };
     });
 
@@ -203,6 +206,10 @@ function buildAIAnalysisCacheKey({
     analysisMode,
     activity: {
       id: activity.id,
+      name: activity.name,
+      type: activity.type,
+      sportType: activity.sport_type,
+      elevation: roundNumber(activity.total_elevation_gain, 0),
       distance: roundNumber(activity.distance, 0),
       movingTime: activity.moving_time,
       elapsedTime: activity.elapsed_time,

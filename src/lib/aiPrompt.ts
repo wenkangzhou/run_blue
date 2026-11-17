@@ -16,6 +16,7 @@ import {
 } from './activityHighlights';
 import { getHRZones } from './heartRateZones';
 import { getRaceExecutionAssessment } from './raceExecution';
+import { getTrailTerrainSummary, type TrailTerrainSummary } from './trailAnalysis';
 
 // Format seconds to HH:MM:SS or MM:SS
 function formatDuration(seconds: number): string {
@@ -265,6 +266,7 @@ export function buildProfessionalPrompt(
   lthr?: number | null,
   streamAnalysis?: string,
   maxHeartRate?: number | null,
+  trailTerrain?: TrailTerrainSummary,
 ): string {
   const en = locale.startsWith('en');
   const distanceKm = (activity.distance / 1000).toFixed(2);
@@ -273,11 +275,13 @@ export function buildProfessionalPrompt(
   const paceStr = formatPace(paceSecKm);
 
   const { estimatedPBs, recentLoad, similarStats, thermalStats, patterns } = trainingProfile;
-  const personalRecords = getActivityPersonalRecords(activity);
+  const terrain = trailTerrain ?? getTrailTerrainSummary(activity, streams);
+  const isTrailRun = terrain.isTrail || Boolean(classification.isTrail);
+  const personalRecords = isTrailRun ? [] : getActivityPersonalRecords(activity);
   const marathonPaceCeiling = trainingProfile.paceZones.marathon.max;
-  const keySustainedEffort = getKeySustainedEffort(activity, marathonPaceCeiling);
+  const keySustainedEffort = isTrailRun ? null : getKeySustainedEffort(activity, marathonPaceCeiling);
   const longRunAssessment = getLongRunAssessment(activity);
-  const raceAssessment = classification.isRace ? getRaceExecutionAssessment(activity) : null;
+  const raceAssessment = classification.isRace && !isTrailRun ? getRaceExecutionAssessment(activity) : null;
   const weatherInfo = buildActivityWeatherContext(activity, streams);
   const hasMeaningfulHeat = weatherInfo.thermalSeverity === 'heat-load' || weatherInfo.thermalSeverity === 'heat-stress';
   const meaningfulHeatLabel = weatherInfo.thermalSeverity === 'heat-stress'
@@ -333,7 +337,7 @@ export function buildProfessionalPrompt(
         : `\n- 第 ${anomaly.kilometer} 公里比均配慢 ${Math.round(anomaly.slowerThanAverageSecondsPerKm)} 秒/公里${anomaly.recoveredAfterward ? '，随后配速恢复：应视为可能的停走、抽筋或撞墙短暂中断，而不是持续性掉速' : ''}。`;
     });
   }
-  if (!classification.isRace && activity.distance >= 20_000 && longRunAssessment) {
+  if (!classification.isRace && !isTrailRun && activity.distance >= 20_000 && longRunAssessment) {
     const { phases: longRunPhases, pattern: blockPattern } = longRunAssessment;
     const blockPatternLabel = ({
       'negative-split': '前慢后快',
@@ -379,25 +383,39 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Elevation: ${Math.round(activity.total_elevation_gain)} m`
     : `\n- 爬升: ${Math.round(activity.total_elevation_gain)} m`;
-  // Trail run detection: significant elevation gain relative to distance
-  const elevationRatio = activity.total_elevation_gain / activity.distance;
-  const isTrailRun = activity.sport_type === 'TrailRun' || activity.type === 'TrailRun' || elevationRatio > 0.05;
-  const equivalentDistance = isTrailRun
-    ? activity.distance + activity.total_elevation_gain * 10 // 100m climb ≈ 1km equivalent
-    : activity.distance;
-  const equivalentPaceSecKm = activity.moving_time / equivalentDistance * 1000;
-  const equivalentPaceStr = formatPace(equivalentPaceSecKm);
-
   if (isTrailRun) {
     prompt += en
-      ? `\n- ⚠️ Trail/ mountain run detected. Elevation gain: ${Math.round(activity.total_elevation_gain)}m (ratio ${(elevationRatio * 1000).toFixed(0)}m/km)`
-      : `\n- ⚠️ 检测到越野跑/山地跑。爬升: ${Math.round(activity.total_elevation_gain)}米（每公里爬升${(elevationRatio * 1000).toFixed(0)}米）`;
-    prompt += en
-      ? `\n- Equivalent distance (flat-ground equivalent): ${(equivalentDistance / 1000).toFixed(2)} km (actual ${distanceKm}km + climb equivalent)`
-      : `\n- 等效平路距离: ${(equivalentDistance / 1000).toFixed(2)} km（实际${distanceKm}km + 爬升等效）`;
-    prompt += en
-      ? `\n- Equivalent pace (flat-ground equivalent): ${equivalentPaceStr}/km — USE THIS for performance evaluation, NOT raw pace`
-      : `\n- 等效平路配速: ${equivalentPaceStr}/km — 评估表现时必须使用等效配速，禁止直接用原始配速`;
+      ? `\n- ⚠️ Trail run detected from ${terrain.source}. Total ascent ${Math.round(activity.total_elevation_gain)}m (${Math.round(terrain.climbMetersPerKm)}m/km). Raw pace is descriptive, not a road-running performance verdict.`
+      : `\n- ⚠️ 识别为越野跑（依据：${terrain.source === 'user-confirmed' ? '用户确认' : terrain.source === 'title' ? '活动标题' : terrain.source === 'sport-type' ? '运动类型' : '爬升数据'}）。总爬升 ${Math.round(activity.total_elevation_gain)} 米，平均每公里爬升 ${Math.round(terrain.climbMetersPerKm)} 米。原始配速只描述路况下的速度，不能按路跑标准判定表现。`;
+    if (terrain.gradeCoverage >= 0.8) {
+      prompt += en
+        ? `\n- Per-kilometer ascent/descent comes from sampled altitude streams and may not sum exactly to Strava's total ascent.`
+        : `\n- 以下逐公里爬升/下降来自采样海拔轨迹，与 Strava 的总爬升可能不完全相加一致。`;
+      terrain.kilometers.forEach((km) => {
+        if (km.altitudeCoverage < 0.8) {
+          prompt += en
+            ? `\n- Km ${km.kilometer}: altitude stream incomplete; net elevation ${Math.round(km.netElevationMeters)}m. Do not infer separate ascent/descent or equivalent pace.`
+            : `\n- 第 ${km.kilometer} 公里：海拔轨迹不完整，净高差 ${Math.round(km.netElevationMeters)} 米；不得推断该公里分别的爬升、下降或等强配速。`;
+          return;
+        }
+        prompt += en
+          ? `\n- Km ${km.kilometer}: ascent ${Math.round(km.ascentMeters)}m, descent ${Math.round(km.descentMeters)}m, raw pace ${km.paceSecondsPerKm ? formatPace(km.paceSecondsPerKm) : 'unknown'}/km${km.averageHeartRate ? `, HR ${km.averageHeartRate} bpm` : ''}${km.equivalentPaceSecondsPerKm ? `, estimated effort-equivalent pace ${formatPace(km.equivalentPaceSecondsPerKm)}/km` : ''}.`
+          : `\n- 第 ${km.kilometer} 公里：爬升 ${Math.round(km.ascentMeters)} 米、下降 ${Math.round(km.descentMeters)} 米，原始配速 ${km.paceSecondsPerKm ? formatPace(km.paceSecondsPerKm) : '未知'}/公里${km.averageHeartRate ? `，平均心率 ${km.averageHeartRate} bpm` : ''}${km.equivalentPaceSecondsPerKm ? `，估算等强配速 ${formatPace(km.equivalentPaceSecondsPerKm)}/公里` : ''}。`;
+      });
+    } else {
+      terrain.kilometers.forEach((km) => {
+        prompt += en
+          ? `\n- Km ${km.kilometer}: net elevation ${Math.round(km.netElevationMeters)}m (NOT separate ascent/descent).`
+          : `\n- 第 ${km.kilometer} 公里：净高差 ${Math.round(km.netElevationMeters)} 米（不是分别的爬升和下降）。`;
+      });
+    }
+    prompt += terrain.equivalentPaceSecondsPerKm
+      ? (en
+          ? `\n- Estimated effort-equivalent pace ${formatPace(terrain.equivalentPaceSecondsPerKm)}/km. Derived from altitude-distance grades (coverage ${Math.round(terrain.gradeCoverage * 100)}%); this is a rough terrain-adjusted estimate, NOT Strava GAP. Downhills and uphills both contribute. Technical terrain is not captured. Use only as a secondary lens, never as a precise road-race equivalent.`
+          : `\n- 估算等强配速 ${formatPace(terrain.equivalentPaceSecondsPerKm)}/公里：由海拔与距离坡度估计（覆盖 ${Math.round(terrain.gradeCoverage * 100)}%），上下坡都参与；这是粗略地形修正，并非 Strava 官方 GAP，也不能反映路面技术难度，只能辅助理解，不能当作精确的路跑等效成绩。`)
+      : (en
+          ? `\n- Altitude-distance stream coverage is insufficient (${Math.round(terrain.gradeCoverage * 100)}%): no reliable grade-adjusted pace. Do not invent one.`
+          : `\n- 海拔与距离轨迹覆盖不足（${Math.round(terrain.gradeCoverage * 100)}%），无法可靠估算等强配速，禁止编造。`);
   }
 
   prompt += en
@@ -416,18 +434,18 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Workout structure source: ${classification.structure.source}`
     : `\n- 结构识别来源: ${classification.structure.source}`;
-  prompt += en
+  if (!isTrailRun) prompt += en
     ? `\n- Pace-zone hint from estimated ability: ${classification.paceZone}`
     : `\n- 基于能力估算的配速区间提示: ${classification.paceZone}`;
-  prompt += en
+  if (!isTrailRun) prompt += en
     ? `\n- Pace-zone confidence: ${classification.paceZoneConfidence}`
     : `\n- 配速区间置信度: ${getConfidenceLabel(classification.paceZoneConfidence, false)}`;
-  if (!classification.paceZoneExactMatch && classification.paceZoneGapSeconds !== null) {
+  if (!isTrailRun && !classification.paceZoneExactMatch && classification.paceZoneGapSeconds !== null) {
     prompt += en
       ? `\n- IMPORTANT: Current pace does NOT sit inside the estimated zone. It is only a nearest-zone hint, with a ${classification.paceZoneGapSeconds}s/km gap.`
       : `\n- 重要：本次配速并不真正落在该区间内，这只是最近区间提示，仍有 ${classification.paceZoneGapSeconds} 秒/公里的偏差。`;
   }
-  if (classification.paceZoneConfidence === 'low') {
+  if (!isTrailRun && classification.paceZoneConfidence === 'low') {
     prompt += en
       ? `\n- IMPORTANT: The current ability model is low-confidence. Treat pace-zone labels as soft hints, not hard truth.`
       : `\n- 重要：当前能力模型置信度较低，请把配速区间标签视为软提示，而不是硬结论。`;
@@ -647,22 +665,28 @@ export function buildProfessionalPrompt(
   const paceMin = paceSecKm / 60;
 
   prompt += en ? `\n\n## Pace Zone Reference` : `\n\n## 配速区间参考`;
-  prompt += en
-    ? `\nCurrent pace ${paceStr}/km ≈ ${paceMin.toFixed(1)} min/km`
-    : `\n本次配速 ${paceStr}/km 约等于 ${paceMin.toFixed(1)} min/km`;
-  prompt += en
-    ? `\nAbility-based zone from the athlete profile: ${zoneDesc}`
-    : `\n基于当前能力模型对应区间: ${zoneDesc}`;
-  prompt += en
-    ? `\n- Do NOT use generic absolute pace cutoffs for zone judgment; use the supplied ability-based zone and workout classification.`
-    : `\n- 判断配速区间时禁止使用通用绝对配速阈值，请以这里的能力模型区间和训练类型识别为准。`;
-  if (!classification.paceZoneExactMatch && classification.paceZoneGapSeconds !== null) {
+  if (isTrailRun) {
+    prompt += en
+      ? `\n- Road pace zones are NOT valid performance thresholds for this trail route. Do not call the activity too slow because of its raw pace; use HR, terrain and duration instead.`
+      : `\n- 路跑配速区间不能作为本次越野路线的表现门槛。不要因为原始配速落在某个路跑区间外，就评价为过慢；应结合心率、地形与时长。`;
+  } else {
+    prompt += en
+      ? `\nCurrent pace ${paceStr}/km ≈ ${paceMin.toFixed(1)} min/km`
+      : `\n本次配速 ${paceStr}/km 约等于 ${paceMin.toFixed(1)} min/km`;
+    prompt += en
+      ? `\nAbility-based zone from the athlete profile: ${zoneDesc}`
+      : `\n基于当前能力模型对应区间: ${zoneDesc}`;
+    prompt += en
+      ? `\n- Do NOT use generic absolute pace cutoffs for zone judgment; use the supplied ability-based zone and workout classification.`
+      : `\n- 判断配速区间时禁止使用通用绝对配速阈值，请以这里的能力模型区间和训练类型识别为准。`;
+  }
+  if (!isTrailRun && !classification.paceZoneExactMatch && classification.paceZoneGapSeconds !== null) {
     prompt += en
       ? `\n- Because the pace missed the estimated zone by ${classification.paceZoneGapSeconds}s/km, do not call it “inside the zone”. Use “near”, “slower than”, or “faster than” instead.`
       : `\n- 由于本次配速与该区间仍有 ${classification.paceZoneGapSeconds} 秒/公里的偏差，禁止表述为“落在该区间”，应改写为“接近”“偏慢”或“偏快”。`;
   }
 
-  prompt += getWorkoutSpecificGuidance(classification, en);
+  if (!isTrailRun) prompt += getWorkoutSpecificGuidance(classification, en);
   prompt += getDataConfidenceGuidance(activity, streams, lthr, maxHeartRate, en);
   if (classification.workoutTypeConfidence === 'low') {
     prompt += en
@@ -795,7 +819,7 @@ export function buildProfessionalPrompt(
     }
   }
 
-  if (thermalStats) {
+  if (thermalStats && !isTrailRun) {
     const paceDelta = Math.abs(thermalStats.paceDifferenceSeconds);
     const paceComparison = thermalStats.paceDifferenceSeconds > 0
       ? (en ? `${paceDelta}s/km slower` : `慢 ${paceDelta} 秒/公里`)
@@ -829,7 +853,7 @@ export function buildProfessionalPrompt(
 
   // Similar activities comparison
   const distanceLabel = getDistanceLabel(activity.distance, en);
-  if (similarStats) {
+  if (similarStats && !isTrailRun) {
     prompt += en
       ? `\n\nComparable Workouts Comparison (${similarStats.count} ${distanceLabel} workouts, ${similarStats.comparisonMode === 'strict' ? 'strict same-type match' : 'distance-matched fallback'}, confidence ${similarStats.sampleConfidence}):`
       : `\n\n同类训练对比（${similarStats.count}次${distanceLabel}，${similarStats.comparisonMode === 'strict' ? '严格同类型匹配' : '仅距离相近兜底样本'}，置信度${getConfidenceLabel(similarStats.sampleConfidence, false)}）:`;
@@ -875,8 +899,8 @@ export function buildProfessionalPrompt(
       ? `\n1. Intensity MUST be "extreme" - this is a race, the athlete should go all-out.`
       : `\n1. 强度必须判为 "extreme"（极限）- 这是比赛，运动员应该全力以赴`;
     prompt += en
-      ? `\n2. Recovery: half marathon 48-72h, marathon 7-14 days.`
-      : `\n2. 恢复时间建议：半马比赛48-72小时，全马比赛7-14天`;
+      ? `\n2. Recovery depends on distance, climbing, descent, and actual load; do not apply road-race recovery durations blindly to trail racing.`
+      : `\n2. 恢复需要结合距离、爬升、下降和实际负荷；越野赛不能直接套用路跑赛恢复时间。`;
     prompt += en
       ? `\n3. Do NOT suggest increasing speed workouts - the race itself is the highest intensity!`
       : `\n3. 不要建议"增加速度训练" - 比赛本身就是最高强度！`;
@@ -886,29 +910,35 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n5. Next workout: easy recovery runs or rest after the race, NOT intensity workouts.`
       : `\n5. 下次训练建议：比赛后应该安排轻松恢复跑，不是强度训练`;
-    prompt += en
-      ? `\n6. Race execution is the main conclusion. A negative split is excellent. Nearly even halves are excellent. For a marathon, a second half up to about 5 minutes slower can still be an excellent controlled finish. Larger fade must be explained from first-half pace versus overall average and HR, not from a generic template.`
-      : `\n6. “完成得怎么样”必须以比赛执行为主结论：负分割应明确表扬；前后半程近似均速应明确表扬；全马后半程只慢约 5 分钟仍属于非常出色的控制。更大的掉速必须结合前半程相对均配是否过快及心率变化解释，禁止套用长距离训练模板。`;
-    prompt += en
-      ? `\n7. If one kilometer is 2-3 minutes slower than average and later pace recovers, call out that isolated disruption separately. It may reflect stopping, walking, cramp or hitting the wall, but do not invent the exact cause.`
-      : `\n7. 如果某一公里比均配慢 2–3 分钟，而后续重新提速，必须单独指出这个中断点；它可能是停走、抽筋或撞墙，但不得臆断具体原因，也不要误写成全程持续跑崩。`;
+    if (!isTrailRun) {
+      prompt += en
+        ? `\n6. Race execution is the main conclusion. A negative split is excellent. Nearly even halves are excellent. For a marathon, a second half up to about 5 minutes slower can still be an excellent controlled finish. Larger fade must be explained from first-half pace versus overall average and HR, not from a generic template.`
+        : `\n6. “完成得怎么样”必须以比赛执行为主结论：负分割应明确表扬；前后半程近似均速应明确表扬；全马后半程只慢约 5 分钟仍属于非常出色的控制。更大的掉速必须结合前半程相对均配是否过快及心率变化解释，禁止套用长距离训练模板。`;
+      prompt += en
+        ? `\n7. If one kilometer is 2-3 minutes slower than average and later pace recovers, call out that isolated disruption separately. It may reflect stopping, walking, cramp or hitting the wall, but do not invent the exact cause.`
+        : `\n7. 如果某一公里比均配慢 2–3 分钟，而后续重新提速，必须单独指出这个中断点；它可能是停走、抽筋或撞墙，但不得臆断具体原因，也不要误写成全程持续跑崩。`;
+    }
     if (isTrailRun) {
       prompt += en
         ? `\n\n⚠️ TRAIL RACE SPECIAL RULES:`
         : `\n\n⚠️ 越野跑/山地赛特别规则:`;
       prompt += en
-        ? `\n- This is a trail race with significant elevation gain. You MUST use the EQUIVALENT PACE (${equivalentPaceStr}/km) for performance evaluation, NOT the raw pace (${paceStr}/km). Comparing raw trail pace to flat-road pace is MEANINGLESS and will produce absurd conclusions.`
-        : `\n- 这是一场有明显爬升的越野赛/山地赛。评估表现时必须使用等效平路配速（${equivalentPaceStr}/km），严禁使用原始配速（${paceStr}/km）直接对比平路成绩。用原始越野配速对比平路配速会得出荒谬结论。`;
+        ? `\n- Judge execution by climbing/descending profile, terrain-adjusted effort where available, heart rate, distance, and sustained performance. Do not diagnose a fade, slow start, or weak result from raw kilometer pace or road-race negative-split rules alone.`
+        : `\n- 结合每公里爬升/下降、可用的坡度修正配速、心率、距离和持续表现评价执行；不能仅凭原始分公里配速或路跑负分割规则判定掉速、起跑过快或成绩差。`;
       prompt += en
-        ? `\n- When comparing to historical data, use the equivalent pace. If there are no comparable trail races in history, explicitly state this and avoid making false "slower than average" claims.`
-        : `\n- 与历史数据对比时必须使用等效配速。如果历史中没有可比的越野赛记录，请明确说明，不要错误地下"比平均慢"的结论。`;
+        ? `\n- Only compare with trail races of sufficiently similar terrain; otherwise explicitly say no fair comparison is available. Estimated effort-equivalent pace is not a precise road-performance conversion.`
+        : `\n- 历史对比仅限爬升和地形足够接近的越野赛；否则明确说明暂无公平可比样本。估算等强配速不是精确的路跑成绩换算。`;
       prompt += en
         ? `\n- Climbing ability IS a core performance metric in trail running. Acknowledge the athlete's climbing strength. Do NOT label a strong trail performance as "poor" just because the raw pace looks slow on paper.`
         : `\n- 爬升能力是越野跑的核心竞技指标之一。应认可运动员的爬坡能力。绝不能仅因为原始配速数字看起来慢就把优秀的越野表现判定为"表现差"。`;
       prompt += en
-        ? `\n- Heart rate in trail races is naturally lower at the same effort level due to running economy differences on varied terrain. Do NOT interpret a lower HR vs flat-road races as "not trying hard enough".`
-        : `\n- 越野跑在同样努力程度下心率天然比平路低（多变地形导致跑步经济性不同）。不要把比平路赛低的心率解读为"没有拼尽全力"。`;
+        ? `\n- Use observed heart rate and duration to assess total load, but do not infer motivation from heart rate alone.`
+        : `\n- 结合实测心率与时长评价总负荷，不能仅凭心率推断主观投入。`;
     }
+  } else if (isTrailRun) {
+    prompt += en
+      ? `\n\nFor this trail run, assess sustained effort using climbing, descending, available grade-adjusted pace, heart rate, distance, and duration. Raw pace differences do not establish fitness change or failure.`
+      : `\n\n本次越野跑应结合爬升、下降、可用的坡度修正配速、心率、距离和时长评价持续努力。原始配速差异不能单独证明能力变化或执行失败。`;
   } else {
     // Normal training analysis - focused on THIS specific workout
     prompt += en ? `\n\nWorkout-specific analysis:` : `\n\n本次训练针对性分析:`;
@@ -1030,12 +1060,12 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n  "trainingLoadContext": "Load assessment: combine single-session intensity + weekly volume trend. Do NOT just report numbers. Give a coach-style conclusion like 'This tempo run accounts for 23% of weekly volume, load is moderate; weekly volume up 12% WoW, within safe range.'",`
     : `\n  "trainingLoadContext": "负荷评估：结合单次强度+周跑量趋势给出教练式结论。不要只报数字。例如'本次节奏跑占本周跑量23%，单次负荷适中；本周跑量环比+12%，处于安全上升区间'。",`;
-  prompt += en
-    ? `\n  "similarActivitiesInsight": "Based on the historical comparison data provided in the prompt, write an insightful observation about THIS workout's standing. If it ranks top 10%, praise the execution quality. If pace was inconsistent, note that. Do NOT just repeat numbers.",`
-    : `\n  "similarActivitiesInsight": "基于prompt中提供的历史对比数据，写出对本次训练站位的一句有洞察的评价。如果排名前10%，表扬执行质量。如果配速波动大，指出这一点。不要简单重复数字。",`;
-  prompt += en
-    ? `\n  "nextWorkoutSuggestion": "Give SPECIFIC details: exact distance, pace zone, and 1 recovery tip. Example: 'Easy run 6km @ E pace (5:30/km), focus on relaxed stride and sleep early.'",`
-    : `\n  "nextWorkoutSuggestion": "给出具体方案：精确距离、配速区间、1条恢复注意点。例如'轻松跑6km，E区配速5分30秒，注意放松步频、早睡'。",`;
+  prompt += isTrailRun
+    ? (en ? `\n  "similarActivitiesInsight": "State that road pace rankings are not comparable; discuss trail-specific terrain evidence instead.",` : `\n  "similarActivitiesInsight": "说明路跑配速排名不可比，转而讨论越野地形证据。",`)
+    : (en ? `\n  "similarActivitiesInsight": "Based on the historical comparison data provided in the prompt, write an insightful observation about THIS workout's standing. If it ranks top 10%, praise the execution quality. If pace was inconsistent, note that. Do NOT just repeat numbers.",` : `\n  "similarActivitiesInsight": "基于prompt中提供的历史对比数据，写出对本次训练站位的一句有洞察的评价。如果排名前10%，表扬执行质量。如果配速波动大，指出这一点。不要简单重复数字。",`);
+  prompt += isTrailRun
+    ? (en ? `\n  "nextWorkoutSuggestion": "Suggest rest or easy effort based on post-race soreness and fatigue; do not prescribe a fixed road pace.",` : `\n  "nextWorkoutSuggestion": "结合赛后肌肉酸痛与疲劳安排休息或轻松活动，不要指定固定路跑配速。",`)
+    : (en ? `\n  "nextWorkoutSuggestion": "Give SPECIFIC details: exact distance, pace zone, and 1 recovery tip. Example: 'Easy run 6km @ E pace (5:30/km), focus on relaxed stride and sleep early.'",` : `\n  "nextWorkoutSuggestion": "给出具体方案：精确距离、配速区间、1条恢复注意点。例如'轻松跑6km，E区配速5分30秒，注意放松步频、早睡'。",`);
   prompt += en
     ? `\n  "warnings": [${classification.isRace ? '"Ensure adequate recovery after the race"' : ''}]`
     : `\n  "warnings": [${classification.isRace ? '"赛后注意充分恢复"' : ''}]`;
@@ -1048,9 +1078,9 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- ${classification.isRace ? 'This is a race analysis; do not suggest increasing speed workouts.' : 'Provide professional coach-level insights and specific actionable advice.'}`
     : `\n- ${classification.isRace ? '这是比赛分析，不要建议增加速度训练' : '提供教练级别的专业洞察和具体可执行的建议'}`;
-  prompt += en
-    ? `\n- "comparisonToAverage" and "similarActivitiesInsight" should only describe pace differences and percentile ranking. Do NOT mention total time differences (e.g., "2 minutes faster") or unrelated descriptions.`
-    : `\n- "comparisonToAverage" 和 "similarActivitiesInsight" 只需描述配速差异和百分比排名，不要提及总用时差异（如"快2分钟"）或与此无关的描述。`;
+  prompt += isTrailRun
+    ? (en ? `\n- "comparisonToAverage" and "similarActivitiesInsight" must state that road pace is not comparable; do not invent a percentile ranking.` : `\n- "comparisonToAverage" 与 "similarActivitiesInsight" 应说明越野与路跑原始配速不可比，不得编造百分比排名。`)
+    : (en ? `\n- "comparisonToAverage" and "similarActivitiesInsight" should only describe pace differences and percentile ranking. Do NOT mention total time differences (e.g., "2 minutes faster") or unrelated descriptions.` : `\n- "comparisonToAverage" 和 "similarActivitiesInsight" 只需描述配速差异和百分比排名，不要提及总用时差异（如"快2分钟"）或与此无关的描述。`);
   prompt += en
     ? `\n- Separate hard facts from inference. For example: lap structure, split pattern, weather, and heart-rate zones are facts; workout intent is an inference that should match the supplied classification confidence.`
     : `\n- 请区分数据事实与推断。圈结构、分段模式、天气、心率区间属于事实；训练意图属于推断，且应与上面提供的训练类型置信度保持一致。`;
@@ -1072,7 +1102,7 @@ export function buildProfessionalPrompt(
   prompt += en
     ? `\n- Unless the activity data explicitly contains a planned workout target, say "reference pace" or "estimated zone" instead of "target pace".`
     : `\n- 除非活动数据明确包含计划训练目标，否则不要写“目标配速”，应写“参考配速”或“能力估算区间”。`;
-  prompt += en
+  if (!isTrailRun) prompt += en
     ? `\n- Do not call a segment a key quality block merely because it is faster than the whole-run average. Its average must reach the athlete's marathon-zone ceiling (${formatPace(marathonPaceCeiling)}/km) or faster, and at least 80% of its distance must independently meet that ceiling. Otherwise it is easy-pace variation or an average distorted by isolated surges, not evidence of speed endurance or a quality workout. PBs remain a separate highest-priority fact.`
     : `\n- 禁止仅因某一段比全程均配快，就称其为核心质量段。除了区间均配须达到个人 M 区慢端（${formatPace(marathonPaceCeiling)}/km）或更快，至少 80% 的区间距离也必须各自达到该门槛；否则只能视为轻松配速内的节奏变化，或被个别短促加速拉快的平均值，不能据此表扬速度耐力或质量课执行。明确 PB 仍是独立的最高优先级事实。`;
   prompt += en
@@ -1083,7 +1113,7 @@ export function buildProfessionalPrompt(
       ? `\n- A personal record is the highest-priority outcome fact for this activity. The summary must name it before generic workout classification, load, or recovery commentary.`
       : `\n- 个人最佳是本次活动最高优先级的结果事实。summary 必须先点名 PB，再展开训练类型、负荷和恢复判断。`;
   }
-  if (keySustainedEffort) {
+  if (keySustainedEffort && !isTrailRun) {
     prompt += en
       ? `\n- The key sustained segment is a priority outcome fact. Mention its distance, moving time or pace, and coaching significance before generic load commentary.`
       : `\n- 核心连续质量段属于优先级很高的结果事实。必须先写出距离、移动用时或配速及其训练意义，再展开泛化负荷提示。`;

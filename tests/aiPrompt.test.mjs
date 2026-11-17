@@ -29,6 +29,7 @@ compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
 compileLibFile('src/lib/raceExecution.ts', 'raceExecution.js');
+compileLibFile('src/lib/trailAnalysis.ts', 'trailAnalysis.js');
 compileLibFile('src/lib/heartRateZones.ts', 'heartRateZones.js');
 compileLibFile('src/lib/aiPrompt.ts', 'aiPrompt.js');
 
@@ -100,6 +101,47 @@ test.after(() => {
 });
 
 const { buildProfessionalPrompt } = require(path.join(tempDir, 'aiPrompt.js'));
+
+test('trail race prompt uses climbing and terrain-adjusted effort without road split verdicts', () => {
+  const activity = makeActivity({
+    id: 20991619385,
+    name: '秋季越野挑战',
+    distance: 2000,
+    moving_time: 900,
+    total_elevation_gain: 120,
+    splits_metric: [
+      { split: 1, distance: 1000, moving_time: 500, elevation_difference: 100 },
+      { split: 2, distance: 1000, moving_time: 400, elevation_difference: -100 },
+    ],
+  });
+  const distances = Array.from({ length: 41 }, (_, index) => index * 50);
+  const altitudes = distances.map((distance) => distance <= 1000 ? 100 + distance * 0.1 : 200 - (distance - 1000) * 0.1);
+  const prompt = buildProfessionalPrompt(
+    activity,
+    { distance: { data: distances }, altitude: { data: altitudes } },
+    makeProfile(),
+    makeClassification({ isRace: true, isTrail: true, raceType: '越野赛', workoutType: 'race', intensity: 'extreme' }),
+    'zh'
+  );
+  assert.match(prompt, /依据：用户确认/);
+  assert.match(prompt, /第 1 公里：爬升 100 米、下降 0 米/);
+  assert.match(prompt, /第 2 公里：爬升 0 米、下降 100 米/);
+  assert.match(prompt, /估算等强配速/);
+  assert.match(prompt, /并非 Strava 官方 GAP/);
+  assert.doesNotMatch(prompt, /比赛前后半程|全马后半程只慢约 5 分钟|历史平均配速/);
+});
+
+test('trail race prompt does not fabricate equivalent pace without altitude stream', () => {
+  const prompt = buildProfessionalPrompt(
+    makeActivity({ name: '越野赛', distance: 2000, moving_time: 900, total_elevation_gain: 120 }),
+    null,
+    makeProfile(),
+    makeClassification({ isRace: true, isTrail: true, raceType: '越野赛', workoutType: 'race', intensity: 'extreme' }),
+    'zh'
+  );
+  assert.match(prompt, /无法可靠估算等强配速，禁止编造/);
+  assert.doesNotMatch(prompt, /等效平路距离/);
+});
 
 test('32 km prompt uses detected phases without assuming a race simulation', () => {
   const splits = Array.from({ length: 32 }, (_, index) => {

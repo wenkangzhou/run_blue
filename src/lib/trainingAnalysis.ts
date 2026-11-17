@@ -3,6 +3,7 @@ import { formatLocalDateKey, getActivityDate, getActivityTimestamp, getISOWeek }
 import { getLthrZoneForHR } from './heartRateZones';
 import { calculateSemanticPaceZones } from './trainingZones';
 import { buildActivityWeatherContext } from './weather';
+import { getTrailDetection } from './trailAnalysis';
 
 // Estimated Personal Bests from activity history
 export interface EstimatedPBs {
@@ -174,6 +175,7 @@ export interface PhysiologyMetrics {
 // Activity classification
 export interface ActivityClassification {
   isRace: boolean;
+  isTrail?: boolean;
   raceType: string | null;
   intensity: 'easy' | 'moderate' | 'hard' | 'extreme';
   paceZone: PaceZoneLabel;
@@ -1134,21 +1136,24 @@ export function classifyActivity(
   paceZoneModelReliability: EstimatedPBs['reliability'] = 'medium',
   lthr?: number | null
 ): ActivityClassification {
+  const trail = getTrailDetection(activity);
   // Check workout_type - 1 = Race in Strava API
   const isWorkoutRace = activity.workout_type === 1;
   
   // Check name for race indicators
-  const raceKeywords = ['比赛', '马拉松', '半马', '全马', 'marathon', 'half marathon', 'race', '10k', '5k'];
+  const raceKeywords = ['比赛', '赛事', '越野赛', '山地赛', '马拉松', '半马', '全马', 'marathon', 'half marathon', 'race', '10k', '5k'];
   const nameLower = activity.name.toLowerCase();
   const hasRaceInName = raceKeywords.some(kw => nameLower.includes(kw.toLowerCase()));
   
-  const isRace = isWorkoutRace || hasRaceInName;
+  // User-confirmed race: Strava may leave both sport_type and workout_type as Run.
+  const isRace = isWorkoutRace || hasRaceInName || activity.id === 20991619385;
   
   // Determine race type from distance
   let raceType = null;
   const distKm = activity.distance / 1000;
   if (isRace) {
-    if (distKm >= 40) raceType = '马拉松';
+    if (trail.isTrail) raceType = '越野赛';
+    else if (distKm >= 40) raceType = '马拉松';
     else if (distKm >= 21) raceType = '半程马拉松';
     else if (distKm >= 9.5 && distKm <= 10.5) raceType = '10公里';
     else if (distKm >= 4.8 && distKm <= 5.3) raceType = '5公里';
@@ -1162,6 +1167,7 @@ export function classifyActivity(
   if (isRace) {
     return {
       isRace,
+      isTrail: trail.isTrail,
       raceType,
       intensity: 'extreme',
       paceZone,
@@ -1170,7 +1176,11 @@ export function classifyActivity(
       paceZoneGapSeconds: paceAssessment.gapSeconds,
       workoutType: 'race',
       workoutTypeConfidence: 'high',
-      workoutTypeEvidence: isWorkoutRace ? ['Strava workout_type=1'] : ['activity name matches race keywords'],
+      workoutTypeEvidence: isWorkoutRace
+        ? ['Strava workout_type=1']
+        : activity.id === 20991619385
+          ? ['user-confirmed trail race']
+          : ['activity name matches race keywords'],
       structure,
     };
   }
@@ -1179,6 +1189,7 @@ export function classifyActivity(
   
   return {
     isRace,
+    isTrail: trail.isTrail,
     raceType,
     intensity: workoutInfo.intensity,
     paceZone,

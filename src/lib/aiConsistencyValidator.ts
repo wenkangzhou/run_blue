@@ -9,6 +9,7 @@ import {
   type LongRunAssessment,
 } from './activityHighlights';
 import { formatRaceExecutionSummary, getRaceExecutionAssessment } from './raceExecution';
+import { getTrailDetection } from './trailAnalysis';
 
 export type AIConsistencyRule =
   | 'intensity-floor'
@@ -210,6 +211,7 @@ function getExecutionQuality(
   const structure = classification.structure;
 
   if (classification.isRace) {
+    if (classification.isTrail || (activity && getTrailDetection(activity).isTrail)) return analysis.executionQuality ?? 'good';
     return activity ? getRaceExecutionAssessment(activity)?.quality ?? 'good' : 'good';
   }
   if (activity && getPrimaryPersonalRecord(activity)) return 'excellent';
@@ -430,10 +432,12 @@ export function validateAIAnalysisConsistency(
   const minimumRecoveryHours = classification.loadAdjustment?.minimumRecoveryHours ?? 0;
   const finalRecoveryHours = Math.max(analysis.recoveryHours || 0, minimumRecoveryHours);
   const longRunAssessment = context.activity ? getLongRunAssessment(context.activity) : null;
+  const isTrail = classification.isTrail || Boolean(context.activity && getTrailDetection(context.activity).isTrail);
   const raceAssessment = classification.isRace && context.activity
+    && !(classification.isTrail || getTrailDetection(context.activity).isTrail)
     ? getRaceExecutionAssessment(context.activity)
     : null;
-  const heartRateRise = raceAssessment
+  const heartRateRise = isTrail || raceAssessment
     ? null
     : getUnexplainedHeartRateRise(streamAnalysis, longRunAssessment);
   const executionQuality = getExecutionQuality(analysis, context, heartRateRise);
@@ -469,7 +473,7 @@ export function validateAIAnalysisConsistency(
   );
   if (executionWithHeartRate !== normalizedExecution) correctedRules.add('heart-rate-trend');
   const raceExecution = raceAssessment ? formatRaceExecutionSummary(raceAssessment, locale) : null;
-  const longRunExecution = getLongRunExecution(context.activity, classification, locale);
+  const longRunExecution = isTrail ? null : getLongRunExecution(context.activity, classification, locale);
   const preferredExecution = raceExecution ?? longRunExecution;
   if (raceExecution && raceExecution !== executionWithHeartRate) correctedRules.add('race-priority');
   if (longRunExecution && longRunExecution !== executionWithHeartRate) correctedRules.add('long-run-priority');

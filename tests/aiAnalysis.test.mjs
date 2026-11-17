@@ -31,6 +31,7 @@ compileLibFile('src/lib/weather.ts', 'weather.js');
 compileLibFile('src/lib/activityAchievements.ts', 'activityAchievements.js');
 compileLibFile('src/lib/activityHighlights.ts', 'activityHighlights.js');
 compileLibFile('src/lib/raceExecution.ts', 'raceExecution.js');
+compileLibFile('src/lib/trailAnalysis.ts', 'trailAnalysis.js');
 compileLibFile('src/lib/aiConsistencyValidator.ts', 'aiConsistencyValidator.js');
 compileLibFile('src/lib/aiResponseParser.ts', 'aiResponseParser.js');
 compileLibFile('src/lib/aiFallbackAnalysis.ts', 'aiFallbackAnalysis.js');
@@ -135,6 +136,35 @@ function makeHuzhouMarathonActivity() {
     splits_metric: splits,
   });
 }
+
+test('trail race parsing rejects road pace ranking and road pace-zone verdict', () => {
+  const activity = makeActivity({
+    id: 20991619385,
+    name: '山径越野挑战',
+    distance: 20_000,
+    moving_time: 12_000,
+    total_elevation_gain: 800,
+  });
+  const classification = makeClassification({ isRace: true, isTrail: true, raceType: '越野赛', intensity: 'extreme', workoutType: 'race' });
+  const parsed = parseAIResponse(JSON.stringify({
+    summary: '越野赛完成，总爬升较大，配速应结合地形理解。',
+    executionSummary: '爬升段速度变化不能单独说明跑崩。',
+    intensity: 'extreme',
+    recoveryHours: 72,
+    comparisonToAverage: '比路跑平均慢很多',
+    similarActivitiesInsight: '历史最慢',
+    paceZoneAnalysis: { zone: 'E', description: '明显太慢', appropriateness: 'too-slow' },
+  }), activity, makeProfile(), classification, 'zh');
+  assert.match(parsed.comparisonToAverage, /不可直接比较/);
+  assert.match(parsed.similarActivitiesInsight, /爬升和地形接近的越野赛/);
+  assert.equal(parsed.paceZoneAnalysis.appropriateness, 'appropriate');
+  assert.doesNotMatch(parsed.executionSummary, /前后半程/);
+
+  const fallback = generateFallbackAnalysis(activity, makeProfile(), classification, 'zh');
+  assert.match(fallback.summary, /越野赛完成/);
+  assert.match(fallback.summary, /总爬升 800 米/);
+  assert.doesNotMatch(fallback.executionSummary, /负分割|跑崩/);
+});
 
 test('activity 16399915541 is assessed as a race with an excellent controlled positive split', () => {
   const activity = makeHuzhouMarathonActivity();

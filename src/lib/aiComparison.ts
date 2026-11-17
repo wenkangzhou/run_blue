@@ -1,5 +1,6 @@
 import { StravaActivity } from '@/types';
 import type { TrainingProfile, WorkoutType } from './trainingAnalysis';
+import { getTrailDetection } from './trailAnalysis';
 
 function getDistanceLabel(distanceMeters: number, en: boolean): string {
   const km = distanceMeters / 1000;
@@ -45,6 +46,12 @@ export function buildAccurateComparison(
   workoutType?: WorkoutType
 ): { comparisonToAverage: string; similarActivitiesInsight: string } {
   const en = locale.startsWith('en');
+  if (getTrailDetection(activity).isTrail) {
+    return {
+      comparisonToAverage: en ? 'Trail terrain is not comparable to road-running pace; no fair pace ranking is available.' : '越野路线与路跑配速不可直接比较，暂无公平的配速排名。',
+      similarActivitiesInsight: en ? 'Compare only with trail races of similar climbing and terrain.' : '仅可与爬升和地形接近的越野赛比较。',
+    };
+  }
   const currentPaceSecKm = activity.moving_time / activity.distance * 1000;
   const avgPaceSecKm = similarStats.avgPace * 60;
   const diffSec = Math.round(currentPaceSecKm - avgPaceSecKm);

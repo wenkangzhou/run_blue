@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     );
     
     // Stream analysis: segment HR + pace by km
-    const streamAnalysisText = streamAnalysisRaw
+    const streamAnalysisText = streamAnalysisRaw && !baseClassification.isTrail
       ? formatStreamAnalysisForPrompt(streamAnalysisRaw, lthr, locale, maxHeartRate)
       : undefined;
 
@@ -133,9 +133,9 @@ export async function POST(request: NextRequest) {
     let analysisError: string | undefined;
     let analysis;
     if (!allowThirdPartyAI) {
-      analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+      analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale, streams);
       analysisSource = 'fallback';
-    } else if (process.env.STRAVA_AI_PROVIDER === 'claude-mcp') {
+    } else if (process.env.STRAVA_AI_PROVIDER === 'claude-mcp' && !baseClassification.isTrail) {
       try {
         analysis = await analyzeActivityViaClaudeStravaMcp({
           activityId: currentActivity.id,
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
         analysisSource = 'claude-mcp';
       } catch (error) {
         console.error('[AI] Claude Strava MCP analysis failed:', error);
-        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale, streams);
         analysisSource = 'fallback';
       }
     } else {
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         analysisError = getErrorMessage(error, 'Kimi analysis failed');
         console.error('[AI] Kimi analysis failed, falling back locally:', error);
-        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale);
+        analysis = generateFallbackAnalysis(currentActivity, trainingProfile, classification, locale, streams);
         analysisSource = 'fallback';
       }
     }

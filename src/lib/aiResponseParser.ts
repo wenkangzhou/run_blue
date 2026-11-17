@@ -8,6 +8,7 @@ import { formatSustainedEffortDistance, getKeySustainedEffort } from './activity
 import { buildExecutionSummary } from './aiFallbackAnalysis';
 import type { StreamAnalysis } from './streamAnalysis';
 import { validateAIAnalysisConsistency } from './aiConsistencyValidator';
+import { getTrailDetection } from './trailAnalysis';
 
 function formatRecordTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -732,6 +733,7 @@ export function normalizeAIAnalysisForDisplay(
   paceZones?: PaceZones | null,
   streamAnalysis?: StreamAnalysis | null
 ): AIAnalysis {
+  const isTrail = classification.isTrail || getTrailDetection(activity).isTrail;
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
   const suggestions = normalizeSuggestionsForRecoveryContext(Array.isArray(analysis.suggestions)
     ? analysis.suggestions
@@ -743,6 +745,7 @@ export function normalizeAIAnalysisForDisplay(
   const recoveryFirstSuggestion = getRecoveryFirstSuggestion(classification, locale);
 
   const summary = getLoadAdjustedSummary(
+    isTrail ? normalizeForDisplay(analysis.summary || '') :
     ensurePrioritySummary(
       normalizeUnsupportedQualitySegmentSummary(
         normalizeForDisplay(analysis.summary || ''),
@@ -788,7 +791,9 @@ export function normalizeAIAnalysisForDisplay(
       ?? normalizeForDisplay(analysis.nextWorkoutSuggestion || ''),
     suggestions,
     warnings,
-    paceZoneAnalysis: analysis.paceZoneAnalysis
+    paceZoneAnalysis: isTrail
+      ? { zone: classification.paceZone, description: locale.startsWith('en') ? 'Road pace zones are not directly comparable on trail terrain.' : '越野地形不能直接套用路跑配速区间。', appropriateness: 'appropriate' }
+      : analysis.paceZoneAnalysis
       ? {
           ...analysis.paceZoneAnalysis,
           description: normalizeForDisplay(analysis.paceZoneAnalysis.description || ''),
@@ -873,6 +878,7 @@ export function parseAIResponse(
   classification: ActivityClassification,
   locale: string = 'zh'
 ): AIAnalysis {
+  const isTrail = classification.isTrail || getTrailDetection(activity).isTrail;
   const jsonStr = extractAIJson(content);
   const result = JSON.parse(jsonStr);
 
@@ -883,6 +889,7 @@ export function parseAIResponse(
     : null;
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
   const normalizedSummary = getLoadAdjustedSummary(
+    isTrail ? normalizeForDisplay(result.summary || '训练分析完成') :
     ensurePrioritySummary(
       normalizeUnsupportedQualitySegmentSummary(
         normalizeForDisplay(result.summary || '训练分析完成'),
@@ -929,7 +936,9 @@ export function parseAIResponse(
     locale
   );
   const normalizedAIInsight = normalizeForDisplay(result.similarActivitiesInsight || '');
-  const normalizedPaceZoneAnalysis = result.paceZoneAnalysis
+  const normalizedPaceZoneAnalysis = isTrail
+    ? { zone: classification.paceZone, description: locale.startsWith('en') ? 'Road pace zones are not directly comparable on trail terrain.' : '越野地形不能直接套用路跑配速区间。', appropriateness: 'appropriate' }
+    : result.paceZoneAnalysis
     ? {
         ...result.paceZoneAnalysis,
         description: normalizeForDisplay(result.paceZoneAnalysis.description || ''),
@@ -941,12 +950,16 @@ export function parseAIResponse(
     executionSummary: normalizedExecutionSummary,
     intensity: result.intensity,
     recoveryHours: result.recoveryHours || (classification.isRace ? 48 : 24),
-    comparisonToAverage: comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
+    comparisonToAverage: isTrail
+      ? comparisonOverride?.comparisonToAverage || (locale.startsWith('en') ? 'Trail terrain is not comparable to road-running pace.' : '越野路线与路跑配速不可直接比较。')
+      : comparisonOverride?.comparisonToAverage || result.comparisonToAverage || '',
     suggestions: normalizedSuggestions,
     generatedAt: Date.now(),
     paceZoneAnalysis: normalizedPaceZoneAnalysis,
     trainingLoadContext: normalizedTrainingLoadContext,
-    similarActivitiesInsight: comparisonOverride && shouldUseSystemInsight(normalizedAIInsight, trainingProfile)
+    similarActivitiesInsight: isTrail
+      ? comparisonOverride?.similarActivitiesInsight || (locale.startsWith('en') ? 'Compare only similar trail terrain.' : '仅比较相近越野地形。')
+      : comparisonOverride && shouldUseSystemInsight(normalizedAIInsight, trainingProfile)
       ? comparisonOverride.similarActivitiesInsight
       : normalizedAIInsight || comparisonOverride?.similarActivitiesInsight || '',
     nextWorkoutSuggestion: normalizedNextWorkoutSuggestion,

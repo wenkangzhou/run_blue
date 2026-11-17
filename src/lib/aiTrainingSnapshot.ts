@@ -6,6 +6,7 @@ import type {
 import type { UserPhysique } from '@/lib/aiTypes';
 import { buildActivityWeatherContext } from '@/lib/weather';
 import { getActivityBestEfforts, getActivityPersonalRecords } from '@/lib/activityAchievements';
+import { getTrailTerrainSummary, type TrailTerrainSummary } from '@/lib/trailAnalysis';
 
 const MAX_LAPS = 40;
 const MAX_SPLITS = 50;
@@ -16,7 +17,7 @@ type PromptTrainingProfile = Pick<
 >;
 
 export interface AITrainingSnapshot {
-  schemaVersion: '9';
+  schemaVersion: '10';
   workout: {
     distanceMeters: number;
     movingTimeSeconds: number;
@@ -42,6 +43,7 @@ export interface AITrainingSnapshot {
   lthr?: number | null;
   streamSummary?: string;
   hasStreamEvidence: boolean;
+  trailTerrain: TrailTerrainSummary;
 }
 
 function finiteNumber(value: number | undefined): number | undefined {
@@ -99,7 +101,7 @@ export function buildAITrainingSnapshot(input: {
   const bestEfforts = getActivityBestEfforts(activity);
 
   return {
-    schemaVersion: '9',
+    schemaVersion: '10',
     workout: {
       distanceMeters: activity.distance,
       movingTimeSeconds: activity.moving_time,
@@ -136,6 +138,7 @@ export function buildAITrainingSnapshot(input: {
     lthr,
     streamSummary,
     hasStreamEvidence: Boolean(streams && Object.keys(streams).length > 0),
+    trailTerrain: getTrailTerrainSummary(activity, streams),
   };
 }
 
@@ -143,6 +146,7 @@ export function getPromptInputsFromSnapshot(snapshot: AITrainingSnapshot): {
   activity: StravaActivity;
   streams: Record<string, ActivityStream> | null;
   trainingProfile: TrainingProfile;
+  trailTerrain: TrailTerrainSummary;
 } {
   const bestEfforts = snapshot.workout.bestEfforts ?? [];
   const personalRecords = snapshot.workout.personalRecords ?? [];
@@ -195,5 +199,5 @@ export function getPromptInputsFromSnapshot(snapshot: AITrainingSnapshot): {
     dateRange: { start: '', end: '' },
   };
 
-  return { activity, streams, trainingProfile };
+  return { activity, streams, trainingProfile, trailTerrain: snapshot.trailTerrain };
 }

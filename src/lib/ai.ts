@@ -85,6 +85,7 @@ export async function analyzeActivity(
     snapshot.lthr,
     snapshot.streamSummary,
     snapshot.maxHeartRate,
+    promptInputs.trailTerrain,
   );
 
   // Retry on JSON parse failure (common on cold-start / network hiccup)

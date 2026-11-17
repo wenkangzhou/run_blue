@@ -1,4 +1,4 @@
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
 import type { ActivityClassification, TrainingProfile } from './trainingAnalysis';
 import { formatPace, getWorkoutTypeLabel } from './trainingAnalysis';
@@ -6,6 +6,7 @@ import { buildAccurateComparison } from './aiComparison';
 import { buildActivityWeatherContext, getThermalContext } from './weather';
 import { getLongRunAssessment, type LongRunAssessment } from './activityHighlights';
 import { formatRaceExecutionSummary, getRaceExecutionAssessment } from './raceExecution';
+import { getTrailDetection, getTrailTerrainSummary } from './trailAnalysis';
 
 function getZoneDescription(
   zone: ActivityClassification['paceZone'],
@@ -94,6 +95,11 @@ export function buildExecutionSummary(
 ): string {
   const en = locale.startsWith('en');
   const structure = classification.structure;
+  if (classification.isTrail || getTrailDetection(activity).isTrail) {
+    return en
+      ? 'Trail execution should be judged with ascent, descent, heart rate, and duration; raw road-style split pacing alone is not enough.'
+      : '越野执行应结合爬升、下降、心率和时长判断，不能只看路跑式分段配速。';
+  }
 
   if (structure.alternatingRepCount >= 3 && structure.workPaceAverage) {
     const reps = structure.alternatingRepCount;
@@ -183,7 +189,8 @@ export function generateFallbackAnalysis(
   activity: StravaActivity,
   profile: TrainingProfile,
   classification: ActivityClassification,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  streams?: Record<string, ActivityStream> | null
 ): AIAnalysis {
   const en = locale.startsWith('en');
   const paceSecKm = activity.moving_time / activity.distance * 1000;
@@ -200,6 +207,45 @@ export function generateFallbackAnalysis(
     : null;
 
   if (classification.isRace) {
+    if (classification.isTrail || getTrailDetection(activity).isTrail) {
+      const terrain = getTrailTerrainSummary(activity, streams);
+      const climbPerKm = activity.distance > 0 ? Math.round(activity.total_elevation_gain / (activity.distance / 1000)) : 0;
+      const baseExecution = en
+        ? `Trail-race execution requires per-kilometer climbing/descending and heart-rate context; raw pace ${paceStr}/km alone cannot establish a fade or road-race quality.`
+        : `越野赛应结合逐公里爬升、下降和心率评价执行；原始均配 ${paceStr}/公里不能单独判定掉速或套用路跑成绩标准。`;
+      const majorClimbs = terrain.gradeCoverage >= 0.8
+        ? terrain.kilometers.filter((km) => km.altitudeCoverage >= 0.8).sort((a, b) => b.ascentMeters - a.ascentMeters).slice(0, 2)
+        : [];
+      const terrainDetail = majorClimbs.length > 0
+        ? (en
+            ? `Largest climbing kilometers: ${majorClimbs.map((km) => `${km.kilometer} (${Math.round(km.ascentMeters)}m up, ${Math.round(km.descentMeters)}m down)`).join(', ')}.`
+            : `爬升最多的公里：${majorClimbs.map((km) => `第 ${km.kilometer} 公里上升 ${Math.round(km.ascentMeters)} 米、下降 ${Math.round(km.descentMeters)} 米`).join('；')}。`)
+        : '';
+      const equivalentDetail = terrain.equivalentPaceSecondsPerKm
+        ? (en
+            ? `Estimated grade-adjusted effort pace ${formatPace(terrain.equivalentPaceSecondsPerKm)}/km is only a rough aid, not Strava GAP or a road-race equivalent.`
+            : `估算坡度修正等强配速 ${formatPace(terrain.equivalentPaceSecondsPerKm)}/公里仅供辅助，并非 Strava GAP 或精确路跑等效成绩。`)
+        : '';
+      const trailExecution = [baseExecution, terrainDetail, equivalentDetail].filter(Boolean).join(' ');
+      return {
+        summary: en
+          ? `Trail race completed over ${(activity.distance / 1000).toFixed(1)} km with ${Math.round(activity.total_elevation_gain)} m ascent (${climbPerKm} m/km). ${trailExecution}`
+          : `越野赛完成 ${(activity.distance / 1000).toFixed(1)} 公里，总爬升 ${Math.round(activity.total_elevation_gain)} 米（平均每公里 ${climbPerKm} 米）。${trailExecution}`,
+        executionSummary: trailExecution,
+        executionQuality: 'good',
+        intensity: 'extreme',
+        recoveryHours: activity.distance > 40000 ? 168 : 48,
+        comparisonToAverage: fallbackComparison?.comparisonToAverage || (en ? 'No comparable trail-race sample.' : '暂无可比的越野赛样本。'),
+        suggestions: en ? ['Prioritize post-race recovery and monitor leg soreness after descents.'] : ['赛后优先恢复，关注下坡后的腿部肌肉酸痛。'],
+        generatedAt: Date.now(),
+        isFallback: true,
+        paceZoneAnalysis: { zone, description: en ? 'Road pace zones do not directly apply to trail terrain.' : '路跑配速区间不宜直接套用于越野地形。', appropriateness: 'appropriate' },
+        trainingLoadContext: en ? 'Consider distance, elevation, heart rate and duration together.' : '需要结合距离、爬升、心率和时长判断总负荷。',
+        similarActivitiesInsight: fallbackComparison?.similarActivitiesInsight || (en ? 'Compare only similar trail terrain.' : '仅比较相近越野地形。'),
+        nextWorkoutSuggestion: en ? 'Rest or easy recovery after the race.' : '赛后安排休息或轻松恢复。',
+        warnings: [en ? 'Allow adequate recovery after the trail race.' : '越野赛后注意充分恢复。'],
+      };
+    }
     const raceAssessment = getRaceExecutionAssessment(activity);
     const raceExecution = raceAssessment
       ? formatRaceExecutionSummary(raceAssessment, locale)
