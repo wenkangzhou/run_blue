@@ -233,10 +233,11 @@ export function useAIAnalysis(
         payload.classification,
         i18n.language,
         payload.trainingStats?.paceZones,
-        payload.streamAnalysis
+        payload.streamAnalysis,
+        streams
       ),
     };
-  }, [activity, i18n.language]);
+  }, [activity, streams, i18n.language]);
 
   const applyAnalysisPayload = useCallback((payload: CachedAIAnalysis, inputKey: string) => {
     const normalizedPayload = normalizeCachedPayload(payload);

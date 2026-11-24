@@ -140,7 +140,7 @@ export async function analyzeActivity(
         throw new Error('Empty response from AI');
       }
 
-      return parseAIResponse(content, activity, trainingProfile, classification, locale);
+      return parseAIResponse(content, activity, trainingProfile, classification, locale, streams);
     } catch (e) {
       const timedOut = e instanceof Error && e.name === 'AbortError';
       const message = timedOut

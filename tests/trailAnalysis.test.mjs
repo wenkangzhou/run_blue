@@ -13,7 +13,7 @@ writeFileSync(path.join(tempDir, 'trailAnalysis.js'), ts.transpileModule(
   readFileSync('src/lib/trailAnalysis.ts', 'utf8'),
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }
 ).outputText);
-const { getTrailDetection, getTrailTerrainSummary } = require(path.join(tempDir, 'trailAnalysis.js'));
+const { assessTrailExecution, getTrailDetection, getTrailTerrainSummary } = require(path.join(tempDir, 'trailAnalysis.js'));
 
 function activity(overrides = {}) {
   return {
@@ -63,4 +63,36 @@ test('no altitude stream never invents ascent/descent or grade-adjusted pace', (
   assert.equal(terrain.gradeCoverage, 0);
   assert.equal(terrain.kilometers[0].netElevationMeters, 100);
   assert.equal(terrain.kilometers[0].ascentMeters, 0);
+});
+
+test('trail execution identifies late fade with grade-adjusted pace and heart rate', () => {
+  const kilometers = Array.from({ length: 9 }, (_, index) => ({
+    kilometer: index + 1,
+    distanceMeters: 1000,
+    altitudeCoverage: 1,
+    ascentMeters: index === 3 ? 110 : 25,
+    descentMeters: 0,
+    paceSecondsPerKm: index < 6 ? 450 : 540,
+    equivalentPaceSecondsPerKm: index < 6 ? 400 : 460,
+    averageHeartRate: index < 6 ? 150 : 165,
+  }));
+  const result = assessTrailExecution(activity({ distance: 9000, total_elevation_gain: 310 }), {
+    isTrail: true,
+    source: 'title',
+    climbMetersPerKm: 34,
+    kilometers,
+    gradeCoverage: 1,
+  }, 'zh');
+  assert.equal(result.quality, 'poor');
+  assert.match(result.summary, /后段等强配速明显下降/);
+  assert.match(result.summary, /第 4 公里/);
+  assert.match(result.summary, /15 bpm/);
+  assert.doesNotMatch(result.summary, /应结合|间歇/);
+});
+
+test('trail execution refuses a quality grade without sufficient altitude coverage', () => {
+  const terrain = getTrailTerrainSummary(activity(), null);
+  const result = assessTrailExecution(activity(), terrain, 'zh');
+  assert.equal(result.quality, undefined);
+  assert.match(result.summary, /暂不评定执行质量/);
 });

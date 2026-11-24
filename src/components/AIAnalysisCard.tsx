@@ -147,7 +147,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const intensity = analysis?.intensity
     ? { ...intensityColors[analysis.intensity], label: t(`aiAnalysis.${analysis.intensity}`) }
     : null;
-  const executionQualityLevel = analysis?.executionQuality ?? 'good';
+  const executionQualityLevel = classification?.isTrail && !analysis?.executionQuality
+    ? 'unknown'
+    : analysis?.executionQuality ?? 'good';
   const executionQualityDisplay = {
     excellent: {
       label: t('aiAnalysis.executionQualityExcellent', '到位'),
@@ -169,13 +171,20 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
       color: 'text-red-700 dark:text-red-400',
       bg: 'bg-red-100 dark:bg-red-900/30',
     },
+    unknown: {
+      label: t('aiAnalysis.executionQualityUnknown', '待判断'),
+      color: 'text-zinc-600 dark:text-zinc-300',
+      bg: 'bg-zinc-100 dark:bg-zinc-800',
+    },
   }[executionQualityLevel];
   const isRace = classification?.isRace;
   const hasAdjustedInternalLoad = classification?.loadAdjustment?.applied === true;
   const hasThermalLoad = classification?.loadAdjustment?.thermalSeverity === 'heat-load'
     || classification?.loadAdjustment?.thermalSeverity === 'heat-stress';
   const workoutTypeLabel = classification
-    ? hasAdjustedInternalLoad
+    ? classification.isRace && classification.isTrail
+      ? t('aiAnalysis.trailRace', '越野赛')
+      : hasAdjustedInternalLoad
       ? hasThermalLoad
         ? t('aiAnalysis.heatLoadRun', '高温负荷有氧跑')
         : t('aiAnalysis.loadAdjustedRun', '较高负荷有氧跑')
@@ -257,6 +266,12 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
 
   function formatStructureSummary() {
     if (!classification) return '';
+    if (classification.isTrail && classification.isRace) {
+      const count = activity.splits_metric?.filter((split) => split.distance >= 800).length ?? 0;
+      return count > 0
+        ? t('aiAnalysis.trailKilometerSplits', { count, defaultValue: `${count} 个公里分段` })
+        : '';
+    }
     const structure = classification.structure;
     const parts: string[] = [];
 
@@ -394,7 +409,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     const cons: string[] = [];
 
     // From pace zone appropriateness
-    if (analysis.paceZoneAnalysis?.appropriateness === 'appropriate') {
+    if (!classification.isTrail && analysis.paceZoneAnalysis?.appropriateness === 'appropriate') {
       pros.push(getAppropriatePaceProLabel(classification.workoutType));
     } else if (analysis.paceZoneAnalysis?.appropriateness === 'too-fast') {
       cons.push('配速偏快，负荷偏高');
@@ -403,15 +418,15 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     }
 
     // From stream analysis
-    if (streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift && !lowIntensityLooksControlled) {
+    if (!classification.isTrail && streamAnalysis?.hasHRDrift && !pacePatternExplainsHRDrift && !lowIntensityLooksControlled) {
       cons.push(`后程心率上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm，需要留意疲劳或补给`);
-    } else if (streamAnalysis?.avgHRDrift && streamAnalysis.avgHRDrift > 5) {
+    } else if (!classification.isTrail && streamAnalysis?.avgHRDrift && streamAnalysis.avgHRDrift > 5) {
       if (pacePatternExplainsHRDrift) {
         pros.push('心率变化与训练结构匹配');
       } else if (!lowIntensityLooksControlled) {
         cons.push(`后程心率小幅上升 ${Math.round(streamAnalysis.avgHRDrift)} bpm`);
       }
-    } else if (streamAnalysis?.avgHRDrift !== undefined && streamAnalysis.avgHRDrift <= 5) {
+    } else if (!classification.isTrail && streamAnalysis?.avgHRDrift !== undefined && streamAnalysis.avgHRDrift <= 5) {
       pros.push('心率控制稳定');
     }
 
@@ -450,6 +465,7 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     good:      { color: 'text-blue-700 dark:text-blue-400',      bg: 'bg-blue-50 dark:bg-blue-900/15',      border: 'border-blue-400' },
     fair:      { color: 'text-amber-700 dark:text-amber-400',    bg: 'bg-amber-50 dark:bg-amber-900/15',    border: 'border-amber-400' },
     poor:      { color: 'text-red-700 dark:text-red-400',        bg: 'bg-red-50 dark:bg-red-900/15',        border: 'border-red-400' },
+    unknown:   { color: 'text-zinc-700 dark:text-zinc-300',      bg: 'bg-zinc-50 dark:bg-zinc-800/60',      border: 'border-zinc-300 dark:border-zinc-700' },
   };
 
   const aiZone = analysis?.paceZoneAnalysis?.zone?.trim();
@@ -460,7 +476,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
   const zoneTranslationKey = `aiAnalysis.zone${zoneKey}`;
   const zoneFallbackLabel = zoneKey;
   const zoneLabel = t(zoneTranslationKey, zoneFallbackLabel);
-  const zone = { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
+  const zone = classification?.isTrail
+    ? { label: t('aiAnalysis.trailPaceZone', '不适用'), color: 'text-zinc-500' }
+    : { label: zoneLabel, color: zoneColors[zoneKey] || zoneColors.E };
   const briefAdvice = (() => {
     if (!analysis || !verdict) return [];
     const candidates = [
@@ -480,7 +498,9 @@ export function AIAnalysisCard({ activity, streams, enabled = true }: AIAnalysis
     verdict?.cons[0],
   ].filter(Boolean).join('；');
   const quickExecution = analysis?.executionSummary
-    ? compactNaturalSentence(analysis.executionSummary, 2, 148)
+    ? classification?.isTrail
+      ? analysis.executionSummary
+      : compactNaturalSentence(analysis.executionSummary, 2, 148)
     : closeSentence(fallbackExecution) || t('aiAnalysis.waitingForConclusion', '正在整理本次训练完成情况');
   const quickNextStep = briefAdvice[0]
     || compactSummary(analysis?.nextWorkoutSuggestion || '', 1, 64)

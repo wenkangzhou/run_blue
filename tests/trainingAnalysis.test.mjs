@@ -62,6 +62,19 @@ test('user-confirmed 20991619385 is treated as a trail race even when Strava say
   assert.equal(classification.raceType, '越野赛');
 });
 
+test('trail race auto-kilometer laps are not interval repetitions', () => {
+  const classification = classifyActivity(makeActivity(20991619385, {
+    name: '秋季越野挑战',
+    distance: 6000,
+    total_elevation_gain: 400,
+    laps: [480, 610, 470, 620, 480, 610].map((seconds, index) => makeLap(index, 1000, seconds)),
+  }));
+  assert.equal(classification.structure.lapCount, 6);
+  assert.equal(classification.structure.shortRepCount, 0);
+  assert.equal(classification.structure.alternatingRepCount, 0);
+  assert.equal(classification.structure.splitPattern, 'unknown');
+});
+
 function makeLap(index, distance, movingTime, overrides = {}) {
   return {
     id: index + 1,

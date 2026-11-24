@@ -1025,6 +1025,13 @@ export function buildProfessionalPrompt(
     prompt += en
       ? `\n{\n  "summary": "Race performance analysis in 2-3 complete sentences: result, pacing execution, and recovery priority.",`
       : `\n{\n  "summary": "用2-3个完整句子总结比赛：结果、配速执行、恢复重点。",`;
+    prompt += isTrailRun
+      ? (en
+          ? `\n  "executionSummary": "Give a race-specific verdict backed by measured climbing, early-versus-late estimated grade-adjusted effort and heart rate; if these data are missing, explicitly say execution cannot be rated.",`
+          : `\n  "executionSummary": "用实际数据评价这场越野赛：指出关键爬升公里、前后段估算等强配速及心率变化；若这些数据不足，明确说明不能评定执行质量，禁止只说应该参考哪些指标。",`)
+      : (en
+          ? `\n  "executionSummary": "Evaluate race execution with split evidence and a specific strength or limitation.",`
+          : `\n  "executionSummary": "结合比赛分段，具体说明完成质量、一个优势和一个主要问题。",`);
     prompt += `\n  "intensity": "extreme",`;
     prompt += `\n  "recoveryHours": ${activity.distance > 40000 ? 168 : 48},`;
     prompt += en

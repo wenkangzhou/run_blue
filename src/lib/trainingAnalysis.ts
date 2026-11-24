@@ -1160,7 +1160,25 @@ export function classifyActivity(
     else raceType = '比赛';
   }
 
-  const structure = summarizeActivityStructure(activity, paceZones?.marathon.max);
+  const inferredStructure = summarizeActivityStructure(activity, paceZones?.marathon.max);
+  // Auto-kilometer laps on a trail race are terrain splits, not interval repetitions.
+  const structure = isRace && trail.isTrail
+    ? {
+        ...inferredStructure,
+        shortRepCount: 0,
+        fastRepCount: 0,
+        recoveryRepCount: 0,
+        alternatingRepCount: 0,
+        alternatingRecoveryCount: 0,
+        alternatingStartLap: null,
+        alternatingEndLap: null,
+        workPaceAverage: null,
+        recoveryPaceAverage: null,
+        workPaceSpread: null,
+        workPaceFade: null,
+        splitPattern: 'unknown' as const,
+      }
+    : inferredStructure;
   const paceAssessment: PaceZoneAssessment = assessPaceZoneForActivity(activity, paceZones, paceZoneModelReliability);
   const paceZone = paceAssessment.zone;
 

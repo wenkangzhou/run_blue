@@ -166,6 +166,62 @@ test('trail race parsing rejects road pace ranking and road pace-zone verdict', 
   assert.doesNotMatch(fallback.executionSummary, /负分割|跑崩/);
 });
 
+test('trail race replaces empty AI verdict with evidence and leaves quality unrated without altitude', () => {
+  const activity = makeActivity({
+    id: 20991619385,
+    name: '越野赛',
+    distance: 26_000,
+    moving_time: 13_000,
+    total_elevation_gain: 950,
+  });
+  const classification = makeClassification({ isRace: true, isTrail: true, workoutType: 'race' });
+  const result = parseAIResponse(JSON.stringify({
+    summary: '顺利完赛。',
+    executionSummary: '越野执行应结合爬升、下降、心率和时长判断。',
+    executionQuality: 'good',
+    intensity: 'extreme',
+    recoveryHours: 72,
+  }), activity, makeProfile(), classification, 'zh');
+  assert.match(result.executionSummary, /26\.0 公里、累计爬升 950 米/);
+  assert.match(result.executionSummary, /暂不评定执行质量/);
+  assert.doesNotMatch(result.executionSummary, /应结合/);
+  assert.equal(result.executionQuality, undefined);
+});
+
+test('trail race parser uses altitude and split heart rate to explain the actual execution', () => {
+  const splits = Array.from({ length: 9 }, (_, index) => ({
+    split: index + 1,
+    distance: 1000,
+    moving_time: index < 6 ? 450 : 540,
+    elapsed_time: index < 6 ? 450 : 540,
+    average_heartrate: index < 6 ? 150 : 165,
+    elevation_difference: 20,
+  }));
+  const activity = makeActivity({
+    id: 20991619385,
+    name: '越野赛',
+    distance: 9000,
+    moving_time: splits.reduce((sum, split) => sum + split.moving_time, 0),
+    total_elevation_gain: 180,
+    splits_metric: splits,
+  });
+  const distances = Array.from({ length: 181 }, (_, index) => index * 50);
+  const streams = {
+    distance: { data: distances },
+    altitude: { data: distances.map((distance) => 100 + distance * 0.02) },
+  };
+  const result = parseAIResponse(JSON.stringify({
+    summary: '顺利完赛。',
+    executionSummary: '应结合爬升和心率分析。',
+    intensity: 'extreme',
+    recoveryHours: 72,
+  }), activity, makeProfile(), makeClassification({ isRace: true, isTrail: true, workoutType: 'race' }), 'zh', streams);
+  assert.equal(result.executionQuality, 'poor');
+  assert.match(result.executionSummary, /后段等强配速明显下降/);
+  assert.match(result.executionSummary, /15 bpm/);
+  assert.match(result.executionSummary, /第 1 公里/);
+});
+
 test('activity 16399915541 is assessed as a race with an excellent controlled positive split', () => {
   const activity = makeHuzhouMarathonActivity();
   const assessment = getRaceExecutionAssessment(activity);

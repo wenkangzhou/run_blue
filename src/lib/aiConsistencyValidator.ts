@@ -1,5 +1,5 @@
 import type { AIAnalysis } from './aiTypes';
-import type { StravaActivity } from '@/types';
+import type { ActivityStream, StravaActivity } from '@/types';
 import type { ActivityClassification, PaceZones } from './trainingAnalysis';
 import type { StreamAnalysis } from './streamAnalysis';
 import { getPrimaryPersonalRecord } from './activityAchievements';
@@ -9,7 +9,7 @@ import {
   type LongRunAssessment,
 } from './activityHighlights';
 import { formatRaceExecutionSummary, getRaceExecutionAssessment } from './raceExecution';
-import { getTrailDetection } from './trailAnalysis';
+import { assessTrailExecution, getTrailDetection, getTrailTerrainSummary } from './trailAnalysis';
 
 export type AIConsistencyRule =
   | 'intensity-floor'
@@ -32,6 +32,7 @@ interface AIConsistencyContext {
   activity?: StravaActivity;
   paceZones?: PaceZones | null;
   streamAnalysis?: StreamAnalysis | null;
+  streams?: Record<string, ActivityStream> | null;
 }
 
 function getFinalIntensity(
@@ -206,12 +207,16 @@ function getExecutionQuality(
   analysis: AIAnalysis,
   context: AIConsistencyContext,
   heartRateRise: number | null
-): NonNullable<AIAnalysis['executionQuality']> {
+): AIAnalysis['executionQuality'] {
   const { activity, classification, paceZones, streamAnalysis } = context;
   const structure = classification.structure;
 
   if (classification.isRace) {
-    if (classification.isTrail || (activity && getTrailDetection(activity).isTrail)) return analysis.executionQuality ?? 'good';
+    if (classification.isTrail || (activity && getTrailDetection(activity).isTrail)) {
+      return activity
+        ? assessTrailExecution(activity, getTrailTerrainSummary(activity, context.streams), context.locale).quality
+        : undefined;
+    }
     return activity ? getRaceExecutionAssessment(activity)?.quality ?? 'good' : 'good';
   }
   if (activity && getPrimaryPersonalRecord(activity)) return 'excellent';
@@ -266,7 +271,7 @@ function getExecutionQuality(
 
 function alignExecutionQualityText(
   text: string,
-  quality: NonNullable<AIAnalysis['executionQuality']>,
+  quality: AIAnalysis['executionQuality'],
   locale: string
 ): string {
   if (!text || (quality !== 'fair' && quality !== 'poor')) return text;

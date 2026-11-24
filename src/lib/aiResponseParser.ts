@@ -1,4 +1,4 @@
-import { StravaActivity } from '@/types';
+import { ActivityStream, StravaActivity } from '@/types';
 import type { AIAnalysis } from './aiTypes';
 import { formatPace, type ActivityClassification, type PaceZones, type TrainingProfile } from './trainingAnalysis';
 import { buildAccurateComparison } from './aiComparison';
@@ -541,8 +541,12 @@ function normalizeExecutionSummary(
   text: string,
   activity: StravaActivity,
   classification: ActivityClassification,
-  locale: string
+  locale: string,
+  streams?: Record<string, ActivityStream> | null
 ): string {
+  if (classification.isTrail || getTrailDetection(activity).isTrail) {
+    return buildExecutionSummary(activity, classification, locale, streams);
+  }
   const normalized = normalizeWorkoutSpecificText(
     normalizeAnalysisText(text, activity, classification, locale),
     classification,
@@ -731,7 +735,8 @@ export function normalizeAIAnalysisForDisplay(
   classification: ActivityClassification,
   locale: string = 'zh',
   paceZones?: PaceZones | null,
-  streamAnalysis?: StreamAnalysis | null
+  streamAnalysis?: StreamAnalysis | null,
+  streams?: Record<string, ActivityStream> | null
 ): AIAnalysis {
   const isTrail = classification.isTrail || getTrailDetection(activity).isTrail;
   const normalizeForDisplay = (text: string) => normalizeAnalysisText(text, activity, classification, locale);
@@ -774,7 +779,8 @@ export function normalizeAIAnalysisForDisplay(
     analysis.executionSummary || '',
     activity,
     classification,
-    locale
+    locale,
+    streams
   );
 
   const normalizedAnalysis: AIAnalysis = {
@@ -807,6 +813,7 @@ export function normalizeAIAnalysisForDisplay(
     locale,
     paceZones,
     streamAnalysis,
+    streams,
   }).analysis;
 }
 
@@ -876,7 +883,8 @@ export function parseAIResponse(
   activity: StravaActivity,
   trainingProfile: TrainingProfile,
   classification: ActivityClassification,
-  locale: string = 'zh'
+  locale: string = 'zh',
+  streams?: Record<string, ActivityStream> | null
 ): AIAnalysis {
   const isTrail = classification.isTrail || getTrailDetection(activity).isTrail;
   const jsonStr = extractAIJson(content);
@@ -911,7 +919,8 @@ export function parseAIResponse(
     result.executionSummary || '',
     activity,
     classification,
-    locale
+    locale,
+    streams
   );
   const normalizedTrainingLoadContext = getTrainingLoadContext(
     normalizeForDisplay(result.trainingLoadContext || ''),
@@ -971,5 +980,6 @@ export function parseAIResponse(
     classification,
     locale,
     paceZones: trainingProfile.paceZones,
+    streams,
   }).analysis;
 }
